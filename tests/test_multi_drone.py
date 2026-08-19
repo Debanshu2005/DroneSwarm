@@ -56,6 +56,39 @@ class TestMultiDrone(unittest.IsolatedAsyncioTestCase):
                         }
                     }
                     await websocket.send(json.dumps(tel))
+                    
+                    if int(elapsed) % 3 == 0:
+                        diag = {
+                            "msg_type": "diagnostics",
+                            "sender_id": drone_id,
+                            "timestamp": time.time(),
+                            "diagnostics": {
+                                "system": {
+                                    "cpu_percent": 12.5 + random.random() * 5,
+                                    "memory_mb": 450 + random.random() * 10,
+                                    "temperature_c": 55.0 + random.random() * 10,
+                                    "async_tasks": 15
+                                }
+                            }
+                        }
+                        await websocket.send(json.dumps(diag))
+                        
+                        param = {
+                            "msg_type": "param_response",
+                            "sender_id": drone_id,
+                            "timestamp": time.time(),
+                            "action": "read_all",
+                            "success": True,
+                            "parameters": {
+                                "MPC_XY_P": 1.5,
+                                "MPC_Z_P": 1.0,
+                                "NAV_RTL_ALT": 30.0,
+                                "SYS_AUTOSTART": 4001,
+                                "BAT_N_CELLS": 6
+                            }
+                        }
+                        await websocket.send(json.dumps(param))
+                        
                     await asyncio.sleep(1.0)
                 logging.info(f"{drone_id} stopping simulation")
         except ConnectionRefusedError:
