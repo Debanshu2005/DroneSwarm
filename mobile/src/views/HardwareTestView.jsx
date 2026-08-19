@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDroneContext } from '../context/DroneContext';
 import { Play, CheckCircle2, XCircle, AlertCircle, RefreshCw, ChevronRight } from 'lucide-react';
 import { getParamMetadata, validateParameter } from '../utils/Px4Parameters';
@@ -11,6 +11,9 @@ export default function HardwareTestView({ setView }) {
   const [activeTest, setActiveTest] = useState(null);
   const [results, setResults] = useState({});
   const [paramTestModal, setParamTestModal] = useState(null); // { step: 'select', name: '', val: '', originalVal: '', error: '' }
+
+  const dronesRef = useRef(drones);
+  useEffect(() => { dronesRef.current = drones; }, [drones]);
 
   const tests = [
     { id: 1, name: 'Connection', desc: 'Verify backend connection to vehicle' },
@@ -51,20 +54,23 @@ export default function HardwareTestView({ setView }) {
         break;
       case 4:
         setTimeout(() => {
-          if (drone.diagnostics?.px4?.firmware_version) updateResult(4, 'PASS', drone.diagnostics.px4.firmware_version);
+          const currentDrone = dronesRef.current[targetId];
+          if (currentDrone?.diagnostics?.px4?.firmware_version) updateResult(4, 'PASS', currentDrone.diagnostics.px4.firmware_version);
           else updateResult(4, 'NOT AVAILABLE', 'Firmware identity missing from telemetry');
         }, 800);
         break;
       case 5:
         sendParamRequest('read_all', null, null, null, targetId);
         setTimeout(() => {
-           if (Object.keys(drone.parameters || {}).length > 0) updateResult(5, 'PASS', `${Object.keys(drone.parameters).length} params found`);
+           const currentDrone = dronesRef.current[targetId];
+           if (Object.keys(currentDrone?.parameters || {}).length > 0) updateResult(5, 'PASS', `${Object.keys(currentDrone.parameters).length} params found`);
            else updateResult(5, 'FAIL', 'No parameters discovered');
         }, 1500);
         break;
       case 6:
         setTimeout(() => {
-           if (drone.parameters && Object.keys(drone.parameters).length > 0) updateResult(6, 'PASS', 'Parameters read successfully');
+           const currentDrone = dronesRef.current[targetId];
+           if (currentDrone?.parameters && Object.keys(currentDrone.parameters).length > 0) updateResult(6, 'PASS', 'Parameters read successfully');
            else updateResult(6, 'FAIL', 'Parameters unavailable');
         }, 500);
         break;
@@ -73,22 +79,30 @@ export default function HardwareTestView({ setView }) {
         break;
       case 8:
         setTimeout(() => {
-           if (!tel) updateResult(8, 'FAIL', 'No telemetry');
-           else if (tel.sensor_health === 'ERROR') updateResult(8, 'FAIL', 'Sensor error detected');
+           const currentTel = dronesRef.current[targetId]?.telemetry;
+           if (!currentTel) updateResult(8, 'FAIL', 'No telemetry');
+           else if (currentTel.sensor_health === 'ERROR') updateResult(8, 'FAIL', 'Sensor error detected');
            else updateResult(8, 'PASS', 'Sensors healthy (IMU/MAG/BARO)');
         }, 500);
         break;
       case 9:
         sendCommand('MODE', { mode: 'HOLD' });
-        setTimeout(() => updateResult(9, tel.flight_mode === 'HOLD' ? 'PASS' : 'FAIL', `Requested HOLD, got ${tel.flight_mode}`), 1000);
+        setTimeout(() => {
+           const currentTel = dronesRef.current[targetId]?.telemetry;
+           updateResult(9, currentTel?.flight_mode === 'HOLD' ? 'PASS' : 'FAIL', `Requested HOLD, got ${currentTel?.flight_mode}`);
+        }, 1000);
         break;
       case 10:
         setTimeout(() => {
+           const currentDrone = dronesRef.current[targetId];
+           const currentTel = currentDrone?.telemetry;
+           if (!currentTel) return updateResult(10, 'FAIL', 'No telemetry');
+           
            let reason = [];
-           if (!tel.gps_valid) reason.push('No GPS');
-           if (tel.battery_level < 20) reason.push('Low Battery');
-           if (drone.status === 'failsafe') reason.push('Failsafe Active');
-           if (tel.system_health !== 'OK' && tel.system_health !== null) reason.push('System Health Error');
+           if (!currentTel.gps_valid) reason.push('No GPS');
+           if (currentTel.battery_level < 20) reason.push('Low Battery');
+           if (currentDrone.status === 'failsafe') reason.push('Failsafe Active');
+           if (currentTel.system_health !== 'OK' && currentTel.system_health !== null) reason.push('System Health Error');
            
            if (reason.length > 0) updateResult(10, 'FAIL', `ARM PRECHECK FAILED: ${reason.join(', ')}`);
            else updateResult(10, 'PASS', 'ARM PRECHECK PASS');
@@ -117,8 +131,25 @@ export default function HardwareTestView({ setView }) {
   return (
     <div className="view-container">
       <div className="view-header">
-         <h2>REAL HARDWARE TEST WORKFLOW</h2>
+         <h2>HARDWARE VALIDATION WORKFLOW</h2>
          <p className="text-muted">Target: {targetId} • Explicit operator action required for flight state</p>
+      </div>
+
+      <div className={`card ${drone.diagnostics?.px4?.firmware_version && !drone.diagnostics?.px4?.firmware_version.toLowerCase().includes('sitl') ? 'good-box' : 'danger-box'}`} style={{ marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+         <AlertCircle size={32} />
+         <div style={{ flex: 1 }}>
+            <h3 style={{ margin: '0 0 8px 0', textTransform: 'uppercase' }}>
+               {drone.diagnostics?.px4?.firmware_version && !drone.diagnostics?.px4?.firmware_version.toLowerCase().includes('sitl') ? 'REAL HARDWARE CONNECTED' : 'SITL / SOFTWARE VALIDATION ONLY'}
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+               <div><strong>Firmware:</strong> {drone.diagnostics?.px4?.firmware_version || 'UNKNOWN'}</div>
+               <div><strong>Vehicle:</strong> {drone.diagnostics?.px4?.vehicle_type || 'UNKNOWN'}</div>
+               <div><strong>Mode:</strong> {tel?.flight_mode || 'UNKNOWN'}</div>
+               <div><strong>Armed:</strong> {tel?.armed_state || 'UNKNOWN'}</div>
+               <div><strong>Health:</strong> {tel?.system_health || 'UNKNOWN'}</div>
+               <div><strong>Heartbeat:</strong> ACTIVE</div>
+            </div>
+         </div>
       </div>
 
       <div className="card" style={{ padding: '0', overflow: 'hidden' }}>

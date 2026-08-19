@@ -18,6 +18,7 @@ export default function ProfileConfigView({ profileKey, setView }) {
   const [appliedCount, setAppliedCount] = useState(0);
   const [rollbackMode, setRollbackMode] = useState(false);
   const [previousValues, setPreviousValues] = useState({});
+  const [rollbackFailures, setRollbackFailures] = useState([]);
 
   const [pendingAction, setPendingAction] = useState(null); // { index, isRollback, name, target, startTime }
 
@@ -130,7 +131,19 @@ export default function ProfileConfigView({ profileKey, setView }) {
     const listToApply = isRollback ? changes.filter((_, i) => i < appliedCount).reverse() : changes;
     
     if (index >= listToApply.length) {
-       setStep(isRollback ? 4 : 3);
+       if (isRollback) {
+           // Verify rollback
+           const failures = [];
+           listToApply.forEach(c => {
+               if (targetDrone?.parameters?.[c.name] !== previousValues[c.name]) {
+                   failures.push(c.name);
+               }
+           });
+           setRollbackFailures(failures);
+           setStep(4);
+       } else {
+           setStep(3);
+       }
        return;
     }
 
@@ -290,8 +303,23 @@ export default function ProfileConfigView({ profileKey, setView }) {
          {step === 4 && (
             <div style={{ textAlign: 'center', padding: '40px' }}>
                <XCircle size={48} color="#ef4444" style={{ marginBottom: '16px' }} />
-               <h3 style={{ color: '#ef4444' }}>CONFIGURATION NOT READY</h3>
-               <p className="text-muted" style={{ marginBottom: '24px' }}>Profile application failed or was aborted. Rollback completed.</p>
+               <h3 style={{ color: '#ef4444' }}>CONFIGURATION ABORTED</h3>
+               
+               {rollbackFailures.length > 0 ? (
+                   <div className="danger-box" style={{textAlign: 'left', marginBottom: '24px'}}>
+                       <h4 style={{margin: '0 0 8px 0'}}>ROLLBACK FAILED</h4>
+                       <p style={{margin: 0, fontSize: '13px'}}>The following parameters could not be restored:</p>
+                       <ul style={{margin: '8px 0 0 16px', fontSize: '13px'}}>
+                          {rollbackFailures.map(f => <li key={f}>{f}</li>)}
+                       </ul>
+                   </div>
+               ) : (
+                   <div className="good-box" style={{marginBottom: '24px'}}>
+                       <strong>ROLLBACK VERIFIED</strong>
+                       <p style={{margin: '4px 0 0 0', fontSize: '13px'}}>All changes were successfully restored.</p>
+                   </div>
+               )}
+               
                <button className="btn btn-secondary" style={{ padding: '12px 24px' }} onClick={() => setView('DRONE_CONTROL')}>RETURN</button>
             </div>
          )}
