@@ -159,6 +159,22 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   background: var(--surface);
   border-right: 1px solid var(--border);
   z-index: 100;
+  overflow-y: auto;
+}
+.sidebar.open {
+  display: flex;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1000;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+}
+.drawer-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 999;
 }
 .sidebar-header {
   padding: 20px;

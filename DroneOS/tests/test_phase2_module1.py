@@ -14,7 +14,7 @@ def test_config_loader():
     
     # Load Flight config
     flight_cfg = load_yaml_config("DroneOS/configs/flight.yaml", FlightConfig)
-    assert flight_cfg.adapter_type == "airsim"
+    assert flight_cfg.adapter_type == "px4"
     
     # Load Safety config
     safety_cfg = load_yaml_config("DroneOS/configs/safety.yaml", SafetyConfig)

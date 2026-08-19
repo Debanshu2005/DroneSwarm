@@ -38,7 +38,7 @@ class HealthMonitor:
             except asyncio.CancelledError:
                 logger.info("Health Monitor loop cancelled.")
                 break
-            except (RuntimeError, ValueError) as e:
+            except Exception as e:
                 logger.exception(f"Error in health monitor: {e}")
                 
             await asyncio.sleep(self.check_interval)

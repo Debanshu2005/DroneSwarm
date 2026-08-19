@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useDroneContext } from '../context/DroneContext';
 import { ShieldAlert, ShieldCheck, Navigation, ArrowUp, ArrowDown, Activity, ArrowLeft, Square, RotateCcw, RotateCw, ArrowRight } from 'lucide-react';
 import { CommandAction } from '../protocol/messages';
@@ -12,27 +12,57 @@ export default function DroneControlView({ setView }) {
   const [yawRate, setYawRate] = useState(15.0);
   
   const [showTakeoffModal, setShowTakeoffModal] = useState(false);
+  const [showArmModal, setShowArmModal] = useState(false);
   const holdIntervalRef = useRef(null);
   const [holdProgress, setHoldProgress] = useState(0);
 
   const [takeoffState, setTakeoffState] = useState(null);
   const [takeoffStartAlt, setTakeoffStartAlt] = useState(0);
 
+  const [testControlEnabled, setTestControlEnabled] = useState(false);
+  const [lastCommandResult, setLastCommandResult] = useState(null);
+
   const activeDroneId = selectedDrones.size > 0 ? Array.from(selectedDrones)[0] : null;
   const drone = drones[activeDroneId];
+  const tel = drone?.telemetry || {};
 
-  if (!drone) {
-    return (
-      <div className="view-container">
-         <div className="card" style={{textAlign: 'center', padding: '40px'}}>
-            <h3 style={{color: 'var(--text-muted)'}}>NO DRONE SELECTED</h3>
-            <button className="btn btn-primary" style={{marginTop: '16px'}} onClick={() => setView('DRONES')}>Back to Fleet</button>
-         </div>
-      </div>
-    );
-  }
+  const moveIntervalRef = useRef(null);
 
-  const tel = drone.telemetry || {};
+  const startHold = (action) => {
+     setHoldProgress(0);
+     let progress = 0;
+     holdIntervalRef.current = setInterval(() => {
+        progress += 5;
+        setHoldProgress(progress);
+        if (progress >= 100) {
+           clearInterval(holdIntervalRef.current);
+           action();
+           setHoldProgress(0);
+        }
+     }, 50);
+  };
+  
+   const cancelHold = () => {
+     if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
+     setHoldProgress(0);
+  };
+
+  const startMove = (params) => {
+     if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+     sendCommand(CommandAction.MOVE, params);
+     // Send at 10Hz to maintain offboard control
+     moveIntervalRef.current = setInterval(() => {
+        sendCommand(CommandAction.MOVE, params);
+     }, 100);
+  };
+
+  const stopMove = () => {
+     if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+     sendCommand(CommandAction.HOVER);
+  };
+  
+  const dronesRef = useRef(drones);
+  useEffect(() => { dronesRef.current = drones; }, [drones]);
 
   useEffect(() => {
      if (takeoffState) {
@@ -61,42 +91,19 @@ export default function DroneControlView({ setView }) {
          cancelHold();
          stopMove();
      };
+     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startHold = (action) => {
-     setHoldProgress(0);
-     let progress = 0;
-     holdIntervalRef.current = setInterval(() => {
-        progress += 5;
-        setHoldProgress(progress);
-        if (progress >= 100) {
-           clearInterval(holdIntervalRef.current);
-           action();
-           setHoldProgress(0);
-        }
-     }, 50);
-  };
-  
-   const cancelHold = () => {
-     if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
-     setHoldProgress(0);
-  };
-
-  const moveIntervalRef = useRef(null);
-
-  const startMove = (params) => {
-     if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
-     sendCommand(CommandAction.MOVE, params);
-     // Send at 10Hz to maintain offboard control
-     moveIntervalRef.current = setInterval(() => {
-        sendCommand(CommandAction.MOVE, params);
-     }, 100);
-  };
-
-  const stopMove = () => {
-     if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
-     sendCommand(CommandAction.HOVER);
-  };
+  if (!drone) {
+    return (
+      <div className="view-container">
+         <div className="card" style={{textAlign: 'center', padding: '40px'}}>
+            <h3 style={{color: 'var(--text-muted)'}}>NO DRONE SELECTED</h3>
+            <button className="btn btn-primary" style={{marginTop: '16px'}} onClick={() => setView('DRONES')}>Back to Fleet</button>
+         </div>
+      </div>
+    );
+  }
 
   const validateDroneSafety = () => {
      const isHeartbeatHealthy = (nowMs - drone.lastSeen) < 2000;
@@ -125,6 +132,20 @@ export default function DroneControlView({ setView }) {
 
   const safety = validateDroneSafety();
 
+  const handleTestCommand = (action, params = null) => {
+     sendCommand(action, params);
+     setLastCommandResult({ action, status: 'SENT', time: new Date().toLocaleTimeString() });
+     
+     // In a real implementation we would listen for WebSocket ACKs containing backend errors.
+     // For this test control, we will just assume the command was sent and PX4 is the authority.
+     setTimeout(() => {
+        const d = dronesRef?.current?.[activeDroneId];
+        if (action === CommandAction.ARM && d?.telemetry?.armed_state !== 'ARMED') {
+           setLastCommandResult({ action, status: 'REJECTED BY PX4', reason: d?.diagnostics?.last_error || 'Pre-arm checks failed', time: new Date().toLocaleTimeString() });
+        }
+     }, 1500);
+  };
+
   const renderModals = () => {
     return (
       <>
@@ -133,8 +154,20 @@ export default function DroneControlView({ setView }) {
               <div className="modal-content">
                  <h2>ARMING SAFETY GATE</h2>
                  <div className="checklist">
+                    <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px'}}>
+                      <h2 style={{fontSize: '20px', margin: 0}}>{drone.id}</h2>
+                      <span className={`status-badge badge-${drone.healthScore === 'HEALTHY' ? 'good' : drone.healthScore === 'WARNING' ? 'warning' : drone.healthScore === 'CRITICAL' ? 'danger' : 'neutral'}`}>
+                        ● {drone.healthScore || 'UNKNOWN'}
+                      </span>
+                      <span className={`status-badge badge-${drone.freshness === 'LIVE' ? 'good' : drone.freshness === 'STALE' ? 'warning' : 'danger'}`}>
+                        {drone.freshness || 'OFFLINE'}
+                      </span>
+                      <span className={`status-badge badge-${drone.status === 'CONNECTED' ? 'good' : drone.status === 'DEGRADED' ? 'warning' : 'danger'}`}>
+                        ● {drone.status.toUpperCase()}
+                      </span>
+                    </div>
                     <div className="check-item" style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '8px'}}>
-                       <span>{drone.id}:</span> 
+                       <span>Safety Status:</span> 
                        {safety.armPass ? <span className="good">✓ PASS</span> : <span className="danger">✗ {safety.reason}</span>}
                     </div>
                  </div>
@@ -239,7 +272,18 @@ export default function DroneControlView({ setView }) {
            <ArrowLeft size={20} />
          </button>
          <div>
-            <h2>Control: {drone.id}</h2>
+             <h2 style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+               Control: {drone.id}
+               <span className={`status-badge badge-${drone.healthScore === 'HEALTHY' ? 'good' : drone.healthScore === 'WARNING' ? 'warning' : drone.healthScore === 'CRITICAL' ? 'danger' : 'neutral'}`} style={{fontSize: '12px'}}>
+                 {drone.healthScore || 'UNKNOWN'}
+               </span>
+               <span className={`status-badge badge-${drone.freshness === 'LIVE' ? 'good' : drone.freshness === 'STALE' ? 'warning' : 'danger'}`} style={{fontSize: '12px'}}>
+                 {drone.freshness || 'OFFLINE'}
+               </span>
+               <span className={`status-badge badge-${drone.status === 'CONNECTED' ? 'good' : drone.status === 'DEGRADED' ? 'warning' : 'danger'}`} style={{fontSize: '12px'}}>
+                 {drone.status.toUpperCase()}
+               </span>
+             </h2>
             <div style={{display: 'flex', gap: '12px', marginTop: '8px'}}>
                <button className="btn btn-secondary text-sm" onClick={() => setView('PARAMETERS')} style={{padding: '4px 8px'}}>Parameters</button>
                <button className="btn btn-secondary text-sm" onClick={() => setView('SENSOR_CALIBRATION')} style={{padding: '4px 8px'}}>Sensors</button>
@@ -266,6 +310,43 @@ export default function DroneControlView({ setView }) {
          </div>
       </div>
 
+      <div className="card" style={{ padding: '16px', marginBottom: '16px', background: testControlEnabled ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-main)' }}>
+         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+            <h3 style={{fontSize: '14px', color: testControlEnabled ? '#ef4444' : 'var(--text-muted)'}}>
+               {testControlEnabled ? 'TEST CONTROL MODE ACTIVE' : 'TEST CONTROL MODE'}
+            </h3>
+            <button className={`btn ${testControlEnabled ? 'btn-primary' : 'btn-secondary'}`} style={{background: testControlEnabled ? '#ef4444' : '', borderColor: testControlEnabled ? '#ef4444' : ''}} onClick={() => setTestControlEnabled(!testControlEnabled)}>
+               {testControlEnabled ? 'EXIT TEST MODE' : 'ENTER TEST MODE'}
+            </button>
+         </div>
+         
+         {testControlEnabled && (
+            <div style={{marginTop: '16px'}}>
+               <p className="text-muted" style={{fontSize: '12px', marginBottom: '16px'}}>
+                  WARNING: UI Safety gates are disabled. Commands are sent directly to the backend. PX4 has final authority.
+               </p>
+               <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '8px'}}>
+                  <button className="btn btn-primary" style={{background: '#ef4444', borderColor: '#ef4444'}} onClick={() => handleTestCommand(CommandAction.ARM)}>ARM</button>
+                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.DISARM)}>DISARM</button>
+                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude })}>TAKEOFF</button>
+                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.LAND)}>LAND</button>
+                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.SET_MODE, { mode: 'HOLD' })}>HOLD</button>
+                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.RTL)}>RTL</button>
+                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.HOVER)}>STOP</button>
+               </div>
+               
+               {lastCommandResult && (
+                  <div style={{marginTop: '16px', padding: '12px', background: 'var(--bg-color)', borderRadius: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between'}}>
+                     <span><strong>Last Command:</strong> {lastCommandResult.action}</span>
+                     <span className={lastCommandResult.status.includes('REJECTED') ? 'danger' : 'good'}>
+                        {lastCommandResult.status} {lastCommandResult.reason ? `(${lastCommandResult.reason})` : ''}
+                     </span>
+                  </div>
+               )}
+            </div>
+         )}
+      </div>
+
       {takeoffState && (
          <div className="card" style={{ padding: '16px', background: 'var(--bg-main)', border: '1px solid var(--primary)', display: 'flex', alignItems: 'center', gap: '16px' }}>
             <Activity color="var(--primary)" className={takeoffState !== 'REACHED' ? 'spin' : ''} />
@@ -287,24 +368,24 @@ export default function DroneControlView({ setView }) {
            {/* Mode-dependent rendering */}
            {(!tel.flight_mode || tel.flight_mode === 'HOLD' || tel.flight_mode === 'LOITER' || tel.flight_mode === 'MANUAL' || tel.flight_mode === 'OFFBOARD') && (
              <>
-               <button className="btn btn-primary" onClick={() => setShowArmModal(true)} disabled={drone.status !== 'active'} style={{background: '#ef4444', borderColor: '#ef4444', color: 'white'}}>
-                  <ShieldAlert size={16}/> ARM
+               <button className="btn btn-primary" onClick={() => setShowArmModal(true)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'} style={{background: '#ef4444', borderColor: '#ef4444', color: 'white'}}>
+                  <ShieldAlert size={16} style={{marginRight: '8px'}}/> ARM
                </button>
-               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.DISARM)} disabled={drone.status !== 'active'}>
-                  <ShieldCheck size={16}/> DISARM
+               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.DISARM)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+                  <ShieldCheck size={16} style={{marginRight: '8px'}}/> DISARM
                </button>
              </>
            )}
 
            {(!tel.flight_mode || tel.flight_mode === 'HOLD' || tel.flight_mode === 'LOITER') && (
              <>
-               <button className="btn btn-secondary" onClick={() => setShowTakeoffModal(true)} disabled={drone.status !== 'active'}>
+               <button className="btn btn-secondary" onClick={() => setShowTakeoffModal(true)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <ArrowUp size={16}/> TAKEOFF
                </button>
-               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.LAND)} disabled={drone.status !== 'active'}>
+               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.LAND)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <ArrowDown size={16}/> LAND
                </button>
-               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.RTL)} disabled={drone.status !== 'active'}>
+               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.RTL)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <Navigation size={16}/> RTL
                </button>
              </>
@@ -319,7 +400,7 @@ export default function DroneControlView({ setView }) {
              </>
            )}
 
-           <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'HOLD'})} disabled={drone.status !== 'active'}>
+           <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'HOLD'})} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
               HOLD
            </button>
 

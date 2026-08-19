@@ -41,7 +41,7 @@ export default function HardwareTestView({ setView }) {
 
     switch (testId) {
       case 1:
-        setTimeout(() => updateResult(1, drone.status === 'active' ? 'PASS' : 'FAIL', drone.status === 'active' ? null : 'Drone not active'), 500);
+        setTimeout(() => updateResult(1, (drone.status === 'CONNECTED' || drone.status === 'DEGRADED') ? 'PASS' : 'FAIL', (drone.status === 'CONNECTED' || drone.status === 'DEGRADED') ? null : 'Drone not connected'), 500);
         break;
       case 2:
         setTimeout(() => updateResult(2, 'PASS'), 1000); // Handled by continuous context stream
@@ -127,6 +127,7 @@ export default function HardwareTestView({ setView }) {
       </div>
     );
   }
+  const tel = drone?.telemetry || {};
 
   return (
     <div className="view-container">

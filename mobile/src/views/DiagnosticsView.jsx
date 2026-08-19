@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useDroneContext } from '../context/DroneContext';
-import { Activity, Server, Radio, Trash2, Smartphone, Globe, Cpu, Zap, HardDrive } from 'lucide-react';
+import { Radio, Smartphone, Globe, Cpu, HardDrive } from 'lucide-react';
 
 export default function DiagnosticsView() {
   const { eventLog, wsManager, isConnected, drones } = useDroneContext();
@@ -51,7 +51,7 @@ export default function DiagnosticsView() {
             <div className="card" style={{flex: 1, minWidth: '300px'}}>
                <h3 style={{marginBottom: '16px', fontSize: '14px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px'}}><Cpu size={16}/> DRONEOS (PI COMPANION)</h3>
                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px'}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Process:</span> <span className={targetDrone.status === 'active' ? 'good' : 'danger'}>{targetDrone.status?.toUpperCase() || 'UNKNOWN'}</span></div>
+                  <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Process:</span> <span className={targetDrone.status === 'CONNECTED' || targetDrone.status === 'DEGRADED' ? 'good' : 'danger'}>{targetDrone.status?.toUpperCase() || 'UNKNOWN'}</span></div>
                   <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">CPU:</span> <span>{targetDrone.diagnostics?.system?.cpu_percent ?? '--'}%</span></div>
                   <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">RAM:</span> <span>{targetDrone.diagnostics?.system?.memory_mb?.toFixed(0) ?? '--'}MB</span></div>
                   <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Temp:</span> <span>{targetDrone.diagnostics?.system?.temperature_c?.toFixed(1) ?? '--'}°C</span></div>
@@ -59,7 +59,7 @@ export default function DiagnosticsView() {
                
                <h3 style={{margin: '16px 0', fontSize: '14px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px'}}><Radio size={16}/> MAVSDK</h3>
                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px'}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Telemetry:</span> <span>{targetDrone.telemetry ? 'ACTIVE' : 'STALE'}</span></div>
+                  <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Telemetry:</span> <span>{targetDrone.freshness === 'LIVE' ? 'ACTIVE' : targetDrone.freshness === 'STALE' ? 'STALE' : 'OFFLINE'}</span></div>
                   <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Connection:</span> <span>MAVLINK</span></div>
                </div>
             </div>

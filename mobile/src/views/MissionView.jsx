@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useDroneContext } from '../context/DroneContext';
 import { CommandAction } from '../protocol/messages';
-import { Route, Play, Pause, Square, Trash2, Plus, Upload, CheckCircle } from 'lucide-react';
+import { Route, Play, Pause, Square, Trash2, Plus, Upload, CheckCircle, Map } from 'lucide-react';
 
 export default function MissionView() {
   const { selectedDrones, drones, sendCommand } = useDroneContext();
@@ -26,6 +26,14 @@ export default function MissionView() {
     sendCommand(CommandAction.MISSION_UPLOAD, { waypoints });
   };
 
+  const [goToLat, setGoToLat] = useState(0);
+  const [goToLon, setGoToLon] = useState(0);
+  const [goToAlt, setGoToAlt] = useState(10);
+  
+  const generateGoToPoint = () => {
+    setWaypoints([{ lat: goToLat, lon: goToLon, alt: goToAlt, speed: 5, action: 'WAYPOINT' }]);
+  };
+
   const isSwarmMission = selectedDrones.size > 1;
 
   return (
@@ -41,6 +49,19 @@ export default function MissionView() {
       <div style={{display: 'flex', gap: '24px', flex: 1, minHeight: 0, flexWrap: 'wrap'}}>
          {/* Waypoint Editor */}
          <div className="card" style={{flex: 1, minWidth: '350px', display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
+            
+            <div style={{marginBottom: '24px', padding: '16px', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: '8px'}}>
+               <h3 style={{fontSize: '14px', marginBottom: '12px', color: 'var(--text-main)', textTransform: 'uppercase'}}>Point-to-Point (Go To)</h3>
+               <div style={{display: 'flex', gap: '8px', marginBottom: '12px'}}>
+                  <input type="number" className="input-field" placeholder="Lat" value={goToLat} onChange={e => setGoToLat(parseFloat(e.target.value))} style={{flex: 1}}/>
+                  <input type="number" className="input-field" placeholder="Lon" value={goToLon} onChange={e => setGoToLon(parseFloat(e.target.value))} style={{flex: 1}}/>
+                  <input type="number" className="input-field" placeholder="Alt (m)" value={goToAlt} onChange={e => setGoToAlt(parseFloat(e.target.value))} style={{width: '80px'}}/>
+               </div>
+               <button className="btn btn-secondary" style={{width: '100%', display: 'flex', justifyContent: 'center', gap: '8px'}} onClick={generateGoToPoint}>
+                  <Map size={16} /> GENERATE WAYPOINT
+               </button>
+            </div>
+            
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
                <h3 style={{fontSize: '16px', fontWeight: 600}}>Waypoints</h3>
                <button className="btn btn-secondary" style={{padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={addWaypoint}><Plus size={16}/> Add WP</button>

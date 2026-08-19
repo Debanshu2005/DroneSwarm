@@ -39,13 +39,19 @@ export default function SettingsView() {
             <h3 style={{marginBottom: '8px'}}>Advanced & Developer</h3>
             <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Simulation and experimental features.</p>
             
-            <label style={{display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-color)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '12px', cursor: 'pointer'}}>
-               <input type="checkbox" checked={testMode} onChange={(e) => setTestMode(e.target.checked)} style={{width: '20px', height: '20px'}} />
-               <div>
-                  <div style={{fontWeight: 600}}>Enable Virtual Swarm Simulation</div>
-                  <div style={{fontSize: '12px', color: 'var(--text-muted)'}}>Spawns virtual drones to test UI layouts without hardware.</div>
+            <div style={{background: 'var(--bg-color)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '16px'}}>
+               <div style={{fontWeight: 600, marginBottom: '8px'}}>System Mode</div>
+               <div style={{display: 'flex', gap: '16px'}}>
+                  <label style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
+                     <input type="radio" name="systemMode" checked={!testMode} onChange={() => setTestMode(false)} />
+                     <span>REAL HARDWARE (Production)</span>
+                  </label>
+                  <label style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
+                     <input type="radio" name="systemMode" checked={testMode} onChange={() => setTestMode(true)} />
+                     <span>SIMULATION / SITL</span>
+                  </label>
                </div>
-            </label>
+            </div>
             
             <label style={{display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-color)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', cursor: 'pointer'}}>
                <input type="checkbox" checked={indoorMode} onChange={(e) => setIndoorMode(e.target.checked)} style={{width: '20px', height: '20px'}} />

@@ -114,7 +114,7 @@ class CommandHandler:
                         )
                         self._dispatch_task(self.network.broadcast_message(msg))
                 return success
-            except (ValueError, RuntimeError, TypeError, KeyError) as e:
+            except Exception as e:
                 logger.exception(f"Exception while executing {message.action.value}: {e}")
                 if self.network:
                     msg = ErrorMessage(

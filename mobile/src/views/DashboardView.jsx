@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { useDroneContext } from '../context/DroneContext';
-import { ShieldAlert, ShieldCheck, Navigation, ArrowUp, ArrowDown, Activity, Battery, Compass, Wind, AlertCircle } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, Navigation, ArrowUp, ArrowDown, Activity, Signal } from 'lucide-react';
 import { CommandAction } from '../protocol/messages';
+import { evaluatePreflightChecklist } from '../utils/DroneHealth';
 
 export default function DashboardView() {
   const { drones, selectedDrones, nowMs, sendCommand, isConnected, indoorMode } = useDroneContext();
@@ -58,9 +59,9 @@ export default function DashboardView() {
   };
 
   const droneCount = Object.keys(drones).length;
-  const activeDrones = Object.values(drones).filter(d => d.status === 'active').length;
+  const activeDrones = Object.values(drones).filter(d => d.status === 'CONNECTED').length;
   const armedDrones = Object.values(drones).filter(d => d.telemetry?.armed_state === 'ARMED').length;
-  const warningDrones = Object.values(drones).filter(d => d.status === 'failsafe').length;
+  const warningDrones = Object.values(drones).filter(d => d.status === 'DEGRADED' || d.healthScore === 'WARNING' || d.healthScore === 'CRITICAL').length;
 
   // For the dashboard, we look at the first selected drone, or the first available drone
   const activeDroneId = selectedDrones.size > 0 ? Array.from(selectedDrones)[0] : Object.keys(drones)[0];
@@ -189,7 +190,13 @@ export default function DashboardView() {
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
                  <h2 style={{fontSize: '20px'}}>{drone.id}</h2>
-                 <span className={`status-badge ${drone.status === 'active' ? 'badge-good' : 'badge-danger'}`}>
+                 <span className={`status-badge badge-${drone.healthScore === 'HEALTHY' ? 'good' : drone.healthScore === 'WARNING' ? 'warning' : drone.healthScore === 'CRITICAL' ? 'danger' : 'neutral'}`}>
+                   ● {drone.healthScore || 'UNKNOWN'}
+                 </span>
+                 <span className={`status-badge badge-${drone.freshness === 'LIVE' ? 'good' : drone.freshness === 'STALE' ? 'warning' : 'danger'}`}>
+                   <Signal size={12} style={{marginRight: 4}}/> {drone.freshness || 'OFFLINE'}
+                 </span>
+                 <span className={`status-badge badge-${drone.status === 'CONNECTED' ? 'good' : drone.status === 'DEGRADED' ? 'warning' : 'danger'}`}>
                    ● {drone.status.toUpperCase()}
                  </span>
                </div>
@@ -238,24 +245,24 @@ export default function DashboardView() {
             </div>
 
             <div className="quick-actions">
-               <button className="action-btn action-arm" onClick={() => setShowArmModal(true)} disabled={drone.status !== 'active'}>
+               <button className="action-btn action-arm" onClick={() => setShowArmModal(true)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <ShieldAlert size={16}/> ARM
                </button>
-               <button className="action-btn action-disarm" onClick={() => sendCommand(CommandAction.DISARM)} disabled={drone.status !== 'active'}>
+               <button className="action-btn action-disarm" onClick={() => sendCommand(CommandAction.DISARM)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <ShieldCheck size={16}/> DISARM
                </button>
                
-               <button className="action-btn" onClick={() => setShowTakeoffModal(true)} disabled={drone.status !== 'active'}>
+               <button className="action-btn" onClick={() => setShowTakeoffModal(true)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <ArrowUp size={16}/> TAKEOFF
                </button>
-               <button className="action-btn" onClick={() => sendCommand(CommandAction.LAND)} disabled={drone.status !== 'active'}>
+               <button className="action-btn" onClick={() => sendCommand(CommandAction.LAND)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <ArrowDown size={16}/> LAND
                </button>
                
-               <button className="action-btn" onClick={() => sendCommand(CommandAction.RTL)} disabled={drone.status !== 'active'}>
+               <button className="action-btn" onClick={() => sendCommand(CommandAction.RTL)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <Navigation size={16}/> RTL
                </button>
-               <button className="action-btn" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'HOLD'})} disabled={drone.status !== 'active'}>
+               <button className="action-btn" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'HOLD'})} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <Activity size={16}/> HOLD
                </button>
             </div>

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { WebSocketManager } from '../networking/WebSocketManager';
 import { MessageType, CommandAction, ControlMessage, HeartbeatMessage } from '../protocol/messages';
+import { evaluateDroneHealth, evaluateTelemetryFreshness } from '../utils/DroneHealth';
 
 const DroneContext = createContext();
 
@@ -71,15 +72,25 @@ export const DroneProvider = ({ children }) => {
         let changed = false;
         const newDrones = { ...prev };
         for (const [id, drone] of Object.entries(newDrones)) {
-          if (now - drone.lastSeen > 5000 && drone.status !== "OFFLINE" && !id.startsWith("drone_test")) {
-            newDrones[id] = { ...drone, status: "OFFLINE" };
+          if (id.startsWith("drone_test") && testMode) continue;
+          
+          const freshness = evaluateTelemetryFreshness(drone);
+          const health = evaluateDroneHealth(drone);
+          
+          let newStatus = drone.status;
+          if (freshness === 'OFFLINE') newStatus = 'OFFLINE';
+          else if (freshness === 'STALE') newStatus = 'DEGRADED';
+          else if (newStatus === 'OFFLINE' || newStatus === 'DEGRADED') newStatus = 'CONNECTED';
+          
+          if (newStatus !== drone.status || health !== drone.healthScore || freshness !== drone.freshness) {
+            newDrones[id] = { ...drone, status: newStatus, healthScore: health, freshness };
             changed = true;
-            addLog(`${id} went OFFLINE (timeout)`);
+            if (newStatus === 'OFFLINE' && drone.status !== 'OFFLINE') addLog(`${id} went OFFLINE (timeout)`);
           }
         }
         return changed ? newDrones : prev;
       });
-    }, 2000);
+    }, 1000);
     return () => clearInterval(interval);
   }, [testMode, isConnected]);
 
@@ -97,13 +108,17 @@ export const DroneProvider = ({ children }) => {
         setDrones(prev => {
           const isNew = !prev[msg.sender_id];
           if (isNew) addLog(`${msg.sender_id} CONNECTED`);
+          const now = Date.now();
           return {
             ...prev,
             [msg.sender_id]: {
               ...(prev[msg.sender_id] || {}),
               id: msg.sender_id,
-              status: msg.status,
-              lastSeen: Date.now(),
+              status: msg.status === 'active' ? 'CONNECTED' : msg.status,
+              lastSeen: now,
+              lastHeartbeat: now,
+              connectTime: isNew ? now : (prev[msg.sender_id]?.connectTime || now),
+              reconnects: isNew ? 0 : (prev[msg.sender_id]?.reconnects || 0),
               commandState: prev[msg.sender_id]?.commandState || { action: null, state: 'IDLE', cmd_id: null }
             }
           };
@@ -115,20 +130,20 @@ export const DroneProvider = ({ children }) => {
       if (msg.sender_id && msg.sender_id.startsWith("drone")) {
         setDrones(prev => {
           const existing = prev[msg.sender_id] || {};
-          // Maintain a bounded path history for the map
           let path = existing.path || [];
           if (msg.telemetry?.latitude && msg.telemetry?.longitude) {
-            // Only add if it moved significantly or time passed, for simplicity just keep last 100
             path = [...path, [msg.telemetry.latitude, msg.telemetry.longitude]].slice(-100);
           }
           
+          const now = Date.now();
           return {
             ...prev,
             [msg.sender_id]: {
               ...existing,
               id: msg.sender_id,
               telemetry: msg.telemetry,
-              lastSeen: Date.now(),
+              lastSeen: now,
+              lastTelemetry: now,
               path,
               commandState: existing.commandState || { action: null, state: 'IDLE', cmd_id: null }
             }
@@ -161,7 +176,8 @@ export const DroneProvider = ({ children }) => {
              ...prev,
              [msg.sender_id]: {
                 ...drone,
-                commandState: { ...drone.commandState, state: 'REJECTED' }
+                commandState: { ...drone.commandState, state: 'REJECTED' },
+                diagnostics: { ...(drone.diagnostics || {}), last_error: msg.error_msg }
              }
           };
        });

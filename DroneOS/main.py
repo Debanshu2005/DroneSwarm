@@ -289,18 +289,29 @@ class DroneOSApp:
             except asyncio.CancelledError:
                 logger.info("Autonomous evaluation loop cancelled.")
                 break
-            except (RuntimeError, ValueError) as e:
+            except Exception as e:
                 logger.exception(f"Decision Engine error: {e}")
+                
+            # Watchdog for Pixhawk reconnection
+            if getattr(self.flight_controller, '_connected', False) is False:
+                try:
+                    logger.info("Attempting to reconnect to flight controller...")
+                    await self.flight_controller.connect()
+                except Exception as e:
+                    logger.debug(f"Reconnect attempt failed: {e}")
+                    
             await asyncio.sleep(0.5)
 
     async def run(self) -> None:
         logger.info(f"Starting DroneOS Node: {self.node_id}")
         self._running = True
         
-        connected = await self.flight_controller.connect()
-        if not connected:
-            logger.error("Could not connect to flight controller. Exiting.")
-            return
+        try:
+            connected = await self.flight_controller.connect()
+            if not connected:
+                logger.error("Could not connect to flight controller initially. Will continue starting DroneOS and retry later.")
+        except Exception as e:
+            logger.error(f"Flight controller connection error during startup: {e}. DroneOS will continue.")
 
         await self.network.start()
         
@@ -308,7 +319,7 @@ class DroneOSApp:
         for t in [
             asyncio.create_task(self.health_monitor.start()),
             asyncio.create_task(self.battery_monitor.start(
-                get_battery_level=lambda: None
+                get_battery_level=lambda: self.flight_controller._telemetry.battery_level if self.flight_controller else None
             )),
             asyncio.create_task(self._autonomous_evaluation_loop())
         ]:

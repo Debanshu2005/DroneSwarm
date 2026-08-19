@@ -5,7 +5,7 @@ import { Network, ArrowRight } from 'lucide-react';
 export default function SwarmView() {
   const { drones } = useDroneContext();
   
-  const onlineDrones = Object.values(drones).filter(d => d.status === 'active');
+  const onlineDrones = Object.values(drones).filter(d => d.status === 'CONNECTED' || d.status === 'DEGRADED');
   const warningDrones = Object.values(drones).filter(d => d.status === 'failsafe');
   const offlineDrones = Object.values(drones).filter(d => d.status === 'OFFLINE');
   const armedDrones = Object.values(drones).filter(d => d?.telemetry?.armed_state === 'ARMED');

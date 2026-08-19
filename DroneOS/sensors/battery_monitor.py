@@ -35,7 +35,7 @@ class BatteryMonitor:
             except asyncio.CancelledError:
                 logger.info("Battery Monitor loop cancelled.")
                 break
-            except (RuntimeError, ValueError) as e:
+            except Exception as e:
                 logger.exception(f"Error checking battery: {e}")
                 
             await asyncio.sleep(self.check_interval)

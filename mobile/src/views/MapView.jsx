@@ -13,20 +13,28 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Custom icons based on selection
-const createIcon = (color) => new L.Icon({
-  iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+const FALLBACK_CENTER = [22.315, 87.310];
 
-const defaultIcon = createIcon('blue');
-const selectedIcon = createIcon('green');
-const warningIcon = createIcon('orange');
-const offlineIcon = createIcon('grey');
+const createDroneIcon = (color, heading) => {
+  const rotation = heading !== undefined && heading !== null && !isNaN(heading) ? `transform: rotate(${heading}deg);` : '';
+  const svg = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="${rotation} transform-origin: center;">
+      <path d="M12 2L22 20L12 16L2 20L12 2Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+    </svg>`;
+  return L.divIcon({
+    html: svg,
+    className: 'custom-drone-icon',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16]
+  });
+};
+
+const getColorForDrone = (drone, isSelected) => {
+   if (drone.status === 'OFFLINE') return '#6B7280'; // grey
+   if (drone.status === 'failsafe') return '#F97316'; // orange
+   if (isSelected) return '#10B981'; // green
+   return '#3B82F6'; // blue
+};
 
 function RecenterAutomatically({ center }) {
    const map = useMap();
@@ -71,29 +79,12 @@ export default function MapView() {
      }
   }
 
+  let mapCenter = hasValidCenter ? center : FALLBACK_CENTER;
+
   const handleCenter = () => {
-     if (hasValidCenter) {
-        setCenterTarget([...center]);
-        setTimeout(() => setCenterTarget(null), 100);
-     }
+     setCenterTarget([...mapCenter]);
+     setTimeout(() => setCenterTarget(null), 100);
   };
-
-  if (Object.keys(drones).length === 0) {
-     return <div className="card" style={{textAlign: 'center', padding: '40px'}}><h3 style={{color: 'var(--text-muted)'}}>No drones connected. Map unavailable.</h3></div>;
-  }
-
-  if (!hasValidCenter) {
-     return (
-        <div style={{display: 'flex', flexDirection: 'column', height: '100%', gap: '16px'}}>
-           <div className="card" style={{flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444'}}>
-              <div style={{textAlign: 'center'}}>
-                 <h3 style={{marginBottom: '8px'}}>POSITION UNAVAILABLE</h3>
-                 <span style={{color: 'var(--text-muted)'}}>(Waiting for GPS 3D Fix)</span>
-              </div>
-           </div>
-        </div>
-     );
-  }
 
   return (
     <div style={{display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', gap: '16px'}}>
@@ -107,41 +98,57 @@ export default function MapView() {
                <option value="terrain">Terrain</option>
             </select>
          </div>
-         <button className="btn btn-secondary" style={{padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={handleCenter} title="Center on selected">
-            <Crosshair size={18}/> Center
-         </button>
+         <div style={{display: 'flex', gap: '8px'}}>
+            <button className="btn btn-secondary" style={{padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '8px'}} onClick={handleCenter} title="Center Map">
+               <Crosshair size={18}/> Center
+            </button>
+         </div>
       </div>
 
+      {!hasValidCenter && (
+         <div style={{position: 'absolute', top: '70px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(0,0,0,0.75)', color: 'white', padding: '12px 24px', borderRadius: '8px', textAlign: 'center'}}>
+            <div style={{fontWeight: 'bold', fontSize: '14px', color: '#F87171'}}>NO LIVE DRONE POSITION</div>
+            <div style={{fontSize: '12px', marginTop: '4px'}}>FIELD TEST AREA: IIT KHARAGPUR</div>
+         </div>
+      )}
+
       <div style={{flex: 1, borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', zIndex: 1}}>
-         <MapContainer center={center} zoom={16} style={{ height: '100%', width: '100%' }}>
+         <MapContainer center={mapCenter} zoom={16} style={{ height: '100%', width: '100%' }}>
             <TileLayer url={tiles[mapStyle]} attribution="PhoneOS GCS" />
             <RecenterAutomatically center={centerTarget} />
 
             {Object.values(drones).map(drone => {
                const t = drone.telemetry;
-               if (!t || !t.latitude || !t.longitude || t.latitude === 0) return null;
+               if (!t || t.latitude == null || t.longitude == null || isNaN(t.latitude) || isNaN(t.longitude) || t.latitude === 0) return null;
                
-               let icon = defaultIcon;
-               if (drone.status === 'OFFLINE') icon = offlineIcon;
-               else if (drone.status === 'failsafe') icon = warningIcon;
-               else if (selectedDrones.has(drone.id)) icon = selectedIcon;
+               const isSelected = selectedDrones.has(drone.id);
+               const color = getColorForDrone(drone, isSelected);
+               const icon = createDroneIcon(color, t.heading);
+               const freshnessText = drone.freshness || (drone.status === 'OFFLINE' ? 'OFFLINE' : 'LIVE');
+               
+               // Do not render moving marker if GPS is offline/stale and we only want to show last known
+               const opacity = (drone.status === 'OFFLINE' || drone.freshness === 'OFFLINE') ? 0.5 : 1.0;
 
                return (
                   <React.Fragment key={drone.id}>
-                     <Marker position={[t.latitude, t.longitude]} icon={icon}>
+                     <Marker position={[t.latitude, t.longitude]} icon={icon} opacity={opacity}>
                         <Popup>
-                           <div style={{color: '#000', fontWeight: 'bold'}}>
-                              {drone.id}<br/>
-                              Alt: {t.altitude?.toFixed(1)}m<br/>
-                              Spd: {t.ground_speed?.toFixed(1)}m/s<br/>
-                              Mode: {t.flight_mode}
+                           <div style={{color: '#000'}}>
+                              <div style={{fontWeight: 'bold', borderBottom: '1px solid #ccc', paddingBottom: '4px', marginBottom: '4px'}}>{drone.id}</div>
+                              <div><strong>GPS:</strong> {freshnessText} ({t.gps_valid ? '3D FIX' : 'NO FIX'})</div>
+                              <div><strong>Satellites:</strong> {t.satellites != null ? t.satellites : 'N/A'}</div>
+                              <div><strong>HDOP:</strong> {t.hdop != null ? t.hdop : 'N/A'}</div>
+                              <div><strong>Alt:</strong> {t.altitude != null ? `${t.altitude.toFixed(1)}m` : 'N/A'}</div>
+                              <div><strong>Spd:</strong> {t.ground_speed != null ? `${t.ground_speed.toFixed(1)}m/s` : 'N/A'}</div>
+                              <div><strong>Heading:</strong> {t.heading != null ? `${t.heading}°` : 'N/A'}</div>
+                              <div><strong>Mode:</strong> {t.flight_mode || 'N/A'}</div>
                            </div>
                         </Popup>
                      </Marker>
                      {drone.path && drone.path.length > 1 && (
                         <Polyline 
                            positions={drone.path} 
-                           color={selectedDrones.has(drone.id) ? '#16A34A' : '#2563EB'} 
+                           color={isSelected ? '#10B981' : '#3B82F6'} 
                            weight={3} 
                            opacity={0.6}
                         />

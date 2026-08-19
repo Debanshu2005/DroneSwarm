@@ -1,6 +1,6 @@
 import React from 'react';
 import { useDroneContext } from '../context/DroneContext';
-import { CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, AlertCircle } from 'lucide-react';
 
 export default function DronesView({ setView }) {
   const { drones, selectNone, toggleSelect } = useDroneContext();
@@ -12,7 +12,8 @@ export default function DronesView({ setView }) {
   };
 
   const renderStatusIcon = (status) => {
-    if (status === 'active') return <CheckCircle2 size={16} className="good" />;
+    if (status === 'CONNECTED') return <CheckCircle2 size={16} className="good" />;
+    if (status === 'DEGRADED') return <AlertCircle size={16} className="warning" />;
     if (status === 'failsafe') return <AlertTriangle size={16} className="warning" />;
     return <XCircle size={16} className="danger" />;
   };
