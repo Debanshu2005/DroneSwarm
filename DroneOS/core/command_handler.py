@@ -1,5 +1,5 @@
 from typing import Dict, Any, Callable, Coroutine
-from DroneOS.shared.protocol.messages import ControlMessage, CommandAction, StatusMessage, ErrorMessage
+from DroneOS.shared.protocol.messages import ControlMessage, CommandAction, CommandLifecycleMessage
 from DroneOS.shared.utils.logger import setup_logger
 
 logger = setup_logger("CommandHandler")
@@ -8,7 +8,7 @@ class CommandHandler:
     """
     Parses incoming ControlMessages and routes them to the appropriate subsystem (e.g. FlightManager).
     """
-    def __init__(self, node_id: str = "DroneOS", safety_module=None, flight_controller=None, health_monitor=None, battery_monitor=None):
+    def __init__(self, node_id: str = "DroneOS", safety_module=None, flight_controller=None, health_monitor=None, battery_monitor=None, error_learning=None):
         # Maps CommandAction to a coroutine handler
         self._handlers: Dict[CommandAction, Callable[[Dict[str, Any]], Coroutine[Any, Any, bool]]] = {}
         self.network = None
@@ -19,6 +19,19 @@ class CommandHandler:
         self.flight_controller = flight_controller
         self.health_monitor = health_monitor
         self.battery_monitor = battery_monitor
+        self.error_learning = error_learning
+
+    def _send_lifecycle(self, target_id: str, action: CommandAction, stage: str, reason: str = None, cmd_id: str = None):
+        if self.network:
+            msg = CommandLifecycleMessage(
+                sender_id=self.node_id,
+                target_id=target_id,
+                action=action,
+                stage=stage,
+                reason=reason,
+                cmd_id=cmd_id
+            )
+            self._dispatch_task(self.network.broadcast_message(msg))
 
     async def _validate_safety_gate(self, action: CommandAction) -> str:
         if not self.flight_controller or not self.safety_module or not self.health_monitor:
@@ -77,51 +90,33 @@ class CommandHandler:
     async def handle_command(self, message: ControlMessage) -> bool:
         if message.action in self._handlers:
             logger.info(f"COMMAND_RX sender={message.sender_id} target={message.target_id} action={message.action.value}")
+            self._send_lifecycle(message.sender_id, message.action, "BACKEND_RECEIVED")
             
             rejection_reason = await self._validate_safety_gate(message.action)
             if rejection_reason:
                 logger.warning(rejection_reason)
-                if self.network:
-                    msg = ErrorMessage(
-                        sender_id=self.node_id, timestamp=0.0, target_id=message.sender_id,
-                        error_code=403, error_msg=rejection_reason
-                    )
-                    self._dispatch_task(self.network.broadcast_message(msg))
+                self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=rejection_reason)
                 return False
 
             params = message.params or {}
             try:
+                self._send_lifecycle(message.sender_id, message.action, "MAVSDK_REQUESTED")
                 success = await self._handlers[message.action](params)
                 if not success:
                     logger.warning(f"Command {message.action.value} failed to execute properly.")
-                    if self.network:
-                        error_text = f"{message.action.name} rejected by FlightManager."
-                        if message.action == CommandAction.ARM:
-                            error_text = "ARM rejected by Pixhawk; check Pixhawk pre-arm checks."
-                        elif message.action == CommandAction.TAKEOFF:
-                            error_text = "TAKEOFF rejected by Pixhawk."
-                            
-                        msg = ErrorMessage(
-                            sender_id=self.node_id, timestamp=0.0, target_id=message.sender_id,
-                            error_code=400, error_msg=error_text
-                        )
-                        self._dispatch_task(self.network.broadcast_message(msg))
-                else:
-                    if self.network:
-                        msg = StatusMessage(
-                            sender_id=self.node_id, timestamp=0.0, target_id=message.sender_id,
-                            status_text=f"{message.action.name} successful.", severity="info"
-                        )
-                        self._dispatch_task(self.network.broadcast_message(msg))
-                return success
+                    error_text = f"{message.action.name} rejected by FlightManager."
+                    if message.action == CommandAction.ARM:
+                        error_text = "ARM rejected by Pixhawk; check Pixhawk pre-arm checks."
+                    self._send_lifecycle(message.sender_id, message.action, "FAILED", reason=error_text)
+                    return False
+                
+                self._send_lifecycle(message.sender_id, message.action, "SUCCESS")
+                return True
             except Exception as e:
                 logger.exception(f"Exception while executing {message.action.value}: {e}")
-                if self.network:
-                    msg = ErrorMessage(
-                        sender_id=self.node_id, timestamp=0.0, target_id=message.sender_id,
-                        error_code=500, error_msg=f"{message.action.name} failed: {e}"
-                    )
-                    self._dispatch_task(self.network.broadcast_message(msg))
+                self._send_lifecycle(message.sender_id, message.action, "FAILED", reason=str(e))
+                if hasattr(self, 'error_learning') and self.error_learning:
+                    self.error_learning.report_error(self.node_id, "COMMAND_HANDLER", str(e))
                 return False
         else:
             logger.warning(f"No handler registered for command: {message.action.value}")

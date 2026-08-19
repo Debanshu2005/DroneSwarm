@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useDroneContext } from './context/DroneContext';
-import { LayoutDashboard, Map as MapIcon, Route, Network, ShieldAlert, Activity, Settings, Menu, X, Navigation } from 'lucide-react';
+import { LayoutDashboard, Map as MapIcon, Route, Network, ShieldAlert, Activity, Settings, Menu, X, Navigation, TestTube } from 'lucide-react';
 import './App.css';
 
 import DashboardView from './views/DashboardView';
@@ -19,9 +19,10 @@ import SensorCalibrationView from './views/SensorCalibrationView';
 import HardwareTestView from './views/HardwareTestView';
 import SystemHealthView from './views/SystemHealthView';
 import LogsView from './views/LogsView';
+import AdvancedTestView from './views/AdvancedTestView';
 
 function App() {
-  const { isConnected, testMode, indoorMode, nowMs, wsManager } = useDroneContext();
+  const { isConnected, testMode, indoorMode, nowMs, wsManager, drones } = useDroneContext();
   const [currentView, setCurrentView] = useState('DASHBOARD');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   
@@ -46,6 +47,7 @@ function App() {
       case 'HARDWARE_TEST': return <HardwareTestView setView={setCurrentView} />;
       case 'SYSTEM_HEALTH': return <SystemHealthView />;
       case 'LOGS': return <LogsView />;
+      case 'ADVANCED_TEST': return <AdvancedTestView />;
       default: return <DashboardView setView={setCurrentView} />;
     }
   };
@@ -63,6 +65,34 @@ function App() {
   const navigateTo = (view) => {
     setCurrentView(view);
     setIsDrawerOpen(false);
+  };
+
+  const getHardwareIdentityStatus = () => {
+     if (isConnected !== "CONNECTED") return { text: "OFFLINE", color: "var(--danger)" };
+     if (testMode) return { text: "SIMULATION / SITL", color: "var(--warning)" };
+     
+     const droneList = Object.values(drones || {});
+     if (droneList.length === 0) return { text: "UNKNOWN", color: "var(--text-muted)" };
+     
+     // Check if any drone provides real hardware evidence
+     let hasReal = false;
+     let allStale = true;
+     
+     for (const d of droneList) {
+         if (d.status !== 'STALE' && d.status !== 'OFFLINE') {
+             allStale = false;
+         }
+         const fw = d.diagnostics?.px4?.firmware_version || "";
+         if (fw && !fw.toLowerCase().includes('sitl') && !fw.toLowerCase().includes('sim') && !fw.toLowerCase().includes('none')) {
+             if (d.telemetry && d.status === 'CONNECTED') {
+                 hasReal = true;
+             }
+         }
+     }
+     
+     if (allStale) return { text: "STALE", color: "var(--warning)" };
+     if (hasReal) return { text: "REAL HARDWARE", color: "var(--good)" };
+     return { text: "SITL", color: "var(--warning)" };
   };
   
   const handleOpenDrawer = () => {
@@ -102,7 +132,8 @@ function App() {
         { id: 'HARDWARE_TEST', label: 'Hardware Test', icon: <Activity size={20}/> },
         { id: 'SYSTEM_HEALTH', label: 'System Health', icon: <Activity size={20}/> },
         { id: 'LOGS', label: 'Logs', icon: <Activity size={20}/> },
-        { id: 'SETTINGS', label: 'Settings', icon: <Settings size={20}/> }
+        { id: 'SETTINGS', label: 'Settings', icon: <Settings size={20}/> },
+        { id: 'ADVANCED_TEST', label: 'Advanced Test', icon: <TestTube size={20}/> }
       ]
     }
   ];
@@ -152,7 +183,9 @@ function App() {
         </nav>
         
         <div style={{marginTop: 'auto', padding: '16px', borderTop: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-muted)'}}>
-           {testMode ? <div style={{color: 'var(--warning)', fontWeight: 600}}>SIMULATION / SITL</div> : <div style={{color: 'var(--good)', fontWeight: 600}}>REAL HARDWARE</div>}
+           <div style={{color: getHardwareIdentityStatus().color, fontWeight: 600}}>
+              {getHardwareIdentityStatus().text}
+           </div>
         </div>
       </aside>
       

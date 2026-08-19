@@ -7,8 +7,9 @@ class SafetyModule:
     """
     Coordinates safety actions. Decouples safety triggers from flight logic.
     """
-    def __init__(self, flight_controller: IFlightController):
+    def __init__(self, flight_controller: IFlightController, config=None):
         self.fc = flight_controller
+        self.config = config
         self.is_failsafe_active: bool = False
         self.mission_manager = None
 
@@ -31,13 +32,23 @@ class SafetyModule:
 
     async def trigger_connection_lost_failsafe(self) -> None:
         self.is_failsafe_active = True
-        logger.warning("Connection lost failsafe triggered! Returning to launch...")
-        await self.fc.rtl()
+        is_indoor = self.config and getattr(self.config, "profile", "") == "indoor"
+        if is_indoor:
+            logger.warning("Connection lost failsafe triggered! Indoor mode active -> Landing.")
+            await self.fc.land()
+        else:
+            logger.warning("Connection lost failsafe triggered! Returning to launch...")
+            await self.fc.rtl()
 
     async def trigger_low_battery_failsafe(self) -> None:
         self.is_failsafe_active = True
-        logger.warning("Low battery failsafe triggered! Returning to launch...")
-        await self.fc.rtl()
+        is_indoor = self.config and getattr(self.config, "profile", "") == "indoor"
+        if is_indoor:
+            logger.warning("Low battery failsafe triggered! Indoor mode active -> Landing.")
+            await self.fc.land()
+        else:
+            logger.warning("Low battery failsafe triggered! Returning to launch...")
+            await self.fc.rtl()
 
     async def trigger_critical_battery_failsafe(self) -> None:
         self.is_failsafe_active = True

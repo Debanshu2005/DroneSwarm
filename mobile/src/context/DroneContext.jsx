@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { WebSocketManager } from '../networking/WebSocketManager';
-import { MessageType, CommandAction, ControlMessage, HeartbeatMessage } from '../protocol/messages';
+import { MessageType, CommandAction, ControlMessage, EmergencyMessage, HeartbeatMessage, TestInjectMessage } from '../protocol/messages';
 import { evaluateDroneHealth, evaluateTelemetryFreshness } from '../utils/DroneHealth';
 
 const DroneContext = createContext();
@@ -20,6 +20,42 @@ export const DroneProvider = ({ children }) => {
   const [testMode, setTestMode] = useState(() => localStorage.getItem("PhoneOS_TestMode") === "true");
   const [indoorMode, setIndoorMode] = useState(() => localStorage.getItem("PhoneOS_IndoorMode") === "true");
   const [eventLog, setEventLog] = useState([]);
+  
+  // Advanced Test Overrides
+  const [testOverrides, setTestOverrides] = useState({});
+  const [testSessionLog, setTestSessionLog] = useState([]);
+  
+  const setTestOverride = (droneId, key, value) => {
+    setTestOverrides(prev => ({
+      ...prev,
+      [droneId]: {
+        ...(prev[droneId] || {}),
+        [key]: value
+      }
+    }));
+    logTestEvent(droneId, `Override ${key} = ${value}`);
+  };
+  
+  const injectFailure = (droneId, injectionType, active = true) => {
+    if (!wsManager || isConnected !== "CONNECTED") return;
+    wsManager.send(new TestInjectMessage(GS_ID, droneId, injectionType, active));
+    logTestEvent(droneId, `Inject Failure: ${injectionType} = ${active}`);
+  };
+  
+  const clearTestOverrides = (droneId) => {
+    setTestOverrides(prev => {
+      const next = { ...prev };
+      delete next[droneId];
+      return next;
+    });
+    logTestEvent(droneId, `Cleared all test overrides`);
+  };
+  
+  const logTestEvent = (droneId, message) => {
+    setTestSessionLog(prev => [{ time: Date.now(), droneId, message }, ...prev].slice(0, 500));
+  };
+  
+  const clearTestSessionLog = () => setTestSessionLog([]);
 
   // Time tracker for stale checks
   const [nowMs, setNowMs] = useState(Date.now());
@@ -167,6 +203,27 @@ export const DroneProvider = ({ children }) => {
        });
     });
 
+    manager.subscribe(MessageType.COMMAND_LIFECYCLE, (msg) => {
+       setDrones(prev => {
+          const drone = prev[msg.sender_id];
+          if (!drone) return prev;
+          return {
+             ...prev,
+             [msg.sender_id]: {
+                ...drone,
+                commandState: {
+                   ...drone.commandState,
+                   action: msg.action,
+                   state: msg.stage,
+                   reason: msg.reason,
+                   cmd_id: msg.cmd_id || (drone.commandState ? drone.commandState.cmd_id : undefined)
+                }
+             }
+          };
+       });
+       addLog(`[${msg.sender_id}] COMMAND ${msg.action.toUpperCase()}: ${msg.stage}${msg.reason ? ` (${msg.reason})` : ''}`);
+    });
+
     manager.subscribe(MessageType.ERROR, (msg) => {
        addLog(`COMMAND FAILED\nSource: MAVSDK\nOperation: ${msg.error_msg}\nTrace: PHONEOS -> WEBSOCKET -> RELAY -> UDP -> DRONEOS -> MAVSDK -> PX4`);
        setDrones(prev => {
@@ -260,7 +317,7 @@ export const DroneProvider = ({ children }) => {
 
     return () => {
       clearInterval(hbInterval);
-      if (manager.ws) manager.ws.close();
+      manager.disconnect();
     };
   }, [wsUrl]);
 
@@ -288,7 +345,7 @@ export const DroneProvider = ({ children }) => {
        }));
        
        if (isEmergency) {
-          wsManager.send(new ControlMessage(GS_ID, CommandAction.EMERGENCY, params, id, cmd_id));
+          wsManager.send(new EmergencyMessage(GS_ID, id));
        } else {
           wsManager.send(new ControlMessage(GS_ID, action, params, id, cmd_id));
        }
@@ -355,7 +412,8 @@ export const DroneProvider = ({ children }) => {
   const value = {
     wsManager, isConnected, drones, selectedDrones,
     wsUrl, setWsUrl, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs,
-    sendCommand, sendParamRequest, toggleSelect, selectAll, selectNone, addLog
+    sendCommand, sendParamRequest, toggleSelect, selectAll, selectNone, addLog,
+    testOverrides, setTestOverride, clearTestOverrides, injectFailure, testSessionLog, clearTestSessionLog
   };
 
   return <DroneContext.Provider value={value}>{children}</DroneContext.Provider>;

@@ -90,8 +90,8 @@ export class WebSocketManager {
         // Reconnect logic with exponential backoff (max 10s)
         let timeout = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 10000);
         console.log(`Will attempt reconnect in ${timeout}ms (Attempt ${this.reconnectAttempts + 1})`);
-        
-        setTimeout(() => {
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = setTimeout(() => {
             if (!this.intentionallyClosed) {
                 this.reconnectAttempts++;
                 this.connect();
@@ -103,6 +103,7 @@ export class WebSocketManager {
         this.intentionallyClosed = true;
         this.isConnecting = false;
         clearTimeout(this.connectionTimeout);
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         if (this.ws) {
             this.ws.close();
             this.ws = null;

@@ -48,7 +48,8 @@ class DroneOSApp:
             from DroneOS.shared.config.models import MissionConfig
             self.mission_cfg = load_yaml_config(config_dir / "mission.yaml", MissionConfig)
             storage_dir = self.mission_cfg.mission_storage_dir
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to load mission config: {e}. Defaulting storage_dir to 'missions/'")
             storage_dir = "missions/"
             
         self.node_id = self.drone_cfg.drone_id
@@ -67,6 +68,9 @@ class DroneOSApp:
             sys.exit(1)
         
         # Dependency Injection / Wiring
+        from DroneOS.core.error_learning import ErrorLearningSystem
+        self.error_learning = ErrorLearningSystem()
+        
         self.serializer = JsonSerializer()
         self.network = UdpNetworkAdapter(
             self.node_id, 
@@ -83,8 +87,8 @@ class DroneOSApp:
             flight_cfg=self.flight_cfg
         )
         self.flight_manager = FlightManager(self.flight_controller)
-        
-        self.safety_module = SafetyModule(self.flight_controller)
+        # Safety & Failsafe Module
+        self.safety_module = SafetyModule(self.flight_controller, config=self.flight_cfg)
         self.health_monitor = HealthMonitor(timeout_seconds=self.network_cfg.connection_timeout)
         self.battery_monitor = BatteryMonitor()
         
@@ -93,7 +97,8 @@ class DroneOSApp:
             safety_module=self.safety_module,
             flight_controller=self.flight_controller,
             health_monitor=self.health_monitor,
-            battery_monitor=self.battery_monitor
+            battery_monitor=self.battery_monitor,
+            error_learning=self.error_learning
         )
         self.command_handler.network = self.network
         self.swarm_manager = SwarmMembership(self.node_id)
@@ -151,6 +156,7 @@ class DroneOSApp:
         self.command_handler.register_handler(CommandAction.HOVER, self.flight_manager.hover)
         self.command_handler.register_handler(CommandAction.MOVE, self.flight_manager.move)
         self.command_handler.register_handler(CommandAction.SET_MODE, self.flight_manager.set_mode)
+        self.command_handler.register_handler(CommandAction.GOTO, self.flight_manager.goto)
         
         # Register safety callbacks
         self.health_monitor.on_connection_lost = self.safety_module.trigger_connection_lost_failsafe
@@ -159,6 +165,15 @@ class DroneOSApp:
 
         # Register network callbacks
         self.network.register_callback(self._on_message_received)
+
+    def _dispatch_task(self, coro):
+        import asyncio
+        try:
+            task = asyncio.create_task(coro)
+            self._active_tasks.add(task)
+            task.add_done_callback(self._active_tasks.discard)
+        except Exception as e:
+            logger.error(f"Failed to dispatch task in main: {e}")
 
     async def _on_message_received(self, msg: BaseMessage) -> None:
         if msg.msg_type == MessageType.HEARTBEAT:
@@ -181,26 +196,61 @@ class DroneOSApp:
             await self.command_handler.handle_command(msg)
             
         elif msg.msg_type == MessageType.EMERGENCY:
+            target = getattr(msg, 'target_id', None)
+            if target and target.lower() not in [self.node_id.lower(), "all"]:
+                logger.debug(f"Ignoring EMERGENCY meant for {target}")
+                return
             await self.safety_module.trigger_emergency_stop()
             
-        elif msg.msg_type == MessageType.MISSION_UPLOAD:
-            self.mission_receiver.handle_upload(msg)
-        elif msg.msg_type == MessageType.MISSION_PAUSE:
-            self.mission_receiver.handle_pause(msg)
-        elif msg.msg_type == MessageType.MISSION_RESUME:
-            self.mission_receiver.handle_resume(msg)
-        elif msg.msg_type == MessageType.MISSION_ABORT:
-            self.mission_receiver.handle_abort(msg)
-        elif msg.msg_type == MessageType.MISSION_START:
-            self.mission_receiver.handle_start(msg)
-        elif msg.msg_type == MessageType.MISSION_STOP:
-            self.mission_receiver.handle_stop(msg)
-        elif msg.msg_type == MessageType.MISSION_DELETE:
-            self.mission_receiver.handle_delete(msg)
-        elif msg.msg_type == MessageType.MISSION_DUPLICATE:
-            self.mission_receiver.handle_duplicate(msg)
-        elif msg.msg_type == MessageType.MISSION_CLEAR:
-            self.mission_receiver.handle_clear(msg)
+        elif msg.msg_type.startswith("mission_"):
+            target = getattr(msg, 'target_id', None)
+            if target and target.lower() not in [self.node_id.lower(), "all"]:
+                logger.debug(f"Ignoring {msg.msg_type} meant for {target}")
+                return
+                
+            if msg.msg_type == MessageType.MISSION_UPLOAD:
+                self.mission_receiver.handle_upload(msg)
+            elif msg.msg_type == MessageType.MISSION_PAUSE:
+                self.mission_receiver.handle_pause(msg)
+            elif msg.msg_type == MessageType.MISSION_RESUME:
+                self.mission_receiver.handle_resume(msg)
+            elif msg.msg_type == MessageType.MISSION_ABORT:
+                self.mission_receiver.handle_abort(msg)
+            elif msg.msg_type == MessageType.MISSION_START:
+                self.mission_receiver.handle_start(msg)
+            elif msg.msg_type == MessageType.MISSION_STOP:
+                self.mission_receiver.handle_stop(msg)
+            elif msg.msg_type == MessageType.MISSION_DELETE:
+                self.mission_receiver.handle_delete(msg)
+            elif msg.msg_type == MessageType.MISSION_DUPLICATE:
+                self.mission_receiver.handle_duplicate(msg)
+            elif msg.msg_type == MessageType.MISSION_CLEAR:
+                self.mission_receiver.handle_clear(msg)
+        elif msg.msg_type == MessageType.TEST_INJECT:
+            target = getattr(msg, 'target_id', None)
+            if target and target.lower() not in [self.node_id.lower(), "all"]:
+                return
+            injection_type = getattr(msg, 'injection_type', '')
+            active = getattr(msg, 'active', True)
+            
+            if injection_type == "RESTORE_ALL":
+                if hasattr(self.flight_controller, '_injections'):
+                    self.flight_controller._injections.clear()
+                # Also restore any manually dropped peers
+                self.swarm_manager.heartbeat_mgr.active_peers = {
+                   k: v for k, v in self.swarm_manager.heartbeat_mgr.active_peers.items()
+                } # In a real scenario we'd remove them from a dropped list
+            elif hasattr(self.flight_controller, 'set_test_injection'):
+                self.flight_controller.set_test_injection(injection_type, active)
+            
+            # Swarm loss injection
+            if injection_type.endswith("_LOST"):
+                # e.g., DR-01_LOST -> DR-01
+                peer_id = injection_type.replace("_LOST", "")
+                if peer_id.lower() != self.node_id.lower():
+                    # manually remove them from tracking to test swarm resilience
+                    self.swarm_manager.heartbeat_mgr.active_peers.pop(peer_id, None)
+
         elif msg.msg_type == MessageType.PARAM_REQUEST:
             target = getattr(msg, 'target_id', None)
             if target and target.lower() not in [self.node_id.lower(), "all"]:
@@ -208,7 +258,7 @@ class DroneOSApp:
             
             # Fire and forget task to avoid blocking main receive loop
             import asyncio
-            asyncio.create_task(self._handle_param_request(msg))
+                self._dispatch_task(self._handle_param_request(msg))
 
     async def _handle_param_request(self, msg: BaseMessage) -> None:
         from DroneOS.shared.protocol.messages import ParamResponseMessage
@@ -284,7 +334,7 @@ class DroneOSApp:
                     timestamp=time.time(),
                     diagnostics=report
                 )
-                asyncio.create_task(self.network.broadcast_message(diag_msg))
+                self._dispatch_task(self.network.broadcast_message(diag_msg))
                 
             except asyncio.CancelledError:
                 logger.info("Autonomous evaluation loop cancelled.")
@@ -316,15 +366,11 @@ class DroneOSApp:
         await self.network.start()
         
         # Start sensors
-        for t in [
-            asyncio.create_task(self.health_monitor.start()),
-            asyncio.create_task(self.battery_monitor.start(
-                get_battery_level=lambda: self.flight_controller._telemetry.battery_level if self.flight_controller else None
-            )),
-            asyncio.create_task(self._autonomous_evaluation_loop())
-        ]:
-            self._active_tasks.add(t)
-            t.add_done_callback(self._active_tasks.discard)
+        self._dispatch_task(self.health_monitor.start())
+        self._dispatch_task(self.battery_monitor.start(
+            get_battery_level=lambda: self.flight_controller._telemetry.battery_level if self.flight_controller else None
+        ))
+        self._dispatch_task(self._autonomous_evaluation_loop())
         
         # Start publisher loops
         self.telemetry_publisher.start()

@@ -38,9 +38,8 @@ class RuntimeDiagnostics:
         try:
             with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
                 temp_c = float(f.read().strip()) / 1000.0
-        except Exception:
-            pass
-
+        except Exception as e:
+            logger.debug(f"Failed to read Pi temperature (likely not on Pi hardware): {e}")
         return {
             "cpu_percent": psutil.cpu_percent(interval=None),
             "memory_mb": process.memory_info().rss / (1024 * 1024),

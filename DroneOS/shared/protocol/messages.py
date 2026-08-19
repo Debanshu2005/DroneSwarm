@@ -8,6 +8,7 @@ class MessageType(str, Enum):
     CONTROL = "control"
     STATUS = "status"
     ERROR = "error"
+    COMMAND_LIFECYCLE = "command_lifecycle"
     EMERGENCY = "emergency"
     TASK_BID = "task_bid"
     MISSION = "mission"
@@ -32,6 +33,12 @@ class MessageType(str, Enum):
     PARAM_REQUEST = "param_request"
     PARAM_RESPONSE = "param_response"
     DIAGNOSTICS = "diagnostics"
+    TEST_INJECT = "test_inject"
+
+class TestInjectMessage(BaseMessage):
+    msg_type: MessageType = MessageType.TEST_INJECT
+    injection_type: str
+    active: bool = True
 
 class BaseMessage(BaseModel):
     msg_type: MessageType
@@ -63,6 +70,7 @@ class TelemetryData(BaseModel):
     armed_state: Optional[str] = None
     mission_state: str = "IDLE"      # Added for decentralized mission awareness
     future_intent: str = "NONE"      # Added for collision avoidance and swarm intent
+    active_injections: List[str] = Field(default_factory=list) # Marks injected states
 
 class TelemetryMessage(BaseMessage):
     msg_type: MessageType = MessageType.TELEMETRY
@@ -84,6 +92,7 @@ class CommandAction(str, Enum):
     MOVE = "move"
     FORMATION_UPDATE = "formation_update"
     SET_MODE = "set_mode"
+    GOTO = "goto"
 
 class ControlMessage(BaseMessage):
     msg_type: MessageType = MessageType.CONTROL
@@ -94,6 +103,13 @@ class StatusMessage(BaseMessage):
     msg_type: MessageType = MessageType.STATUS
     status_text: str
     severity: str = "info"
+
+class CommandLifecycleMessage(BaseMessage):
+    msg_type: MessageType = MessageType.COMMAND_LIFECYCLE
+    action: CommandAction
+    stage: str # REQUESTED, BACKEND_RECEIVED, MAVSDK_REQUESTED, MAVSDK_RESPONSE, PX4_TELEMETRY_CONFIRMATION, SUCCESS, REJECTED, TIMEOUT, FAILED
+    reason: Optional[str] = None
+    cmd_id: Optional[str] = None
 
 class ErrorMessage(BaseMessage):
     msg_type: MessageType = MessageType.ERROR

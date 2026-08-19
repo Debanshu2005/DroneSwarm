@@ -1,4 +1,0 @@
-level: "INFO"
-log_file: "logs/groundstation.log"
-max_bytes: 10485760
-backup_count: 5

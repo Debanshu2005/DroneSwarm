@@ -6,6 +6,7 @@ export const MessageType = {
     CONTROL: "control",
     STATUS: "status",
     ERROR: "error",
+    COMMAND_LIFECYCLE: "command_lifecycle",
     EMERGENCY: "emergency",
     MISSION: "mission",
     MISSION_PROGRESS: "mission_progress",
@@ -29,6 +30,7 @@ export const MessageType = {
     PARAM_REQUEST: "param_request",
     PARAM_RESPONSE: "param_response",
     DIAGNOSTICS: "diagnostics",
+    TEST_INJECT: "test_inject",
 };
 
 export const CommandAction = {
@@ -41,7 +43,21 @@ export const CommandAction = {
     MOVE: "move",
     FORMATION_UPDATE: "formation_update",
     SET_MODE: "set_mode",
+    GOTO: "goto",
 };
+
+export class CommandLifecycleMessage {
+  constructor(sender_id, target_id, action, stage, reason = null, cmd_id = null) {
+    this.msg_type = MessageType.COMMAND_LIFECYCLE;
+    this.sender_id = sender_id;
+    this.target_id = target_id;
+    this.timestamp = Date.now() / 1000;
+    this.action = action;
+    this.stage = stage;
+    this.reason = reason;
+    this.cmd_id = cmd_id;
+  }
+}
 
 export class BaseMessage {
     constructor(msg_type, sender_id, target_id = null) {
@@ -82,5 +98,13 @@ export class ParamRequestMessage extends BaseMessage {
         this.param_name = param_name;
         this.param_value = param_value;
         this.param_type = param_type;
+    }
+}
+
+export class TestInjectMessage extends BaseMessage {
+    constructor(sender_id, target_id, injection_type, active = true) {
+        super(MessageType.TEST_INJECT, sender_id, target_id);
+        this.injection_type = injection_type;
+        this.active = active;
     }
 }

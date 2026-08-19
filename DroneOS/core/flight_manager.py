@@ -77,6 +77,30 @@ class FlightManager:
         
         return await self.fc.move_velocity(vx, vy, vz, duration, yaw_rate)
 
+    async def goto(self, params: Dict[str, Any]) -> bool:
+        telemetry = await self.fc.get_telemetry()
+        if getattr(telemetry, 'armed_state', None) != "ARMED":
+            logger.error("Cannot goto: Drone is not ARMED.")
+            return False
+            
+        lat = params.get('lat')
+        lon = params.get('lon')
+        alt = params.get('alt')
+        if lat is None or lon is None or alt is None:
+            logger.error("Goto requires lat, lon, and alt.")
+            return False
+            
+        # Basic Validation
+        if not telemetry.gps_valid:
+            logger.error("Goto failed: GPS is invalid.")
+            return False
+        if telemetry.battery_level is not None and telemetry.battery_level < 10.0:
+            logger.error("Goto failed: Battery too low for mission.")
+            return False
+            
+        # Call FC adapter goto (which should compile a temporary mission)
+        return await self.fc.goto_location(lat, lon, alt)
+
     async def set_mode(self, params: Dict[str, Any]) -> bool:
         mode = params.get('mode')
         if not mode:

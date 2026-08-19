@@ -1,12 +1,12 @@
 import json
 import os
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from pydantic import BaseModel, ValidationError
 from DroneOS.shared.utils.logger import setup_logger
 from DroneOS.shared.protocol.messages import (
     MissionUploadMessage, MissionProgressMessage, MissionStatusMessage,
-    MissionCompleteMessage, MissionAbortMessage, MissionPauseMessage, MissionResumeMessage
+    MissionAbortMessage, MissionPauseMessage, MissionResumeMessage
 )
 from DroneOS.core.navigation_manager import NavigationManager
 

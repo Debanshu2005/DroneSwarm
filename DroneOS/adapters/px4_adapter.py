@@ -1,7 +1,6 @@
 import asyncio
 from typing import Optional
 from DroneOS.core.interfaces import IFlightController
-from DroneOS.shared.protocol.messages import TelemetryData
 from DroneOS.shared.config.models import FlightConfig
 from DroneOS.shared.utils.logger import setup_logger
 
@@ -27,6 +26,7 @@ class PX4FlightController(IFlightController):
         self._connected = False
         self._telemetry = self._empty_telemetry()
         self._active_tasks = set()
+        self._injections = {}  # Store active TEST_INJECT states
 
     async def connect(self) -> bool:
         if not System:
@@ -36,8 +36,6 @@ class PX4FlightController(IFlightController):
         self.client = System()
         
         import glob
-        import os
-        
         conn_str = self.config.px4_connection_string
         
         if conn_str.startswith("serial://auto:"):
@@ -168,6 +166,15 @@ class PX4FlightController(IFlightController):
             logger.exception(f"PX4 Hover failed: {e}")
             return False
 
+    async def goto_location(self, lat: float, lon: float, alt: float, yaw: float = 0.0) -> bool:
+        if not self._connected: return False
+        try:
+            await self.client.action.goto_location(lat, lon, alt, yaw)
+            return True
+        except Exception as e:
+            logger.exception(f"PX4 Goto Location failed: {e}")
+            return False
+
     async def move_velocity(self, vx: float, vy: float, vz: float, duration: float, yaw_rate: float = 0.0) -> bool:
         if not self._connected: return False
         try:
@@ -177,19 +184,23 @@ class PX4FlightController(IFlightController):
             )
             try:
                 await self.client.offboard.start()
-            except Exception:
-                pass # Might already be started
-                
+            except Exception as e:
+                logger.debug(f"Offboard start failed or already active: {e}")
             await asyncio.sleep(duration)
-            
-            # Stop moving after duration
-            await self.client.offboard.set_velocity_body(
-                VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
-            )
             return True
         except (OSError, RuntimeError) as e:
             logger.exception(f"PX4 Move failed: {e}")
             return False
+        finally:
+            if self._connected:
+                try:
+                    # Guarantee neutral command on exit/cancel
+                    await self.client.offboard.set_velocity_body(
+                        VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                    )
+                    await self.client.offboard.stop()
+                except Exception as e:
+                    logger.error(f"Failed to cleanly terminate offboard stream: {e}")
 
     async def set_mode(self, mode: str) -> bool:
         if not self._connected:
@@ -224,8 +235,34 @@ class PX4FlightController(IFlightController):
                 raise e
             raise RuntimeError(f"PX4 Set Mode failed: {e}")
 
+    def set_test_injection(self, injection_type: str, active: bool):
+        self._injections[injection_type] = active
+        if active:
+            logger.warning(f"TEST INJECTION ACTIVE: {injection_type}")
+
     async def get_telemetry(self) -> TelemetryData:
-        return self._telemetry
+        # Create a deep copy of telemetry so we don't permanently corrupt internal state
+        import copy
+        t = copy.deepcopy(self._telemetry)
+        
+        # Track which injections are active so UI can explicitly distinguish fake data
+        t.active_injections = [k for k, v in self._injections.items() if v]
+
+        # Apply active injections
+        if self._injections.get("GPS_LOST"):
+            t.gps_valid = False
+            t.latitude = None
+            t.longitude = None
+        if self._injections.get("BATTERY_LOW"):
+            t.battery_level = 15.0
+        if self._injections.get("BATTERY_CRITICAL"):
+            t.battery_level = 5.0
+        if self._injections.get("TELEMETRY_STALE"):
+            # push timestamp back by 10 seconds to simulate stall
+            if t.timestamp:
+                t.timestamp -= 10.0
+                
+        return t
 
     def _mark_telemetry_fresh(self):
         import time

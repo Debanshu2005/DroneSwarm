@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">PhoneOS</string>
-    <string name="title_activity_main">PhoneOS</string>
+    <string name="app_name">PhoneOS GCS</string>
+    <string name="title_activity_main">PhoneOS GCS</string>
     <string name="package_name">com.swarmos.phoneos</string>
     <string name="custom_url_scheme">com.swarmos.phoneos</string>
 </resources>

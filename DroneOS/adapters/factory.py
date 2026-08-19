@@ -14,13 +14,7 @@ class AdapterFactory:
     def create_flight_controller(drone_cfg: DroneConfig, flight_cfg: FlightConfig) -> IFlightController:
         backend_type = flight_cfg.adapter_type.lower()
         
-        if backend_type == "airsim":
-            # Lazy import to prevent missing SDK crashes if another backend is used
-            from DroneOS.adapters.airsim_adapter import AirSimFlightController
-            logger.info("Initializing AirSim Flight Controller Adapter.")
-            return AirSimFlightController(vehicle_name=drone_cfg.vehicle_name, config=flight_cfg)
-            
-        elif backend_type in ["mavsdk", "px4"]:
+        if backend_type in ["mavsdk", "px4"]:
             from DroneOS.adapters.px4_adapter import PX4FlightController
             logger.info("Initializing PX4/MAVSDK Flight Controller Adapter.")
             return PX4FlightController(vehicle_name=drone_cfg.vehicle_name, config=flight_cfg)

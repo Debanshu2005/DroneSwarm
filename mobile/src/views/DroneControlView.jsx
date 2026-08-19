@@ -4,7 +4,7 @@ import { ShieldAlert, ShieldCheck, Navigation, ArrowUp, ArrowDown, Activity, Arr
 import { CommandAction } from '../protocol/messages';
 
 export default function DroneControlView({ setView }) {
-  const { drones, selectedDrones, nowMs, sendCommand, isConnected, indoorMode } = useDroneContext();
+  const { drones, selectedDrones, nowMs, sendCommand, isConnected, indoorMode, testOverrides } = useDroneContext();
   
   const [takeoffAltitude, setTakeoffAltitude] = useState(2.0);
   const [movementSpeed, setMovementSpeed] = useState(2.0);
@@ -114,15 +114,17 @@ export default function DroneControlView({ setView }) {
      const isFailsafe = drone.status === 'failsafe';
      const isHealthy = tel.system_health === "OK" || tel.system_health == null;
      
+     const overrides = testOverrides[activeDroneId] || {};
+     
      let reason = "OK";
      let armPass = true;
      
-     if (!isTelemetryHealthy) { armPass = false; reason = "LINK DOWN"; }
-     else if (!isPx4Connected) { armPass = false; reason = "PX4 DISCONNECTED"; }
+     if (!isTelemetryHealthy && !overrides.simulate_offline) { armPass = false; reason = "LINK DOWN"; }
+     else if (!isPx4Connected && !overrides.simulate_offline) { armPass = false; reason = "PX4 DISCONNECTED"; }
      else if (isFailsafe) { armPass = false; reason = "FAILSAFE ACTIVE"; }
-     else if (!isHealthy) { armPass = false; reason = "PX4 HEALTH NOT READY"; }
+     else if (!isHealthy && !overrides.bypass_sensors) { armPass = false; reason = "PX4 HEALTH NOT READY"; }
      else if (!isBatteryAcceptable) { armPass = false; reason = "BATTERY LOW"; }
-     else if (!indoorMode && !isGpsValid) { armPass = false; reason = "NO GPS FIX (OUTDOOR MODE)"; }
+     else if (!indoorMode && !isGpsValid && !overrides.bypass_gps) { armPass = false; reason = "NO GPS FIX (OUTDOOR MODE)"; }
      
      const takeoffPass = armPass && tel.armed_state === "ARMED";
      const takeoffReason = !armPass ? reason : (tel.armed_state !== "ARMED" ? "NOT ARMED" : "OK");
@@ -134,16 +136,25 @@ export default function DroneControlView({ setView }) {
 
   const handleTestCommand = (action, params = null) => {
      sendCommand(action, params);
-     setLastCommandResult({ action, status: 'SENT', time: new Date().toLocaleTimeString() });
+  };
+
+  const renderCommandStatus = () => {
+     if (!drone?.commandState?.action) return null;
+     const cs = drone.commandState;
+     let color = 'var(--text-muted)';
+     if (cs.state === 'SUCCESS') color = 'var(--good)';
+     if (cs.state === 'FAILED' || cs.state === 'REJECTED' || cs.state === 'TIMEOUT') color = 'var(--danger)';
+     if (cs.state === 'MAVSDK_REQUESTED' || cs.state === 'BACKEND_RECEIVED') color = 'var(--warning)';
      
-     // In a real implementation we would listen for WebSocket ACKs containing backend errors.
-     // For this test control, we will just assume the command was sent and PX4 is the authority.
-     setTimeout(() => {
-        const d = dronesRef?.current?.[activeDroneId];
-        if (action === CommandAction.ARM && d?.telemetry?.armed_state !== 'ARMED') {
-           setLastCommandResult({ action, status: 'REJECTED BY PX4', reason: d?.diagnostics?.last_error || 'Pre-arm checks failed', time: new Date().toLocaleTimeString() });
-        }
-     }, 1500);
+     return (
+       <div style={{marginTop: '16px', padding: '12px', background: 'var(--bg-card)', borderRadius: '6px', fontSize: '12px', border: `1px solid ${color}`}}>
+          <div style={{fontWeight: 'bold', marginBottom: '4px'}}>LIFECYCLE: {cs.action.toUpperCase()}</div>
+          <div style={{display: 'flex', justifyContent: 'space-between', color}}>
+            <span>Stage: {cs.state}</span>
+          </div>
+          {cs.reason && <div style={{color: 'var(--danger)', marginTop: '4px'}}>Reason: {cs.reason}</div>}
+       </div>
+     );
   };
 
   const renderModals = () => {
@@ -414,6 +425,8 @@ export default function DroneControlView({ setView }) {
                  <option value="MISSION">MISSION</option>
               </select>
            </div>
+           
+           {renderCommandStatus()}
         </div>
       </div>
 
