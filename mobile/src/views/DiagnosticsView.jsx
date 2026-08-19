@@ -29,26 +29,55 @@ export default function DiagnosticsView() {
          </div>
       </div>
 
-      <div className="glass-panel" style={{flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
-         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
-            <h3>Event Log</h3>
-            <div style={{display: 'flex', gap: '10px'}}>
-               <input type="text" placeholder="Filter logs..." value={filter} onChange={e => setFilter(e.target.value)} style={{padding: '4px 8px', borderRadius: '4px', background: 'rgba(0,0,0,0.5)', border: '1px solid var(--glass-border)', color: 'white'}} />
-               {/* Note: clear logs would require a method in context, omitted for brevity */}
+      <div style={{display: 'flex', gap: '15px', flex: 1, minHeight: 0}}>
+         <div className="glass-panel" style={{flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
+               <h3>Event Log</h3>
+               <div style={{display: 'flex', gap: '10px'}}>
+                  <input type="text" placeholder="Filter logs..." value={filter} onChange={e => setFilter(e.target.value)} style={{padding: '4px 8px', borderRadius: '4px', background: 'rgba(0,0,0,0.5)', border: '1px solid var(--glass-border)', color: 'white'}} />
+               </div>
+            </div>
+            
+            <div style={{flex: 1, overflowY: 'auto', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.85rem'}}>
+               {filteredLogs.length === 0 ? (
+                  <div style={{color: 'var(--text-muted)'}}>No events.</div>
+               ) : (
+                  filteredLogs.map((log, i) => (
+                     <div key={i} style={{marginBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '2px'}}>
+                        <span style={{color: 'var(--text-muted)'}}>{new Date(log.time).toISOString().substring(11,23)}</span> 
+                        <span style={{marginLeft: '10px'}}>{log.msg}</span>
+                     </div>
+                  ))
+               )}
             </div>
          </div>
-         
-         <div style={{flex: 1, overflowY: 'auto', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.85rem'}}>
-            {filteredLogs.length === 0 ? (
-               <div style={{color: 'var(--text-muted)'}}>No events.</div>
-            ) : (
-               filteredLogs.map((log, i) => (
-                  <div key={i} style={{marginBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '2px'}}>
-                     <span style={{color: 'var(--text-muted)'}}>{new Date(log.time).toISOString().substring(11,23)}</span> 
-                     <span style={{marginLeft: '10px'}}>{log.msg}</span>
-                  </div>
-               ))
-            )}
+
+         <div className="glass-panel" style={{flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
+            <h3>Motor / Vehicle Diagnostics</h3>
+            <div style={{flex: 1, overflowY: 'auto', marginTop: '10px'}}>
+               {Object.values(drones).length === 0 ? (
+                  <div style={{color: 'var(--text-muted)'}}>No drones connected.</div>
+               ) : (
+                  Object.values(drones).map(drone => {
+                     const tel = drone.telemetry || {};
+                     return (
+                        <div key={drone.id} style={{marginBottom: '15px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px'}}>
+                           <h4 style={{marginBottom: '10px'}}>{drone.id}</h4>
+                           <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.85rem'}}>
+                              <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Actuator Status:</span> <span>{tel.actuator_status || 'N/A'}</span></div>
+                              <div style={{display: 'flex', justifyContent: 'space-between'}}><span>ESC RPM:</span> <span>{tel.esc_rpm != null ? tel.esc_rpm : 'N/A'}</span></div>
+                              <div style={{display: 'flex', justifyContent: 'space-between'}}><span>ESC Voltage:</span> <span>{tel.esc_voltage != null ? `${tel.esc_voltage.toFixed(1)}V` : 'N/A'}</span></div>
+                              <div style={{display: 'flex', justifyContent: 'space-between'}}><span>ESC Current:</span> <span>{tel.esc_current != null ? `${tel.esc_current.toFixed(1)}A` : 'N/A'}</span></div>
+                              <div style={{display: 'flex', justifyContent: 'space-between'}}><span>ESC Temp:</span> <span>{tel.esc_temperature != null ? `${tel.esc_temperature.toFixed(1)}°C` : 'N/A'}</span></div>
+                              <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Sensor Health:</span> <span>{tel.sensor_health || 'N/A'}</span></div>
+                              <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Errors:</span> <span className={tel.errors ? 'danger' : ''}>{tel.errors || 'None'}</span></div>
+                              <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Warnings:</span> <span className={tel.warnings ? 'warning' : ''}>{tel.warnings || 'None'}</span></div>
+                           </div>
+                        </div>
+                     )
+                  })
+               )}
+            </div>
          </div>
       </div>
     </div>

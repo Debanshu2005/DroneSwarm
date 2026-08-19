@@ -3,7 +3,7 @@ import { useDroneContext } from '../context/DroneContext';
 import { Settings, RefreshCw } from 'lucide-react';
 
 export default function SettingsView() {
-  const { wsUrl, setWsUrl, testMode, setTestMode, isConnected } = useDroneContext();
+  const { wsUrl, setWsUrl, testMode, setTestMode, indoorMode, setIndoorMode, isConnected } = useDroneContext();
   const [localWsUrl, setLocalWsUrl] = useState(wsUrl);
 
   const handleSave = (e) => {
@@ -39,11 +39,19 @@ export default function SettingsView() {
             <h3>Advanced & Developer</h3>
             <p style={{fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '15px'}}>Simulation and experimental features.</p>
             
-            <label style={{display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px'}}>
+            <label style={{display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', marginBottom: '10px'}}>
                <input type="checkbox" checked={testMode} onChange={(e) => setTestMode(e.target.checked)} />
                <div>
                   <div style={{fontWeight: 'bold'}}>Enable Virtual Swarm Simulation</div>
                   <div style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>Spawns virtual drones to test UI layouts without hardware.</div>
+               </div>
+            </label>
+            
+            <label style={{display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px'}}>
+               <input type="checkbox" checked={indoorMode} onChange={(e) => setIndoorMode(e.target.checked)} />
+               <div>
+                  <div style={{fontWeight: 'bold', color: indoorMode ? 'var(--warning)' : 'inherit'}}>Indoor / Bench Test Mode</div>
+                  <div style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>Visually indicates GPS flight is disabled. PX4 still enforces safety.</div>
                </div>
             </label>
             

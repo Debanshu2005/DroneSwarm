@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useDroneContext } from './context/DroneContext';
 import { LayoutDashboard, Map as MapIcon, Route, Network, ShieldAlert, Activity, Settings, Menu, X } from 'lucide-react';
 import './App.css';
@@ -12,7 +13,7 @@ import DiagnosticsView from './views/DiagnosticsView';
 import SettingsView from './views/SettingsView';
 
 function App() {
-  const { isConnected, testMode } = useDroneContext();
+  const { isConnected, testMode, indoorMode } = useDroneContext();
   const [currentView, setCurrentView] = useState('FLEET');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -46,6 +47,7 @@ function App() {
       <div className="bg-blob blob-2"></div>
       
       {testMode && <div className="test-mode-banner">DEMO / TEST MODE</div>}
+      {indoorMode && !testMode && <div className="test-mode-banner" style={{background: 'var(--warning)', color: '#000'}}>INDOOR / BENCH TEST (NO GPS REQ)</div>}
 
       <div className="app-body">
         {/* Sidebar for desktop/tablet */}
@@ -84,7 +86,9 @@ function App() {
 
         {/* Main View Area */}
         <main className="view-area">
-          {renderView()}
+          <ErrorBoundary>
+            {renderView()}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

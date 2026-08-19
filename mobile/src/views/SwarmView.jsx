@@ -59,6 +59,23 @@ export default function SwarmView() {
                <div className="status-badge" style={{background: 'rgba(255,255,255,0.1)'}}>GCS</div>
             </div>
          </div>
+         
+         <div style={{marginTop: '20px', padding: '15px', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', width: '100%', maxWidth: '500px'}}>
+            <h4 style={{marginBottom: '10px', fontSize: '0.9rem'}}>Swarm Formation Control</h4>
+            <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+               <select disabled className="disabled-panel" style={{flex: 1, padding: '8px'}}>
+                  <option>Diamond</option>
+                  <option>V</option>
+                  <option>Line</option>
+                  <option>Square</option>
+                  <option>Circle</option>
+               </select>
+               <button className="primary-btn disabled-panel" disabled>Apply</button>
+            </div>
+            <div style={{color: 'var(--danger)', fontSize: '0.8rem', marginTop: '10px', textAlign: 'center'}}>
+               FORMATION CONTROL UNSUPPORTED BY BACKEND
+            </div>
+         </div>
       </div>
     </div>
   );

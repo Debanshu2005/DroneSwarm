@@ -17,6 +17,7 @@ export const DroneProvider = ({ children }) => {
   
   const [wsUrl, setWsUrl] = useState(() => localStorage.getItem("PhoneOS_WsUrl") || "ws://swarmos-pi.local:8080");
   const [testMode, setTestMode] = useState(() => localStorage.getItem("PhoneOS_TestMode") === "true");
+  const [indoorMode, setIndoorMode] = useState(() => localStorage.getItem("PhoneOS_IndoorMode") === "true");
   const [eventLog, setEventLog] = useState([]);
 
   // Time tracker for stale checks
@@ -33,7 +34,8 @@ export const DroneProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem("PhoneOS_WsUrl", wsUrl);
     localStorage.setItem("PhoneOS_TestMode", testMode);
-  }, [wsUrl, testMode]);
+    localStorage.setItem("PhoneOS_IndoorMode", indoorMode);
+  }, [wsUrl, testMode, indoorMode]);
   
   // Drone cleanup task & demo mode
   useEffect(() => {
@@ -185,12 +187,19 @@ export const DroneProvider = ({ children }) => {
     if (targets.length === 0) return;
     
     targets.forEach(id => {
+       // Prevent duplicate pending commands (unless MOVE which is streamable)
+       const currentState = drones[id]?.commandState;
+       if (currentState && currentState.state === 'SENDING' && currentState.action === action && action !== CommandAction.MOVE) {
+           console.warn(`Command ${action} is already pending for ${id}. Deduplicating.`);
+           return;
+       }
+
        const cmd_id = `cmd_${Date.now()}_${id}`;
        setDrones(prev => ({
           ...prev,
           [id]: {
              ...prev[id],
-             commandState: { action, state: 'SENDING', cmd_id }
+             commandState: { action, state: 'SENDING', cmd_id, timestamp: Date.now() }
           }
        }));
        
@@ -202,6 +211,31 @@ export const DroneProvider = ({ children }) => {
        addLog(`Sent ${action} to ${id}`);
     });
   };
+
+  // Command Timeout Monitor
+  useEffect(() => {
+    const timeoutMonitor = setInterval(() => {
+       const now = Date.now();
+       setDrones(prev => {
+          let changed = false;
+          const nextDrones = { ...prev };
+          for (const [id, drone] of Object.entries(nextDrones)) {
+             if (drone.commandState && drone.commandState.state === 'SENDING') {
+                if (now - drone.commandState.timestamp > 5000) { // 5s timeout
+                   nextDrones[id] = {
+                      ...drone,
+                      commandState: { ...drone.commandState, state: 'TIMEOUT' }
+                   };
+                   changed = true;
+                   addLog(`Command timeout for ${id}`);
+                }
+             }
+          }
+          return changed ? nextDrones : prev;
+       });
+    }, 1000);
+    return () => clearInterval(timeoutMonitor);
+  }, []);
 
   const toggleSelect = (id) => {
      const newSet = new Set(selectedDrones);
@@ -215,7 +249,7 @@ export const DroneProvider = ({ children }) => {
 
   const value = {
     wsManager, isConnected, drones, selectedDrones,
-    wsUrl, setWsUrl, testMode, setTestMode, eventLog, nowMs,
+    wsUrl, setWsUrl, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs,
     sendCommand, toggleSelect, selectAll, selectNone, addLog
   };
 

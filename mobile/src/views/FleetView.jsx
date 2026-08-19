@@ -4,8 +4,11 @@ import { ShieldAlert, ShieldCheck, Navigation, ArrowUp, ArrowDown, AlertTriangle
 import { CommandAction } from '../protocol/messages';
 
 export default function FleetView() {
-  const { drones, selectedDrones, toggleSelect, selectAll, selectNone, nowMs, sendCommand, isConnected } = useDroneContext();
+  const { drones, selectedDrones, toggleSelect, selectAll, selectNone, nowMs, sendCommand, isConnected, indoorMode } = useDroneContext();
   const [takeoffAltitude, setTakeoffAltitude] = useState(2.0);
+  const [movementSpeed, setMovementSpeed] = useState(2.0);
+  const [verticalSpeed, setVerticalSpeed] = useState(1.0);
+  const [yawRate, setYawRate] = useState(15.0);
   const [selectedFlightMode, setSelectedFlightMode] = useState("HOLD");
   const [showArmModal, setShowArmModal] = useState(false);
   const [showTakeoffModal, setShowTakeoffModal] = useState(false);
@@ -36,15 +39,26 @@ export default function FleetView() {
      const tel = drone.telemetry || {};
      const isHeartbeatHealthy = (nowMs - drone.lastSeen) < 2000;
      const isTelemetryHealthy = isHeartbeatHealthy && isConnected === "CONNECTED";
-     const isPx4Connected = tel.flight_mode && tel.flight_mode !== "disconnected";
+     const isPx4Connected = tel.flight_mode && tel.flight_mode !== "disconnected" && tel.flight_mode !== "UNKNOWN";
      const isBatteryAcceptable = (tel.battery_level || 0) >= 20;
      const isGpsValid = tel.gps_valid === true;
-     const isModeValid = tel.flight_mode && tel.flight_mode !== "UNKNOWN";
+     const isFailsafe = drone.status === 'failsafe';
+     const isHealthy = tel.system_health === "OK" || tel.system_health == null; // Fallback if missing
      
-     const armPass = isPx4Connected && isTelemetryHealthy && isBatteryAcceptable && isGpsValid && isModeValid && isHeartbeatHealthy;
+     let reason = "OK";
+     let armPass = true;
+     
+     if (!isTelemetryHealthy) { armPass = false; reason = "LINK DOWN"; }
+     else if (!isPx4Connected) { armPass = false; reason = "PX4 DISCONNECTED"; }
+     else if (isFailsafe) { armPass = false; reason = "FAILSAFE ACTIVE"; }
+     else if (!isHealthy) { armPass = false; reason = "PX4 HEALTH NOT READY"; }
+     else if (!isBatteryAcceptable) { armPass = false; reason = "BATTERY LOW"; }
+     else if (!indoorMode && !isGpsValid) { armPass = false; reason = "NO GPS FIX (OUTDOOR MODE)"; }
+     
      const takeoffPass = armPass && tel.armed_state === "ARMED";
+     const takeoffReason = !armPass ? reason : (tel.armed_state !== "ARMED" ? "NOT ARMED" : "OK");
      
-     return { armPass, takeoffPass, reason: armPass ? "OK" : "Safety checks failed" };
+     return { armPass, takeoffPass, reason, takeoffReason };
   };
 
   const selectedSafetyStates = Array.from(selectedDrones).map(id => {
@@ -147,6 +161,10 @@ export default function FleetView() {
                      <option value="LOITER">LOITER</option>
                      <option value="RTL">RTL</option>
                      <option value="LAND">LAND</option>
+                     <option value="OFFBOARD">OFFBOARD</option>
+                     <option value="POSITION">POSITION</option>
+                     <option value="ALTITUDE">ALTITUDE</option>
+                     <option value="MISSION">MISSION</option>
                   </select>
                   <button className="primary-btn" style={{padding: '5px 10px', fontSize: '0.8rem'}} onClick={() => sendCommand(CommandAction.SET_MODE, { mode: selectedFlightMode })}>SET</button>
                </div>
@@ -181,24 +199,42 @@ export default function FleetView() {
 
       {/* Manual Movement */}
       <div className={`glass-panel movement-widget mt-4 ${selectedDrones.size === 0 ? 'disabled-panel' : ''}`}>
-         <h2>Manual Movement <span className="subtitle">(Offboard)</span></h2>
+         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
+             <h2>Manual Movement <span className="subtitle">(Offboard)</span></h2>
+         </div>
+         
+         <div style={{display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap'}}>
+            <div className="takeoff-config" style={{flex: 1, minWidth: '150px'}}>
+               <label>Horizontal (m/s): {movementSpeed.toFixed(1)}</label>
+               <input type="range" min="0.5" max="10.0" step="0.5" value={movementSpeed} onChange={(e) => setMovementSpeed(parseFloat(e.target.value))} />
+            </div>
+            <div className="takeoff-config" style={{flex: 1, minWidth: '150px'}}>
+               <label>Vertical (m/s): {verticalSpeed.toFixed(1)}</label>
+               <input type="range" min="0.5" max="5.0" step="0.5" value={verticalSpeed} onChange={(e) => setVerticalSpeed(parseFloat(e.target.value))} />
+            </div>
+            <div className="takeoff-config" style={{flex: 1, minWidth: '150px'}}>
+               <label>Yaw Rate (deg/s): {yawRate.toFixed(1)}</label>
+               <input type="range" min="5" max="90" step="5" value={yawRate} onChange={(e) => setYawRate(parseFloat(e.target.value))} />
+            </div>
+         </div>
+
          <div className="joystick-container">
             <div className="d-pad">
                <div></div>
-               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vx: 2.0})}><ArrowUp/></button>
+               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vx: movementSpeed})}><ArrowUp/></button>
                <div></div>
-               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vy: -2.0})}><ArrowLeft/></button>
-               <div className="d-center"><Crosshair/></div>
-               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vy: 2.0})}><ArrowRight/></button>
+               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vy: -movementSpeed})}><ArrowLeft/></button>
+               <div className="d-center" onClick={() => sendCommand(CommandAction.HOVER)} title="Hover/Stop"><Square size={20} style={{margin:'auto'}}/></div>
+               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vy: movementSpeed})}><ArrowRight/></button>
                <div></div>
-               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vx: -2.0})}><ArrowDown/></button>
+               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vx: -movementSpeed})}><ArrowDown/></button>
                <div></div>
             </div>
             <div className="z-pad">
-               <button className="d-btn z-btn" onClick={() => sendCommand(CommandAction.MOVE, {vz: -1.0})}>Up</button>
-               <button className="d-btn z-btn" onClick={() => sendCommand(CommandAction.MOVE, {vz: 1.0})}>Dn</button>
-               <button className="d-btn z-btn rot" onClick={() => sendCommand(CommandAction.MOVE, {yaw_rate: -15.0})}><RotateCcw/></button>
-               <button className="d-btn z-btn rot" onClick={() => sendCommand(CommandAction.MOVE, {yaw_rate: 15.0})}><RotateCw/></button>
+               <button className="d-btn z-btn" onClick={() => sendCommand(CommandAction.MOVE, {vz: -verticalSpeed})}>Up</button>
+               <button className="d-btn z-btn" onClick={() => sendCommand(CommandAction.MOVE, {vz: verticalSpeed})}>Dn</button>
+               <button className="d-btn z-btn rot" onClick={() => sendCommand(CommandAction.MOVE, {yaw_rate: -yawRate})}><RotateCcw/></button>
+               <button className="d-btn z-btn rot" onClick={() => sendCommand(CommandAction.MOVE, {yaw_rate: yawRate})}><RotateCw/></button>
             </div>
          </div>
       </div>
@@ -210,9 +246,9 @@ export default function FleetView() {
                <h2>ARMING SAFETY GATE</h2>
                <div className="checklist" style={{maxHeight: '40vh', overflowY: 'auto'}}>
                   {selectedSafetyStates.map(s => (
-                     <div key={s.id} className="check-item" style={{borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '5px', marginBottom: '5px'}}>
+                     <div key={s.id} className="check-item" style={{borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '5px', marginBottom: '5px', display: 'flex', justifyContent: 'space-between'}}>
                         <span>{s.id}:</span> 
-                        {s.armPass ? <span className="good">✓ PASS</span> : <span className="danger">✗ FAIL</span>}
+                        {s.armPass ? <span className="good">✓ PASS</span> : <span className="danger">✗ {s.reason}</span>}
                      </div>
                   ))}
                </div>
@@ -253,9 +289,9 @@ export default function FleetView() {
                      <span>Target Altitude:</span> <span>{takeoffAltitude.toFixed(1)} m</span>
                   </div>
                   {selectedSafetyStates.map(s => (
-                     <div key={s.id} className="check-item" style={{borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '5px', marginBottom: '5px'}}>
+                     <div key={s.id} className="check-item" style={{borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '5px', marginBottom: '5px', display: 'flex', justifyContent: 'space-between'}}>
                         <span>{s.id}:</span> 
-                        {s.takeoffPass ? <span className="good">✓ READY</span> : <span className="danger">✗ NOT READY (Must be armed)</span>}
+                        {s.takeoffPass ? <span className="good">✓ READY</span> : <span className="danger">✗ {s.takeoffReason}</span>}
                      </div>
                   ))}
                </div>
