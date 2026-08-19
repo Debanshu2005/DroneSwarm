@@ -14,6 +14,8 @@ import SafetyView from './views/SafetyView';
 import DiagnosticsView from './views/DiagnosticsView';
 import SettingsView from './views/SettingsView';
 import ParameterView from './views/ParameterView';
+import ProfileConfigView from './views/ProfileConfigView';
+import SensorCalibrationView from './views/SensorCalibrationView';
 
 function App() {
   const { isConnected, testMode, indoorMode, nowMs, wsManager } = useDroneContext();
@@ -25,9 +27,9 @@ function App() {
   
   const renderView = () => {
     switch (currentView) {
-      case 'DASHBOARD': return <DashboardView />;
+      case 'DASHBOARD': return <DashboardView setView={setCurrentView} />;
+      case 'FLIGHT': return <DroneControlView setView={setCurrentView} />;
       case 'DRONES': return <DronesView setView={setCurrentView} />;
-      case 'DRONE_CONTROL': return <DroneControlView setView={setCurrentView} />;
       case 'MAP': return <MapView />;
       case 'MISSION': return <MissionView />;
       case 'SWARM': return <SwarmView />;
@@ -35,7 +37,10 @@ function App() {
       case 'DIAGNOSTICS': return <DiagnosticsView />;
       case 'SETTINGS': return <SettingsView />;
       case 'PARAMETERS': return <ParameterView />;
-      default: return <DashboardView />;
+      case 'SENSORS': return <SensorCalibrationView />;
+      case 'INDOOR_PROFILE': return <ProfileConfigView profileKey="INDOOR_PROFILE" setView={setCurrentView} />;
+      case 'OUTDOOR_PROFILE': return <ProfileConfigView profileKey="OUTDOOR_GPS_PROFILE" setView={setCurrentView} />;
+      default: return <DashboardView setView={setCurrentView} />;
     }
   };
 
@@ -46,9 +51,13 @@ function App() {
 
   const navItems = [
     { id: 'DASHBOARD', label: 'Dashboard', icon: <LayoutDashboard size={20}/> },
+    { id: 'FLIGHT', label: 'Flight Control', icon: <Navigation size={20}/> },
     { id: 'MAP', label: 'Map', icon: <MapIcon size={20}/> },
     { id: 'MISSION', label: 'Mission', icon: <Route size={20}/> },
-    { id: 'DRONES', label: 'Drones', icon: <Navigation size={20}/> },
+    { id: 'PARAMETERS', label: 'Parameters', icon: <Settings size={20}/> },
+    { id: 'INDOOR_PROFILE', label: 'Indoor Profile', icon: <Network size={20}/> },
+    { id: 'SENSORS', label: 'Sensors', icon: <Activity size={20}/> },
+    { id: 'DRONES', label: 'Drones', icon: <Network size={20}/> },
     { id: 'SWARM', label: 'Swarm', icon: <Network size={20}/> },
     { id: 'SAFETY', label: 'Safety', icon: <ShieldAlert size={20}/> },
     { id: 'DIAGNOSTICS', label: 'Diagnostics', icon: <Activity size={20}/> },

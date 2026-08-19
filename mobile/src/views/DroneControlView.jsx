@@ -46,9 +46,25 @@ export default function DroneControlView({ setView }) {
      }, 50);
   };
   
-  const cancelHold = () => {
+   const cancelHold = () => {
      if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
      setHoldProgress(0);
+  };
+
+  const moveIntervalRef = useRef(null);
+
+  const startMove = (params) => {
+     if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+     sendCommand(CommandAction.MOVE, params);
+     // Send at 10Hz to maintain offboard control
+     moveIntervalRef.current = setInterval(() => {
+        sendCommand(CommandAction.MOVE, params);
+     }, 100);
+  };
+
+  const stopMove = () => {
+     if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+     sendCommand(CommandAction.HOVER);
   };
 
   const validateDroneSafety = () => {
@@ -207,23 +223,47 @@ export default function DroneControlView({ setView }) {
       </div>
 
       <div className="card" style={{ padding: '20px' }}>
-        <h3 style={{marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Quick Actions</h3>
+        <h3 style={{marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Quick Actions ({tel.flight_mode || 'HOLD'})</h3>
         <div className="quick-actions" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))'}}>
-           <button className="btn btn-primary" onClick={() => setShowArmModal(true)} disabled={drone.status !== 'active'} style={{background: '#ef4444', borderColor: '#ef4444', color: 'white'}}>
-              <ShieldAlert size={16}/> ARM
+           {/* Mode-dependent rendering */}
+           {(!tel.flight_mode || tel.flight_mode === 'HOLD' || tel.flight_mode === 'LOITER' || tel.flight_mode === 'MANUAL' || tel.flight_mode === 'OFFBOARD') && (
+             <>
+               <button className="btn btn-primary" onClick={() => setShowArmModal(true)} disabled={drone.status !== 'active'} style={{background: '#ef4444', borderColor: '#ef4444', color: 'white'}}>
+                  <ShieldAlert size={16}/> ARM
+               </button>
+               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.DISARM)} disabled={drone.status !== 'active'}>
+                  <ShieldCheck size={16}/> DISARM
+               </button>
+             </>
+           )}
+
+           {(!tel.flight_mode || tel.flight_mode === 'HOLD' || tel.flight_mode === 'LOITER') && (
+             <>
+               <button className="btn btn-secondary" onClick={() => setShowTakeoffModal(true)} disabled={drone.status !== 'active'}>
+                  <ArrowUp size={16}/> TAKEOFF
+               </button>
+               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.LAND)} disabled={drone.status !== 'active'}>
+                  <ArrowDown size={16}/> LAND
+               </button>
+               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.RTL)} disabled={drone.status !== 'active'}>
+                  <Navigation size={16}/> RTL
+               </button>
+             </>
+           )}
+
+           {tel.flight_mode === 'MISSION' && (
+             <>
+               <button className="btn btn-primary" style={{background: '#10b981', borderColor: '#10b981'}} onClick={() => sendCommand(CommandAction.MISSION_START)}>START</button>
+               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.MISSION_PAUSE)}>PAUSE</button>
+               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.MISSION_START)}>RESUME</button>
+               <button className="btn btn-primary" style={{background: '#ef4444', borderColor: '#ef4444'}} onClick={() => sendCommand(CommandAction.MISSION_ABORT)}>CANCEL</button>
+             </>
+           )}
+
+           <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'HOLD'})} disabled={drone.status !== 'active'}>
+              HOLD
            </button>
-           <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.DISARM)} disabled={drone.status !== 'active'}>
-              <ShieldCheck size={16}/> DISARM
-           </button>
-           <button className="btn btn-secondary" onClick={() => setShowTakeoffModal(true)} disabled={drone.status !== 'active'}>
-              <ArrowUp size={16}/> TAKEOFF
-           </button>
-           <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.LAND)} disabled={drone.status !== 'active'}>
-              <ArrowDown size={16}/> LAND
-           </button>
-           <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.RTL)} disabled={drone.status !== 'active'}>
-              <Navigation size={16}/> RTL
-           </button>
+
            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <select className="input-field" style={{ width: '100%', padding: '8px', fontSize: '12px' }} onChange={(e) => sendCommand(CommandAction.SET_MODE, {mode: e.target.value})}>
                  <option value="">Set Mode...</option>
@@ -231,49 +271,93 @@ export default function DroneControlView({ setView }) {
                  <option value="LOITER">LOITER</option>
                  <option value="OFFBOARD">OFFBOARD</option>
                  <option value="MANUAL">MANUAL</option>
+                 <option value="MISSION">MISSION</option>
               </select>
            </div>
         </div>
       </div>
 
-      <div className="card" style={{ padding: '20px' }}>
-         <h3 style={{marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Manual Control (RC)</h3>
-         
-         <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '24px'}}>
-            <div className="input-group">
-               <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>XY Speed: {movementSpeed.toFixed(1)}m/s</label>
-               <input type="range" min="0.5" max="10.0" step="0.5" value={movementSpeed} onChange={(e) => setMovementSpeed(parseFloat(e.target.value))} />
+      {(tel.flight_mode === 'MANUAL' || tel.flight_mode === 'OFFBOARD' || !tel.flight_mode) && (
+         <div className="card" style={{ padding: '20px' }}>
+            <h3 style={{marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Manual Control (RC)</h3>
+            
+            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '24px'}}>
+               <div className="input-group">
+                  <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>XY Speed: {movementSpeed.toFixed(1)}m/s</label>
+                  <input type="range" min="0.5" max="10.0" step="0.5" value={movementSpeed} onChange={(e) => setMovementSpeed(parseFloat(e.target.value))} />
+               </div>
+               <div className="input-group">
+                  <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>Z Speed: {verticalSpeed.toFixed(1)}m/s</label>
+                  <input type="range" min="0.5" max="5.0" step="0.5" value={verticalSpeed} onChange={(e) => setVerticalSpeed(parseFloat(e.target.value))} />
+               </div>
+               <div className="input-group">
+                  <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>Yaw Rate: {yawRate.toFixed(1)}°/s</label>
+                  <input type="range" min="5" max="90" step="5" value={yawRate} onChange={(e) => setYawRate(parseFloat(e.target.value))} />
+               </div>
             </div>
-            <div className="input-group">
-               <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>Z Speed: {verticalSpeed.toFixed(1)}m/s</label>
-               <input type="range" min="0.5" max="5.0" step="0.5" value={verticalSpeed} onChange={(e) => setVerticalSpeed(parseFloat(e.target.value))} />
-            </div>
-            <div className="input-group">
-               <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>Yaw Rate: {yawRate.toFixed(1)}°/s</label>
-               <input type="range" min="5" max="90" step="5" value={yawRate} onChange={(e) => setYawRate(parseFloat(e.target.value))} />
-            </div>
-         </div>
 
-         <div className="joystick-container" style={{background: 'var(--bg-main)', padding: '24px', borderRadius: '12px', display: 'flex', justifyContent: 'center', gap: '40px'}}>
-            <div className="d-pad">
-               <div></div>
-               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vx: movementSpeed})}><ArrowUp/></button>
-               <div></div>
-               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vy: -movementSpeed})}><ArrowLeft/></button>
-               <div className="d-center" onClick={() => sendCommand(CommandAction.HOVER)} title="Hover/Stop"><Square size={20}/></div>
-               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vy: movementSpeed})}><ArrowRight/></button>
-               <div></div>
-               <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vx: -movementSpeed})}><ArrowDown/></button>
-               <div></div>
-            </div>
-            <div className="z-pad">
-               <button className="d-btn z-btn" onClick={() => sendCommand(CommandAction.MOVE, {vz: -verticalSpeed})}>Up</button>
-               <button className="d-btn z-btn" onClick={() => sendCommand(CommandAction.MOVE, {vz: verticalSpeed})}>Dn</button>
-               <button className="d-btn z-btn rot" onClick={() => sendCommand(CommandAction.MOVE, {yaw_rate: -yawRate})}><RotateCcw/></button>
-               <button className="d-btn z-btn rot" onClick={() => sendCommand(CommandAction.MOVE, {yaw_rate: yawRate})}><RotateCw/></button>
+            <div className="joystick-container" style={{background: 'var(--bg-main)', padding: '24px', borderRadius: '12px', display: 'flex', justifyContent: 'center', gap: '40px', flexWrap: 'wrap'}}>
+               
+               {/* Left Stick (Altitude / Yaw) */}
+               <div className="d-pad">
+                  <div></div>
+                  <button className="d-btn" 
+                     onPointerDown={() => startMove({vz: -verticalSpeed})}
+                     onPointerUp={stopMove}
+                     onPointerLeave={stopMove}
+                  ><ArrowUp/></button>
+                  <div></div>
+                  <button className="d-btn" 
+                     onPointerDown={() => startMove({yaw_rate: -yawRate})}
+                     onPointerUp={stopMove}
+                     onPointerLeave={stopMove}
+                  ><RotateCcw/></button>
+                  <div className="d-center" onClick={stopMove} title="Hover/Stop"><Square size={20}/></div>
+                  <button className="d-btn" 
+                     onPointerDown={() => startMove({yaw_rate: yawRate})}
+                     onPointerUp={stopMove}
+                     onPointerLeave={stopMove}
+                  ><RotateCw/></button>
+                  <div></div>
+                  <button className="d-btn" 
+                     onPointerDown={() => startMove({vz: verticalSpeed})}
+                     onPointerUp={stopMove}
+                     onPointerLeave={stopMove}
+                  ><ArrowDown/></button>
+                  <div></div>
+               </div>
+
+               {/* Right Stick (XY Movement) */}
+               <div className="d-pad">
+                  <div></div>
+                  <button className="d-btn" 
+                     onPointerDown={() => startMove({vx: movementSpeed})}
+                     onPointerUp={stopMove}
+                     onPointerLeave={stopMove}
+                  ><ArrowUp/></button>
+                  <div></div>
+                  <button className="d-btn" 
+                     onPointerDown={() => startMove({vy: -movementSpeed})}
+                     onPointerUp={stopMove}
+                     onPointerLeave={stopMove}
+                  ><ArrowLeft/></button>
+                  <div className="d-center" onClick={stopMove} title="Hover/Stop"><Square size={20}/></div>
+                  <button className="d-btn" 
+                     onPointerDown={() => startMove({vy: movementSpeed})}
+                     onPointerUp={stopMove}
+                     onPointerLeave={stopMove}
+                  ><ArrowRight/></button>
+                  <div></div>
+                  <button className="d-btn" 
+                     onPointerDown={() => startMove({vx: -movementSpeed})}
+                     onPointerUp={stopMove}
+                     onPointerLeave={stopMove}
+                  ><ArrowDown/></button>
+                  <div></div>
+               </div>
             </div>
          </div>
-      </div>
+      )}
       
       {renderModals()}
     </div>

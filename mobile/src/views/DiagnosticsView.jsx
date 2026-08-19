@@ -46,7 +46,7 @@ export default function DiagnosticsView() {
                   filteredLogs.map((log, i) => (
                      <div key={i} style={{marginBottom: '4px', borderBottom: '1px solid var(--border)', paddingBottom: '4px'}}>
                         <span style={{color: 'var(--text-muted)'}}>{new Date(log.time).toISOString().substring(11,23)}</span> 
-                        <span style={{marginLeft: '12px', color: 'var(--text-main)'}}>{log.msg}</span>
+                        <span style={{marginLeft: '12px', color: 'var(--text-main)', whiteSpace: 'pre-wrap'}}>{log.msg}</span>
                      </div>
                   ))
                )}

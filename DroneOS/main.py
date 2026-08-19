@@ -239,12 +239,28 @@ class DroneOSApp:
                 if success:
                     # Readback to confirm
                     val = await self.flight_controller.get_param(msg.param_name, msg.param_type)
-                    response.param_name = msg.param_name
-                    response.param_value = val
-                    response.param_type = msg.param_type
-                    response.success = True
+                    if val is not None:
+                        # Check match
+                        is_match = False
+                        if msg.param_type == "int":
+                            is_match = int(val) == int(msg.param_value)
+                        else:
+                            is_match = abs(float(val) - float(msg.param_value)) < 0.0001
+                        
+                        if is_match:
+                            response.param_name = msg.param_name
+                            response.param_value = val
+                            response.param_type = msg.param_type
+                            response.success = True
+                        else:
+                            response.success = False
+                            response.message = f"PX4 rejected parameter change. Expected {msg.param_value}, got {val}"
+                    else:
+                        response.success = False
+                        response.message = f"Failed to readback param {msg.param_name} after writing."
                 else:
-                    response.message = f"Failed to set param {msg.param_name}."
+                    response.success = False
+                    response.message = f"PX4 rejected write for param {msg.param_name}."
         except Exception as e:
             logger.error(f"Param request failed: {e}")
             response.message = str(e)

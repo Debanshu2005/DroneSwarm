@@ -153,7 +153,7 @@ export const DroneProvider = ({ children }) => {
     });
 
     manager.subscribe(MessageType.ERROR, (msg) => {
-       addLog(`ERROR from ${msg.sender_id}: ${msg.error_msg}`);
+       addLog(`COMMAND FAILED\nSource: MAVSDK\nOperation: ${msg.error_msg}\nTrace: PHONEOS -> WEBSOCKET -> RELAY -> UDP -> DRONEOS -> MAVSDK -> PX4`);
        setDrones(prev => {
           const drone = prev[msg.sender_id];
           if (!drone) return prev;
@@ -173,23 +173,49 @@ export const DroneProvider = ({ children }) => {
           if (!drone) return prev;
           
           let updatedParams = { ...(drone.parameters || {}) };
+          let updatedHistory = [ ...(drone.paramHistory || []) ];
           
           if (msg.action === "read_all" && msg.parameters) {
              updatedParams = msg.parameters;
           } else if (msg.success && msg.param_name !== null) {
+             const oldVal = updatedParams[msg.param_name];
              updatedParams[msg.param_name] = msg.param_value;
+             
+             if (msg.action === "write") {
+                updatedHistory.unshift({
+                   time: Date.now(),
+                   name: msg.param_name,
+                   old_value: oldVal,
+                   new_value: msg.param_value,
+                   status: 'SUCCESS'
+                });
+             }
           }
           
           if (msg.message && !msg.success) {
              addLog(`Param Error from ${msg.sender_id}: ${msg.message}`);
+             if (msg.action === "write" && msg.param_name) {
+                updatedHistory.unshift({
+                   time: Date.now(),
+                   name: msg.param_name,
+                   old_value: updatedParams[msg.param_name],
+                   new_value: msg.param_value,
+                   status: 'FAILED',
+                   error: msg.message
+                });
+             }
           }
+
+          // Keep bounded history
+          if (updatedHistory.length > 50) updatedHistory = updatedHistory.slice(0, 50);
 
           return {
              ...prev,
              [msg.sender_id]: {
                 ...drone,
                 parameters: updatedParams,
-                paramSyncState: { pending: false, lastSync: Date.now() }
+                paramHistory: updatedHistory,
+                paramSyncState: { pending: false, lastSync: Date.now(), lastAction: msg.action, lastParam: msg.param_name }
              }
           };
        });
