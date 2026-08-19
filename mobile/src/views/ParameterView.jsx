@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDroneContext } from '../context/DroneContext';
-import { Settings, RefreshCw, Search, Save, AlertCircle } from 'lucide-react';
+import { Settings, RefreshCw, Search, Save, AlertCircle, X, Edit2 } from 'lucide-react';
+import { getParamMetadata, validateParameter } from '../utils/Px4Parameters';
 
 export default function ParameterView() {
   const { drones, selectedDrones, sendParamRequest } = useDroneContext();
@@ -8,6 +9,7 @@ export default function ParameterView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
   const [editState, setEditState] = useState({}); // { param_name: current_edited_value }
+  const [validationErrors, setValidationErrors] = useState({});
   
   // If multiple drones are selected, just show the first one's params for now, 
   // or prompt to select exactly one.
@@ -20,23 +22,33 @@ export default function ParameterView() {
 
   const handleParamChange = (name, val) => {
     setEditState(prev => ({ ...prev, [name]: val }));
+    setValidationErrors(prev => ({ ...prev, [name]: null }));
   };
 
-  const handleSave = (name, originalType) => {
-    const val = editState[name];
-    if (val !== undefined && targetId) {
-       // Infer type based on whether it's an int or float in JS, but it's string from input
-       const isFloat = val.includes('.');
-       const paramType = isFloat ? 'float' : 'int';
-       sendParamRequest('write', name, val, paramType, targetId);
-       
-       // Clear edit state for this param so it returns to viewing mode while syncing
-       setEditState(prev => {
-          const next = { ...prev };
-          delete next[name];
-          return next;
-       });
-    }
+  const handleSave = (name, type) => {
+     const value = editState[name];
+     const validation = validateParameter(name, value, type);
+     if (!validation.valid) {
+        setValidationErrors(prev => ({ ...prev, [name]: validation.error }));
+        return;
+     }
+     
+     const actualType = getParamMetadata(name)?.type === 'FLOAT' ? 'float' : 'int';
+     sendParamRequest('write', name, value, actualType, targetId);
+     handleCancel(name);
+  };
+
+  const handleCancel = (name) => {
+     setEditState(prev => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+     });
+     setValidationErrors(prev => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+     });
   };
 
   if (!targetDrone) {
@@ -138,40 +150,42 @@ export default function ParameterView() {
                 </tr>
               </thead>
               <tbody>
-                {filteredParams.map(name => {
-                  const val = parameters[name];
-                  const isEditing = editState[name] !== undefined;
-                  const displayVal = isEditing ? editState[name] : val;
+                {filteredParams.map(k => {
+                  const val = parameters[k];
+                  const isEditing = editState[k] !== undefined;
                   
                   return (
-                    <tr key={name} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      <td style={{ padding: '12px 16px', fontWeight: 500, fontFamily: 'monospace' }}>{name}</td>
-                      <td style={{ padding: '12px 16px' }}>
+                    <tr key={k} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '12px 16px', fontWeight: 500, fontFamily: 'monospace' }}>{k}</td>
+                      <td style={{ padding: '8px' }}>
                         {isEditing ? (
-                           <input 
-                              type="number" 
-                              step="any"
-                              value={displayVal} 
-                              onChange={(e) => handleParamChange(name, e.target.value)}
-                              style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--primary)', borderRadius: '4px', outline: 'none' }}
-                           />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                             {renderEditor(k, getParamMetadata(k), editState[k], (val) => handleParamChange(k, val))}
+                             {validationErrors[k] && (
+                                <div style={{ color: '#ef4444', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                   <AlertCircle size={12}/> {validationErrors[k]}
+                                </div>
+                             )}
+                          </div>
                         ) : (
-                           <span style={{ fontFamily: 'monospace' }}>{val}</span>
+                           <span style={{ fontFamily: 'monospace' }}>
+                              {val} {getParamMetadata(k)?.unit ? <span className="text-muted text-sm">{getParamMetadata(k).unit}</span> : ''}
+                           </span>
                         )}
                       </td>
-                      <td style={{ padding: '12px 16px' }}>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>
                         {isEditing ? (
-                           <div style={{ display: 'flex', gap: '8px' }}>
-                              <button className="btn btn-primary" style={{ padding: '6px 12px' }} onClick={() => handleSave(name, typeof val)}>
-                                <Save size={14} /> Save
+                           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                              <button className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => handleCancel(k)}>
+                                <X size={14} />
                               </button>
-                              <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => handleParamChange(name, undefined)}>
-                                Cancel
+                              <button className="btn btn-primary" style={{ padding: '4px 8px' }} onClick={() => handleSave(k, typeof val === 'number' && Number.isInteger(val) ? 'int' : 'float')}>
+                                <Save size={14} />
                               </button>
                            </div>
                         ) : (
-                           <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => handleParamChange(name, val)}>
-                             Edit
+                           <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => handleParamChange(k, val)}>
+                             <Edit2 size={14} />
                            </button>
                         )}
                       </td>
@@ -223,4 +237,72 @@ export default function ParameterView() {
       )}
     </div>
   );
+}
+
+function renderEditor(name, meta, val, onChange) {
+    if (meta?.type === 'ENUM') {
+        return (
+            <select 
+                className="input-field" 
+                value={val} 
+                onChange={(e) => onChange(e.target.value)}
+                style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--primary)', borderRadius: '4px' }}
+            >
+                {Object.entries(meta.options).map(([optVal, optLabel]) => (
+                    <option key={optVal} value={optVal}>{optVal} - {optLabel}</option>
+                ))}
+            </select>
+        );
+    }
+    if (meta?.type === 'BOOLEAN') {
+        return (
+            <select 
+                className="input-field" 
+                value={val} 
+                onChange={(e) => onChange(e.target.value)}
+                style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--primary)', borderRadius: '4px' }}
+            >
+                <option value={0}>0 - False</option>
+                <option value={1}>1 - True</option>
+            </select>
+        );
+    }
+    if (meta?.type === 'BITMASK') {
+        const numVal = parseInt(val) || 0;
+        return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', background: 'var(--bg-main)', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                {Object.entries(meta.options).map(([bitStr, label]) => {
+                    const bit = parseInt(bitStr);
+                    const isSet = (numVal & bit) === bit;
+                    return (
+                        <label key={bit} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                            <input 
+                                type="checkbox" 
+                                checked={isSet}
+                                onChange={(e) => {
+                                    const newVal = e.target.checked ? (numVal | bit) : (numVal & ~bit);
+                                    onChange(newVal);
+                                }}
+                            />
+                            {label}
+                        </label>
+                    );
+                })}
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Value: {numVal}</div>
+            </div>
+        );
+    }
+    // Float, Int or fallback
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input 
+                type="number" 
+                step={meta?.type === 'FLOAT' ? "any" : "1"}
+                value={val} 
+                onChange={(e) => onChange(e.target.value)}
+                style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--primary)', borderRadius: '4px' }}
+            />
+            {meta?.unit && <span className="text-muted text-sm">{meta.unit}</span>}
+        </div>
+    );
 }

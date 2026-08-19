@@ -11,10 +11,12 @@ export default function DroneControlView({ setView }) {
   const [verticalSpeed, setVerticalSpeed] = useState(1.0);
   const [yawRate, setYawRate] = useState(15.0);
   
-  const [showArmModal, setShowArmModal] = useState(false);
   const [showTakeoffModal, setShowTakeoffModal] = useState(false);
   const holdIntervalRef = useRef(null);
   const [holdProgress, setHoldProgress] = useState(0);
+
+  const [takeoffState, setTakeoffState] = useState(null);
+  const [takeoffStartAlt, setTakeoffStartAlt] = useState(0);
 
   const activeDroneId = selectedDrones.size > 0 ? Array.from(selectedDrones)[0] : null;
   const drone = drones[activeDroneId];
@@ -31,6 +33,19 @@ export default function DroneControlView({ setView }) {
   }
 
   const tel = drone.telemetry || {};
+
+  useEffect(() => {
+     if (takeoffState) {
+        if (takeoffState === 'REQUESTED' && tel.flight_mode === 'TAKEOFF') {
+           setTakeoffState('ACTIVE');
+        } else if (takeoffState === 'ACTIVE' && tel.altitude > takeoffStartAlt + 0.5) {
+           setTakeoffState('RISING');
+        } else if (takeoffState === 'RISING' && tel.altitude >= takeoffAltitude - 0.5) {
+           setTakeoffState('REACHED');
+           setTimeout(() => setTakeoffState(null), 3000);
+        }
+     }
+  }, [tel.flight_mode, tel.altitude, takeoffState, takeoffStartAlt, takeoffAltitude]);
 
   const startHold = (action) => {
      setHoldProgress(0);
@@ -153,9 +168,22 @@ export default function DroneControlView({ setView }) {
                          <h3 className="good" style={{marginBottom: '10px'}}>READY FOR TAKEOFF</h3>
                          <button 
                             className="action-btn action-arm press-hold" style={{width: '100%', borderColor: 'var(--primary)', color: '#fff', background: 'var(--primary)'}}
-                            onMouseDown={() => startHold(() => {setShowTakeoffModal(false); sendCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude });})}
+                            onMouseDown={() => startHold(() => {
+                               setShowTakeoffModal(false); 
+                               setTakeoffState('REQUESTED'); 
+                               setTakeoffStartAlt(tel.altitude || 0); 
+                               sendCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude });
+                            })}
                             onMouseUp={cancelHold} onMouseLeave={cancelHold}
-                            onTouchStart={(e) => { e.preventDefault(); startHold(() => {setShowTakeoffModal(false); sendCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude });});}}
+                            onTouchStart={(e) => { 
+                               e.preventDefault(); 
+                               startHold(() => {
+                                  setShowTakeoffModal(false); 
+                                  setTakeoffState('REQUESTED'); 
+                                  setTakeoffStartAlt(tel.altitude || 0); 
+                                  sendCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude });
+                               });
+                            }}
                             onTouchEnd={(e) => { e.preventDefault(); cancelHold();}}
                          >
                             <div className="progress-bg" style={{width: `${holdProgress}%`}}></div>
@@ -221,6 +249,21 @@ export default function DroneControlView({ setView }) {
             <span className={`metric-value ${tel.gps_valid ? 'good' : 'danger'}`}>{tel.gps_valid ? '3D FIX' : 'NO FIX'}</span>
          </div>
       </div>
+
+      {takeoffState && (
+         <div className="card" style={{ padding: '16px', background: 'var(--bg-main)', border: '1px solid var(--primary)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <Activity color="var(--primary)" className={takeoffState !== 'REACHED' ? 'spin' : ''} />
+            <div style={{ flex: 1 }}>
+               <h4 style={{ margin: 0, fontSize: '13px', color: 'var(--primary)' }}>TAKEOFF SEQUENCE: {takeoffState}</h4>
+               <div style={{ background: 'var(--bg-color)', height: '6px', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: 'var(--primary)', width: takeoffState === 'REQUESTED' ? '25%' : takeoffState === 'ACTIVE' ? '50%' : takeoffState === 'RISING' ? '75%' : '100%', transition: 'width 0.3s' }}></div>
+               </div>
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 600, fontFamily: 'monospace' }}>
+               {(tel.altitude || 0).toFixed(1)}m / {takeoffAltitude.toFixed(1)}m
+            </div>
+         </div>
+      )}
 
       <div className="card" style={{ padding: '20px' }}>
         <h3 style={{marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Quick Actions ({tel.flight_mode || 'HOLD'})</h3>
