@@ -1,0 +1,6 @@
+window_title: "SwarmOS GroundStation"
+theme: "dark"
+refresh_rate_hz: 30
+known_drones:
+  - "drone1"
+  - "drone2"

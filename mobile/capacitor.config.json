@@ -1,0 +1,9 @@
+{
+  "appId": "com.swarmos.phoneos",
+  "appName": "PhoneOS",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  }
+}

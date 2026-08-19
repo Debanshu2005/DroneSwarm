@@ -1,0 +1,18 @@
+[Unit]
+Description=SwarmOS PhoneOS Relay Service
+After=swarmos-drone.service network-online.target
+Wants=swarmos-drone.service network-online.target
+
+[Service]
+Type=simple
+User=priyanshu
+WorkingDirectory=/home/priyanshu/Projects/PhoneOS
+# Update the ExecStart path if using a virtual environment
+ExecStart=/usr/bin/python3 PhoneOS/relay/relay.py
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

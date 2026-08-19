@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+*.log
+.env
+.env.*
+node_modules/
+mobile/node_modules/
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/dist/
+mobile/www/

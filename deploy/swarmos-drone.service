@@ -1,0 +1,18 @@
+[Unit]
+Description=SwarmOS DroneOS Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=priyanshu
+WorkingDirectory=/home/priyanshu/Projects/PhoneOS
+# Update the ExecStart path if using a virtual environment (e.g. /home/priyanshu/.../venv/bin/python)
+ExecStart=/usr/bin/python3 -m DroneOS.main
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,128 @@
+from typing import Dict, Any, Callable, Coroutine
+from DroneOS.shared.protocol.messages import ControlMessage, CommandAction, StatusMessage, ErrorMessage
+from DroneOS.shared.utils.logger import setup_logger
+
+logger = setup_logger("CommandHandler")
+
+class CommandHandler:
+    """
+    Parses incoming ControlMessages and routes them to the appropriate subsystem (e.g. FlightManager).
+    """
+    def __init__(self, node_id: str = "DroneOS", safety_module=None, flight_controller=None, health_monitor=None, battery_monitor=None):
+        # Maps CommandAction to a coroutine handler
+        self._handlers: Dict[CommandAction, Callable[[Dict[str, Any]], Coroutine[Any, Any, bool]]] = {}
+        self.network = None
+        self.node_id = node_id
+        self._active_tasks = set()
+        
+        self.safety_module = safety_module
+        self.flight_controller = flight_controller
+        self.health_monitor = health_monitor
+        self.battery_monitor = battery_monitor
+
+    async def _validate_safety_gate(self, action: CommandAction) -> str:
+        if not self.flight_controller or not self.safety_module or not self.health_monitor:
+            return "" # Tests or incomplete DI
+
+        telemetry = await self.flight_controller.get_telemetry()
+        
+        import time
+        # Telemetry Freshness
+        is_telemetry_stale = False
+        if getattr(telemetry, 'timestamp', None) is not None:
+            if (time.time() - telemetry.timestamp) > 2.0:
+                is_telemetry_stale = True
+        else:
+            is_telemetry_stale = True
+
+        # Heartbeat Freshness
+        is_heartbeat_stale = False
+        if self.health_monitor.last_heartbeat_time is not None:
+            if (time.time() - self.health_monitor.last_heartbeat_time) > self.health_monitor.timeout_seconds:
+                is_heartbeat_stale = True
+        else:
+            is_heartbeat_stale = True
+
+        is_emergency = self.safety_module.is_failsafe_active
+        is_battery_critical = False # Assumed from the failsafe state or we can read telemetry voltage. Actually failsafe covers it.
+
+        if action == CommandAction.ARM:
+            if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
+            if is_telemetry_stale: return "Command rejected: Telemetry stale"
+            if is_emergency: return "Command rejected: Emergency stop active"
+            
+        elif action == CommandAction.TAKEOFF:
+            if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
+            if is_telemetry_stale: return "Command rejected: Telemetry stale"
+            if is_emergency: return "Command rejected: Emergency stop active"
+            if not getattr(telemetry, 'gps_valid', False): return "Command rejected: GPS unavailable"
+            
+        elif action == CommandAction.MOVE:
+            if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
+            if is_emergency: return "Command rejected: Emergency stop active"
+            
+        return ""
+
+    def _dispatch_task(self, coro):
+        import asyncio
+        try:
+            task = asyncio.create_task(coro)
+            self._active_tasks.add(task)
+            task.add_done_callback(self._active_tasks.discard)
+        except Exception as e:
+            logger.error(f"Failed to dispatch task: {e}")
+    def register_handler(self, action: CommandAction, handler: Callable[[Dict[str, Any]], Coroutine[Any, Any, bool]]) -> None:
+        self._handlers[action] = handler
+
+    async def handle_command(self, message: ControlMessage) -> bool:
+        if message.action in self._handlers:
+            logger.info(f"COMMAND_RX sender={message.sender_id} target={message.target_id} action={message.action.value}")
+            
+            rejection_reason = await self._validate_safety_gate(message.action)
+            if rejection_reason:
+                logger.warning(rejection_reason)
+                if self.network:
+                    msg = ErrorMessage(
+                        sender_id=self.node_id, timestamp=0.0, target_id=message.sender_id,
+                        error_code=403, error_msg=rejection_reason
+                    )
+                    self._dispatch_task(self.network.broadcast_message(msg))
+                return False
+
+            params = message.params or {}
+            try:
+                success = await self._handlers[message.action](params)
+                if not success:
+                    logger.warning(f"Command {message.action.value} failed to execute properly.")
+                    if self.network:
+                        error_text = f"{message.action.name} rejected by FlightManager."
+                        if message.action == CommandAction.ARM:
+                            error_text = "ARM rejected by Pixhawk; check Pixhawk pre-arm checks."
+                        elif message.action == CommandAction.TAKEOFF:
+                            error_text = "TAKEOFF rejected by Pixhawk."
+                            
+                        msg = ErrorMessage(
+                            sender_id=self.node_id, timestamp=0.0, target_id=message.sender_id,
+                            error_code=400, error_msg=error_text
+                        )
+                        self._dispatch_task(self.network.broadcast_message(msg))
+                else:
+                    if self.network:
+                        msg = StatusMessage(
+                            sender_id=self.node_id, timestamp=0.0, target_id=message.sender_id,
+                            status_text=f"{message.action.name} successful.", severity="info"
+                        )
+                        self._dispatch_task(self.network.broadcast_message(msg))
+                return success
+            except (ValueError, RuntimeError, TypeError, KeyError) as e:
+                logger.exception(f"Exception while executing {message.action.value}: {e}")
+                if self.network:
+                    msg = ErrorMessage(
+                        sender_id=self.node_id, timestamp=0.0, target_id=message.sender_id,
+                        error_code=500, error_msg=f"{message.action.name} failed: {e}"
+                    )
+                    self._dispatch_task(self.network.broadcast_message(msg))
+                return False
+        else:
+            logger.warning(f"No handler registered for command: {message.action.value}")
+            return False
