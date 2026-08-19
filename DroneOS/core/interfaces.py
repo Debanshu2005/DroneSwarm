@@ -115,3 +115,29 @@ class IFlightController(ABC):
         Failure Modes: FC rejecting command, mode not supported.
         """
         pass
+
+    @abstractmethod
+    async def get_all_params(self) -> dict:
+        """
+        Retrieves all parameters from the flight controller.
+        Outputs: dict mapping parameter name to value.
+        """
+        pass
+
+    @abstractmethod
+    async def get_param(self, name: str, param_type: str = "float"):
+        """
+        Retrieves a single parameter.
+        Inputs: name (str), param_type ("float" or "int")
+        Outputs: The value of the parameter, or None if not found.
+        """
+        pass
+
+    @abstractmethod
+    async def set_param(self, name: str, value, param_type: str = "float") -> bool:
+        """
+        Sets a single parameter.
+        Inputs: name (str), value, param_type ("float" or "int")
+        Outputs: True if successfully set.
+        """
+        pass

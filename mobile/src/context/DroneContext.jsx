@@ -167,6 +167,48 @@ export const DroneProvider = ({ children }) => {
        });
     });
 
+    manager.subscribe(MessageType.PARAM_RESPONSE, (msg) => {
+       setDrones(prev => {
+          const drone = prev[msg.sender_id];
+          if (!drone) return prev;
+          
+          let updatedParams = { ...(drone.parameters || {}) };
+          
+          if (msg.action === "read_all" && msg.parameters) {
+             updatedParams = msg.parameters;
+          } else if (msg.success && msg.param_name !== null) {
+             updatedParams[msg.param_name] = msg.param_value;
+          }
+          
+          if (msg.message && !msg.success) {
+             addLog(`Param Error from ${msg.sender_id}: ${msg.message}`);
+          }
+
+          return {
+             ...prev,
+             [msg.sender_id]: {
+                ...drone,
+                parameters: updatedParams,
+                paramSyncState: { pending: false, lastSync: Date.now() }
+             }
+          };
+       });
+    });
+
+    manager.subscribe(MessageType.DIAGNOSTICS, (msg) => {
+       setDrones(prev => {
+          const drone = prev[msg.sender_id];
+          if (!drone) return prev;
+          return {
+             ...prev,
+             [msg.sender_id]: {
+                ...drone,
+                diagnostics: msg.diagnostics
+             }
+          };
+       });
+    });
+
     manager.connect();
     setWsManager(manager);
 
@@ -212,6 +254,27 @@ export const DroneProvider = ({ children }) => {
     });
   };
 
+  const sendParamRequest = (action, param_name = null, param_value = null, param_type = null, targetId = null) => {
+    if (!wsManager || isConnected !== "CONNECTED") return;
+    
+    const targets = targetId ? [targetId] : Array.from(selectedDrones);
+    if (targets.length === 0) return;
+    
+    import('../protocol/messages').then(({ ParamRequestMessage }) => {
+      targets.forEach(id => {
+         wsManager.send(new ParamRequestMessage(GS_ID, id, action, param_name, param_value, param_type));
+         
+         setDrones(prev => ({
+            ...prev,
+            [id]: {
+               ...(prev[id] || {}),
+               paramSyncState: { pending: true, lastSync: prev[id]?.paramSyncState?.lastSync || 0 }
+            }
+         }));
+      });
+    });
+  };
+
   // Command Timeout Monitor
   useEffect(() => {
     const timeoutMonitor = setInterval(() => {
@@ -250,7 +313,7 @@ export const DroneProvider = ({ children }) => {
   const value = {
     wsManager, isConnected, drones, selectedDrones,
     wsUrl, setWsUrl, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs,
-    sendCommand, toggleSelect, selectAll, selectNone, addLog
+    sendCommand, sendParamRequest, toggleSelect, selectAll, selectNone, addLog
   };
 
   return <DroneContext.Provider value={value}>{children}</DroneContext.Provider>;

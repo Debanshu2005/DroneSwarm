@@ -21,9 +21,11 @@ export default function DroneControlView({ setView }) {
 
   if (!drone) {
     return (
-      <div className="glass-panel" style={{textAlign: 'center', padding: '40px'}}>
-         <h3 style={{color: 'var(--text-muted)'}}>NO DRONE SELECTED</h3>
-         <button className="primary-btn mt-4" onClick={() => setView('DRONES')}>Back to Fleet</button>
+      <div className="view-container">
+         <div className="card" style={{textAlign: 'center', padding: '40px'}}>
+            <h3 style={{color: 'var(--text-muted)'}}>NO DRONE SELECTED</h3>
+            <button className="btn btn-primary" style={{marginTop: '16px'}} onClick={() => setView('DRONES')}>Back to Fleet</button>
+         </div>
       </div>
     );
   }
@@ -160,13 +162,29 @@ export default function DroneControlView({ setView }) {
   };
 
   return (
-    <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
+    <div className="view-container">
       
-      <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-         <button className="icon-btn" onClick={() => setView('DRONES')} style={{background: 'var(--surface)', border: '1px solid var(--border)'}}>
+      {indoorMode && (
+         <div className="card" style={{ background: 'var(--primary)', color: 'white', padding: '12px 16px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Activity size={20} />
+            <div>
+               <h4 style={{ margin: 0, fontSize: '14px' }}>INDOOR MODE ACTIVE</h4>
+               <p style={{ margin: 0, fontSize: '12px', opacity: 0.9 }}>GPS: NOT REQUIRED FOR SELECTED CONTROL MODE</p>
+            </div>
+         </div>
+      )}
+
+      <div className="view-header" style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+         <button className="btn btn-secondary" style={{padding: '8px'}} onClick={() => setView('DRONES')}>
            <ArrowLeft size={20} />
          </button>
-         <h2>Control: {drone.id}</h2>
+         <div>
+            <h2>Control: {drone.id}</h2>
+            <div style={{display: 'flex', gap: '12px', marginTop: '8px'}}>
+               <button className="btn btn-secondary text-sm" onClick={() => setView('PARAMETERS')} style={{padding: '4px 8px'}}>Parameters</button>
+               <button className="btn btn-secondary text-sm" onClick={() => setView('SENSOR_CALIBRATION')} style={{padding: '4px 8px'}}>Sensors</button>
+            </div>
+         </div>
       </div>
 
       <div className="metrics-row" style={{marginBottom: 0}}>
@@ -188,55 +206,55 @@ export default function DroneControlView({ setView }) {
          </div>
       </div>
 
-      <div className="glass-panel">
-        <h3 style={{marginBottom: '16px'}}>ACTIONS</h3>
-        <div className="quick-actions" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))'}}>
-           <button className="action-btn action-arm" onClick={() => setShowArmModal(true)} disabled={drone.status !== 'active'}>
+      <div className="card" style={{ padding: '20px' }}>
+        <h3 style={{marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Quick Actions</h3>
+        <div className="quick-actions" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))'}}>
+           <button className="btn btn-primary" onClick={() => setShowArmModal(true)} disabled={drone.status !== 'active'} style={{background: '#ef4444', borderColor: '#ef4444', color: 'white'}}>
               <ShieldAlert size={16}/> ARM
            </button>
-           <button className="action-btn action-disarm" onClick={() => sendCommand(CommandAction.DISARM)} disabled={drone.status !== 'active'}>
+           <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.DISARM)} disabled={drone.status !== 'active'}>
               <ShieldCheck size={16}/> DISARM
            </button>
-           <button className="action-btn" onClick={() => setShowTakeoffModal(true)} disabled={drone.status !== 'active'}>
+           <button className="btn btn-secondary" onClick={() => setShowTakeoffModal(true)} disabled={drone.status !== 'active'}>
               <ArrowUp size={16}/> TAKEOFF
            </button>
-           <button className="action-btn" onClick={() => sendCommand(CommandAction.LAND)} disabled={drone.status !== 'active'}>
+           <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.LAND)} disabled={drone.status !== 'active'}>
               <ArrowDown size={16}/> LAND
            </button>
-           <button className="action-btn" onClick={() => sendCommand(CommandAction.RTL)} disabled={drone.status !== 'active'}>
+           <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.RTL)} disabled={drone.status !== 'active'}>
               <Navigation size={16}/> RTL
            </button>
-           <button className="action-btn" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'HOLD'})} disabled={drone.status !== 'active'}>
-              <Activity size={16}/> HOLD
-           </button>
-           <button className="action-btn" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'LOITER'})} disabled={drone.status !== 'active'}>
-              LOITER
-           </button>
-           <button className="action-btn" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'OFFBOARD'})} disabled={drone.status !== 'active'}>
-              OFFBOARD
-           </button>
+           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <select className="input-field" style={{ width: '100%', padding: '8px', fontSize: '12px' }} onChange={(e) => sendCommand(CommandAction.SET_MODE, {mode: e.target.value})}>
+                 <option value="">Set Mode...</option>
+                 <option value="HOLD">HOLD</option>
+                 <option value="LOITER">LOITER</option>
+                 <option value="OFFBOARD">OFFBOARD</option>
+                 <option value="MANUAL">MANUAL</option>
+              </select>
+           </div>
         </div>
       </div>
 
-      <div className="glass-panel">
-         <h3 style={{marginBottom: '16px'}}>MANUAL CONTROL (OFFBOARD)</h3>
+      <div className="card" style={{ padding: '20px' }}>
+         <h3 style={{marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Manual Control (RC)</h3>
          
-         <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px'}}>
+         <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '24px'}}>
             <div className="input-group">
-               <label>Horiz Speed (m/s): {movementSpeed.toFixed(1)}</label>
+               <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>XY Speed: {movementSpeed.toFixed(1)}m/s</label>
                <input type="range" min="0.5" max="10.0" step="0.5" value={movementSpeed} onChange={(e) => setMovementSpeed(parseFloat(e.target.value))} />
             </div>
             <div className="input-group">
-               <label>Vert Speed (m/s): {verticalSpeed.toFixed(1)}</label>
+               <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>Z Speed: {verticalSpeed.toFixed(1)}m/s</label>
                <input type="range" min="0.5" max="5.0" step="0.5" value={verticalSpeed} onChange={(e) => setVerticalSpeed(parseFloat(e.target.value))} />
             </div>
             <div className="input-group">
-               <label>Yaw Rate (deg/s): {yawRate.toFixed(1)}</label>
+               <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>Yaw Rate: {yawRate.toFixed(1)}°/s</label>
                <input type="range" min="5" max="90" step="5" value={yawRate} onChange={(e) => setYawRate(parseFloat(e.target.value))} />
             </div>
          </div>
 
-         <div className="joystick-container">
+         <div className="joystick-container" style={{background: 'var(--bg-main)', padding: '24px', borderRadius: '12px', display: 'flex', justifyContent: 'center', gap: '40px'}}>
             <div className="d-pad">
                <div></div>
                <button className="d-btn" onClick={() => sendCommand(CommandAction.MOVE, {vx: movementSpeed})}><ArrowUp/></button>

@@ -29,6 +29,9 @@ class MessageType(str, Enum):
     PEER_STATE = "peer_state"
     DRONE_IDENTITY = "drone_identity"
     SWARM_HEARTBEAT = "swarm_heartbeat"
+    PARAM_REQUEST = "param_request"
+    PARAM_RESPONSE = "param_response"
+    DIAGNOSTICS = "diagnostics"
 
 class BaseMessage(BaseModel):
     msg_type: MessageType
@@ -190,3 +193,24 @@ class SwarmHeartbeatMessage(BaseMessage):
     msg_type: MessageType = MessageType.SWARM_HEARTBEAT
     status: str = "active"
     battery_level: Optional[float] = None
+
+class ParamRequestMessage(BaseMessage):
+    msg_type: MessageType = MessageType.PARAM_REQUEST
+    action: str  # "read_all", "read", or "write"
+    param_name: Optional[str] = None
+    param_value: Optional[Any] = None
+    param_type: Optional[str] = None # "float" or "int"
+
+class ParamResponseMessage(BaseMessage):
+    msg_type: MessageType = MessageType.PARAM_RESPONSE
+    action: str  # "read_all", "read", or "write"
+    success: bool
+    message: str = ""
+    parameters: Optional[Dict[str, Any]] = None # For read_all
+    param_name: Optional[str] = None
+    param_value: Optional[Any] = None
+    param_type: Optional[str] = None
+
+class DiagnosticsMessage(BaseMessage):
+    msg_type: MessageType = MessageType.DIAGNOSTICS
+    diagnostics: Dict[str, Any]

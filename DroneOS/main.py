@@ -201,6 +201,55 @@ class DroneOSApp:
             self.mission_receiver.handle_duplicate(msg)
         elif msg.msg_type == MessageType.MISSION_CLEAR:
             self.mission_receiver.handle_clear(msg)
+        elif msg.msg_type == MessageType.PARAM_REQUEST:
+            target = getattr(msg, 'target_id', None)
+            if target and target.lower() not in [self.node_id.lower(), "all"]:
+                return
+            
+            # Fire and forget task to avoid blocking main receive loop
+            import asyncio
+            asyncio.create_task(self._handle_param_request(msg))
+
+    async def _handle_param_request(self, msg: BaseMessage) -> None:
+        from DroneOS.shared.protocol.messages import ParamResponseMessage
+        import time
+        response = ParamResponseMessage(
+            sender_id=self.node_id, 
+            target_id=msg.sender_id,
+            timestamp=time.time(),
+            action=msg.action,
+            success=False
+        )
+        try:
+            if msg.action == "read_all":
+                params = await self.flight_controller.get_all_params()
+                response.parameters = params
+                response.success = True
+            elif msg.action == "read":
+                val = await self.flight_controller.get_param(msg.param_name, msg.param_type)
+                if val is not None:
+                    response.param_name = msg.param_name
+                    response.param_value = val
+                    response.param_type = msg.param_type
+                    response.success = True
+                else:
+                    response.message = f"Param {msg.param_name} not found."
+            elif msg.action == "write":
+                success = await self.flight_controller.set_param(msg.param_name, msg.param_value, msg.param_type)
+                if success:
+                    # Readback to confirm
+                    val = await self.flight_controller.get_param(msg.param_name, msg.param_type)
+                    response.param_name = msg.param_name
+                    response.param_value = val
+                    response.param_type = msg.param_type
+                    response.success = True
+                else:
+                    response.message = f"Failed to set param {msg.param_name}."
+        except Exception as e:
+            logger.error(f"Param request failed: {e}")
+            response.message = str(e)
+            
+        await self.network.broadcast_message(response)
 
     async def _autonomous_evaluation_loop(self) -> None:
         while self._running:
@@ -208,9 +257,19 @@ class DroneOSApp:
                 telemetry = await self.flight_controller.get_telemetry()
                 await self.decision_engine.evaluate_tick(telemetry)
                 
-                # Periodically log diagnostic metrics at DEBUG level
+                # Periodically log and publish diagnostic metrics at DEBUG level
                 report = self.diagnostics.get_full_report()
                 logger.debug(f"Diagnostics: {report}")
+                
+                from DroneOS.shared.protocol.messages import DiagnosticsMessage
+                import time
+                diag_msg = DiagnosticsMessage(
+                    sender_id=self.node_id,
+                    timestamp=time.time(),
+                    diagnostics=report
+                )
+                asyncio.create_task(self.network.broadcast_message(diag_msg))
+                
             except asyncio.CancelledError:
                 logger.info("Autonomous evaluation loop cancelled.")
                 break

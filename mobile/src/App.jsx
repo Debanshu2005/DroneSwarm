@@ -13,10 +13,12 @@ import SwarmView from './views/SwarmView';
 import SafetyView from './views/SafetyView';
 import DiagnosticsView from './views/DiagnosticsView';
 import SettingsView from './views/SettingsView';
+import ParameterView from './views/ParameterView';
 
 function App() {
   const { isConnected, testMode, indoorMode, nowMs, wsManager } = useDroneContext();
   const [currentView, setCurrentView] = useState('DASHBOARD');
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   
   // Latency calculation from wsManager
   const latency = wsManager?.latency || 0;
@@ -32,8 +34,14 @@ function App() {
       case 'SAFETY': return <SafetyView />;
       case 'DIAGNOSTICS': return <DiagnosticsView />;
       case 'SETTINGS': return <SettingsView />;
+      case 'PARAMETERS': return <ParameterView />;
       default: return <DashboardView />;
     }
+  };
+
+  const navigateTo = (view) => {
+    setCurrentView(view);
+    setIsDrawerOpen(false);
   };
 
   const navItems = [
@@ -56,9 +64,12 @@ function App() {
   return (
     <div className="app-layout">
       {/* Sidebar for desktop/tablet */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${isDrawerOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
            <h2>PhoneOS GCS</h2>
+           <button className="close-drawer-btn" onClick={() => setIsDrawerOpen(false)}>
+             <X size={24} />
+           </button>
         </div>
         
         <div className="connection-pill" style={{margin: '0 16px 24px'}}>
@@ -72,19 +83,23 @@ function App() {
             <button 
               key={item.id} 
               className={`nav-btn ${currentView === item.id ? 'active' : ''}`}
-              onClick={() => setCurrentView(item.id)}
+              onClick={() => navigateTo(item.id)}
             >
               {item.icon} <span>{item.label}</span>
             </button>
           ))}
         </nav>
       </aside>
+      
+      {isDrawerOpen && <div className="drawer-overlay" onClick={() => setIsDrawerOpen(false)} />}
 
       <div className="app-body">
         {/* Mobile Header */}
         <header className="mobile-header">
            <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
-             <Menu size={24} color="var(--text-main)" />
+             <button className="menu-btn" onClick={() => setIsDrawerOpen(true)}>
+               <Menu size={24} color="var(--text-main)" />
+             </button>
              <h2>PhoneOS GCS</h2>
            </div>
            <div className="connection-pill">
@@ -109,7 +124,7 @@ function App() {
             <button 
               key={item.id} 
               className={`nav-btn ${currentView === item.id ? 'active' : ''}`}
-              onClick={() => setCurrentView(item.id)}
+              onClick={() => navigateTo(item.id)}
             >
               {item.icon} <span>{item.label}</span>
             </button>

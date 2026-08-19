@@ -321,3 +321,40 @@ class PX4FlightController(IFlightController):
             battery_level=None, altitude=None, latitude=None, longitude=None,
             velocity_x=None, velocity_y=None, velocity_z=None, flight_mode="disconnected"
         )
+
+    async def get_all_params(self) -> dict:
+        if not self._connected: return {}
+        try:
+            params = await self.client.param.get_all_params()
+            res = {}
+            for p in params.int_params:
+                res[p.name] = p.value
+            for p in params.float_params:
+                res[p.name] = p.value
+            return res
+        except Exception as e:
+            logger.error(f"Failed to get all parameters: {e}")
+            return {}
+
+    async def get_param(self, name: str, param_type: str = "float"):
+        if not self._connected: return None
+        try:
+            if param_type == "int":
+                return await self.client.param.get_param_int(name)
+            else:
+                return await self.client.param.get_param_float(name)
+        except Exception as e:
+            logger.error(f"Failed to get parameter {name}: {e}")
+            return None
+
+    async def set_param(self, name: str, value, param_type: str = "float") -> bool:
+        if not self._connected: return False
+        try:
+            if param_type == "int":
+                await self.client.param.set_param_int(name, int(value))
+            else:
+                await self.client.param.set_param_float(name, float(value))
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set parameter {name}: {e}")
+            return False

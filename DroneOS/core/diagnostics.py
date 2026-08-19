@@ -32,11 +32,21 @@ class RuntimeDiagnostics:
     @staticmethod
     def get_system_metrics() -> Dict[str, Any]:
         process = psutil.Process(os.getpid())
+        
+        # Try to read Pi Temperature
+        temp_c = None
+        try:
+            with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+                temp_c = float(f.read().strip()) / 1000.0
+        except Exception:
+            pass
+
         return {
             "cpu_percent": psutil.cpu_percent(interval=None),
             "memory_mb": process.memory_info().rss / (1024 * 1024),
             "async_tasks": len(asyncio.all_tasks()),
-            "threads": process.num_threads()
+            "threads": process.num_threads(),
+            "temperature_c": temp_c
         }
 
 class SystemHealthReporter:

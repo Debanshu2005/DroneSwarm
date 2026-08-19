@@ -26,6 +26,9 @@ export const MessageType = {
     PEER_STATE: "peer_state",
     DRONE_IDENTITY: "drone_identity",
     SWARM_HEARTBEAT: "swarm_heartbeat",
+    PARAM_REQUEST: "param_request",
+    PARAM_RESPONSE: "param_response",
+    DIAGNOSTICS: "diagnostics",
 };
 
 export const CommandAction = {
@@ -69,5 +72,15 @@ export class EmergencyMessage extends BaseMessage {
     constructor(sender_id, action = "stop_and_land", target_id = null) {
         super(MessageType.EMERGENCY, sender_id, target_id);
         this.action = action;
+    }
+}
+
+export class ParamRequestMessage extends BaseMessage {
+    constructor(sender_id, target_id, action, param_name = null, param_value = null, param_type = null) {
+        super(MessageType.PARAM_REQUEST, sender_id, target_id);
+        this.action = action;
+        this.param_name = param_name;
+        this.param_value = param_value;
+        this.param_type = param_type;
     }
 }
