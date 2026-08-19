@@ -13,50 +13,50 @@ export default function SettingsView() {
   };
 
   return (
-    <div className="view-container fade-in">
-      <div className="view-header">
+    <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
+      <div className="glass-panel" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px'}}>
          <h2>Professional Settings</h2>
       </div>
 
-      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px'}}>
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px'}}>
          
          {/* Network Settings */}
          <div className="glass-panel">
-            <h3><Settings size={18} style={{marginRight: '8px', verticalAlign: 'middle'}}/> Network Configuration</h3>
-            <p style={{fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '15px'}}>Configure the connection to the PhoneOS Relay.</p>
+            <h3 style={{marginBottom: '8px'}}><Settings size={18} style={{marginRight: '8px', verticalAlign: 'middle'}}/> Network Configuration</h3>
+            <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Configure the connection to the PhoneOS Relay.</p>
             
-            <form onSubmit={handleSave} className="settings-form" style={{flexDirection: 'column', alignItems: 'stretch'}}>
+            <form onSubmit={handleSave} style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
                <div className="input-group">
-                  <label>Relay WebSocket URL</label>
-                  <input type="text" value={localWsUrl} onChange={e => setLocalWsUrl(e.target.value)} />
+                  <label style={{fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)'}}>Relay WebSocket URL</label>
+                  <input type="text" value={localWsUrl} onChange={e => setLocalWsUrl(e.target.value)} style={{padding: '10px', borderRadius: '6px', border: '1px solid var(--border)', width: '100%'}} />
                </div>
-               <button type="submit" className="primary-btn mt-4">Save & Reconnect</button>
+               <button type="submit" className="primary-btn">Save & Reconnect</button>
             </form>
          </div>
 
          {/* Advanced */}
          <div className="glass-panel">
-            <h3>Advanced & Developer</h3>
-            <p style={{fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '15px'}}>Simulation and experimental features.</p>
+            <h3 style={{marginBottom: '8px'}}>Advanced & Developer</h3>
+            <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Simulation and experimental features.</p>
             
-            <label style={{display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', marginBottom: '10px'}}>
-               <input type="checkbox" checked={testMode} onChange={(e) => setTestMode(e.target.checked)} />
+            <label style={{display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-color)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '12px', cursor: 'pointer'}}>
+               <input type="checkbox" checked={testMode} onChange={(e) => setTestMode(e.target.checked)} style={{width: '20px', height: '20px'}} />
                <div>
-                  <div style={{fontWeight: 'bold'}}>Enable Virtual Swarm Simulation</div>
-                  <div style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>Spawns virtual drones to test UI layouts without hardware.</div>
+                  <div style={{fontWeight: 600}}>Enable Virtual Swarm Simulation</div>
+                  <div style={{fontSize: '12px', color: 'var(--text-muted)'}}>Spawns virtual drones to test UI layouts without hardware.</div>
                </div>
             </label>
             
-            <label style={{display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px'}}>
-               <input type="checkbox" checked={indoorMode} onChange={(e) => setIndoorMode(e.target.checked)} />
+            <label style={{display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-color)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', cursor: 'pointer'}}>
+               <input type="checkbox" checked={indoorMode} onChange={(e) => setIndoorMode(e.target.checked)} style={{width: '20px', height: '20px'}} />
                <div>
-                  <div style={{fontWeight: 'bold', color: indoorMode ? 'var(--warning)' : 'inherit'}}>Indoor / Bench Test Mode</div>
-                  <div style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>Visually indicates GPS flight is disabled. PX4 still enforces safety.</div>
+                  <div style={{fontWeight: 600, color: indoorMode ? 'var(--warning)' : 'inherit'}}>Indoor / Bench Test Mode</div>
+                  <div style={{fontSize: '12px', color: 'var(--text-muted)'}}>Visually indicates GPS flight is disabled. PX4 still enforces safety.</div>
                </div>
             </label>
             
-            <div style={{marginTop: '20px'}}>
-               <button className="secondary-btn" onClick={() => window.location.reload()}>
+            <div style={{marginTop: '24px'}}>
+               <button className="secondary-btn" onClick={() => window.location.reload()} style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
                   <RefreshCw size={16}/> Force App Reload
                </button>
             </div>

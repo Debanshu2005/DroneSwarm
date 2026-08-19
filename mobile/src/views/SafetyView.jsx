@@ -1,17 +1,42 @@
 import React from 'react';
 import { useDroneContext } from '../context/DroneContext';
-import { ShieldAlert, BatteryWarning, WifiOff, AlertOctagon } from 'lucide-react';
+import { ShieldAlert, AlertOctagon, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 
 export default function SafetyView() {
   const { drones, nowMs } = useDroneContext();
 
+  const renderStatus = (isGood, isWarning, label, goodText, warningText, badText) => {
+    let icon, color, text;
+    if (isGood) {
+      icon = <CheckCircle2 size={16} className="good" />;
+      color = 'var(--text-main)';
+      text = goodText;
+    } else if (isWarning) {
+      icon = <AlertTriangle size={16} className="warning" />;
+      color = 'var(--warning)';
+      text = warningText;
+    } else {
+      icon = <XCircle size={16} className="danger" />;
+      color = 'var(--danger)';
+      text = badText;
+    }
+
+    return (
+      <div style={{display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', borderBottom: '1px solid var(--border)'}}>
+        {icon}
+        <span style={{fontWeight: 600, width: '120px', color: 'var(--text-muted)'}}>{label}</span>
+        <span style={{fontWeight: 600, color}}>{text}</span>
+      </div>
+    );
+  };
+
   return (
-    <div className="view-container fade-in" style={{display: 'flex', flexDirection: 'column'}}>
-      <div className="view-header">
+    <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
+      <div className="glass-panel" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px'}}>
          <h2>Safety Center</h2>
       </div>
 
-      <div className="fleet-grid">
+      <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
          {Object.values(drones).map(drone => {
             const tel = drone.telemetry || {};
             const ageMs = nowMs - drone.lastSeen;
@@ -21,49 +46,33 @@ export default function SafetyView() {
             const lowBatt = batt < 20;
             const noGps = !tel.gps_valid;
             const isFailsafe = drone.status === 'failsafe';
-            
-            let cardStatus = "NORMAL";
-            let headerClass = "good-bg";
-            if (isOffline) { cardStatus = "OFFLINE"; headerClass = "danger-bg"; }
-            else if (isFailsafe || isStale || lowBatt || noGps) { cardStatus = "WARNING"; headerClass = "warning-bg"; }
-            if (isFailsafe && lowBatt) { cardStatus = "CRITICAL"; headerClass = "danger-bg"; }
+            const px4Connected = tel.flight_mode && tel.flight_mode !== 'disconnected' && tel.flight_mode !== 'UNKNOWN';
 
             return (
-               <div key={drone.id} className={`drone-card ${isOffline ? 'offline-state' : ''}`} style={{cursor: 'default', minWidth: '300px'}}>
-                  <div className="drone-card-header">
-                     <span>{drone.id}</span>
-                     <div className={`status-badge ${headerClass}`}>{cardStatus}</div>
+               <div key={drone.id} className="glass-panel" style={{display: 'flex', flexDirection: 'column', gap: '8px', opacity: isOffline ? 0.6 : 1}}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                     <h3 style={{fontSize: '18px'}}>{drone.id}</h3>
+                     <span className={`status-badge ${isOffline ? 'badge-danger' : isFailsafe ? 'badge-warning' : 'badge-good'}`}>
+                       {isOffline ? 'OFFLINE' : isFailsafe ? 'FAILSAFE' : 'NORMAL'}
+                     </span>
                   </div>
                   
-                  <div style={{marginTop: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.8rem'}}>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Link Age:</span> <span className={isStale ? 'danger' : 'good'}>{(ageMs/1000).toFixed(1)}s</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Battery:</span> <span className={lowBatt ? 'danger' : 'good'}>{batt}%</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Voltage:</span> <span>{tel.battery_voltage ? `${tel.battery_voltage.toFixed(1)}V` : 'N/A'}</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Current:</span> <span>{tel.battery_current ? `${tel.battery_current.toFixed(1)}A` : 'N/A'}</span></div>
-                     
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Failsafe:</span> <span className={isFailsafe ? 'danger' : 'good'}>{isFailsafe ? 'ACTIVE' : 'NONE'}</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>GPS:</span> <span className={noGps ? 'danger' : 'good'}>{noGps ? 'NO FIX' : '3D FIX'}</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Sats:</span> <span>{tel.satellites ?? 'N/A'}</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>HDOP/VDOP:</span> <span>{tel.hdop ?? 'N/A'} / {tel.vdop ?? 'N/A'}</span></div>
-                     
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Alt (Rel):</span> <span>{tel.altitude != null ? `${tel.altitude.toFixed(1)}m` : 'N/A'}</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>V-Speed:</span> <span>{tel.vertical_speed != null ? `${tel.vertical_speed.toFixed(1)}m/s` : 'N/A'}</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>G-Speed:</span> <span>{tel.ground_speed != null ? `${tel.ground_speed.toFixed(1)}m/s` : 'N/A'}</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>A-Speed:</span> <span>{tel.air_speed != null ? `${tel.air_speed.toFixed(1)}m/s` : 'N/A'}</span></div>
-                     
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Roll:</span> <span>{tel.roll != null ? `${tel.roll.toFixed(1)}°` : 'N/A'}</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Pitch:</span> <span>{tel.pitch != null ? `${tel.pitch.toFixed(1)}°` : 'N/A'}</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Yaw (Hdg):</span> <span>{tel.heading != null ? `${tel.heading.toFixed(1)}°` : 'N/A'}</span></div>
-                     
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Sys Health:</span> <span>{tel.system_health || 'N/A'}</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>Estimator:</span> <span>{tel.estimator_status || 'N/A'}</span></div>
-                     <div style={{display: 'flex', justifyContent: 'space-between'}}><span>RC Status:</span> <span>{tel.rc_status || 'N/A'}</span></div>
+                  <div style={{display: 'flex', flexDirection: 'column'}}>
+                     {renderStatus(!noGps, false, 'GPS', '3D FIX', '', 'NO FIX')}
+                     {renderStatus(!lowBatt, false, 'BATTERY', `${batt}% (NORMAL)`, '', `${batt}% (LOW)`)}
+                     {renderStatus(!isStale, false, 'TELEMETRY', 'FRESH', '', 'STALE')}
+                     {renderStatus(px4Connected, false, 'PX4', 'CONNECTED', '', 'DISCONNECTED')}
+                     {renderStatus(!isFailsafe, false, 'FAILSAFE', 'CLEAR', '', 'ACTIVE')}
+                     {renderStatus(tel.system_health === 'OK', tel.system_health == null, 'FCU HEALTH', 'HEALTHY', 'UNKNOWN', 'ERROR')}
+                     {renderStatus(tel.rc_status !== 'disconnected', tel.rc_status === 'weak', 'RC SIGNAL', 'ACTIVE', 'WEAK', 'DISCONNECTED')}
                   </div>
                </div>
             );
          })}
          {Object.keys(drones).length === 0 && (
-            <div className="no-drone-msg glass-panel" style={{gridColumn: '1 / -1'}}>No drones connected.</div>
+            <div className="glass-panel" style={{textAlign: 'center', padding: '40px', color: 'var(--text-muted)'}}>
+               <h3>No drones connected.</h3>
+            </div>
          )}
       </div>
     </div>

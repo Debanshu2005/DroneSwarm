@@ -3,7 +3,7 @@ import { useDroneContext } from '../context/DroneContext';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Crosshair, Map as MapIcon, Layers } from 'lucide-react';
+import { Crosshair, Layers } from 'lucide-react';
 
 // Fix Leaflet's default icon path issues in React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -79,36 +79,35 @@ export default function MapView() {
   };
 
   if (Object.keys(drones).length === 0) {
-     return <div className="view-container fade-in"><div className="no-drone-msg glass-panel">No drones connected. Map unavailable.</div></div>;
+     return <div className="glass-panel" style={{textAlign: 'center', padding: '40px'}}><h3 style={{color: 'var(--text-muted)'}}>No drones connected. Map unavailable.</h3></div>;
   }
 
   if (!hasValidCenter) {
      return (
-        <div className="view-container fade-in" style={{display: 'flex', flexDirection: 'column', height: '100%'}}>
-           <div className="view-header"><h2>GPS Map</h2></div>
-           <div className="no-drone-msg glass-panel" style={{flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)'}}>
-              POSITION UNAVAILABLE<br/>(Waiting for GPS 3D Fix)
+        <div style={{display: 'flex', flexDirection: 'column', height: '100%', gap: '16px'}}>
+           <div className="glass-panel" style={{flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger)'}}>
+              <h3>POSITION UNAVAILABLE</h3><br/><span style={{color: 'var(--text-muted)'}}>(Waiting for GPS 3D Fix)</span>
            </div>
         </div>
      );
   }
 
   return (
-    <div className="view-container fade-in" style={{display: 'flex', flexDirection: 'column', height: '100%', position: 'relative'}}>
+    <div style={{display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', gap: '16px'}}>
       
-      <div className="map-overlay-controls glass-panel">
+      <div className="glass-panel" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px'}}>
          <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
             <Layers size={18}/>
-            <select value={mapStyle} onChange={e => setMapStyle(e.target.value)} style={{padding: '4px', fontSize: '0.8rem'}}>
+            <select value={mapStyle} onChange={e => setMapStyle(e.target.value)} style={{padding: '6px', fontSize: '13px', border: '1px solid var(--border)', borderRadius: '4px', outline: 'none'}}>
                <option value="street">Street</option>
                <option value="satellite">Satellite</option>
                <option value="terrain">Terrain</option>
             </select>
          </div>
-         <button className="secondary-btn" onClick={handleCenter} title="Center on selected"><Crosshair size={18}/></button>
+         <button className="secondary-btn" style={{padding: '6px 12px'}} onClick={handleCenter} title="Center on selected"><Crosshair size={18}/></button>
       </div>
 
-      <div style={{flex: 1, borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--glass-border)', zIndex: 1}}>
+      <div style={{flex: 1, borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', zIndex: 1}}>
          <MapContainer center={center} zoom={16} style={{ height: '100%', width: '100%' }}>
             <TileLayer url={tiles[mapStyle]} attribution="PhoneOS GCS" />
             <RecenterAutomatically center={centerTarget} />
@@ -137,7 +136,7 @@ export default function MapView() {
                      {drone.path && drone.path.length > 1 && (
                         <Polyline 
                            positions={drone.path} 
-                           color={selectedDrones.has(drone.id) ? '#10b981' : '#3b82f6'} 
+                           color={selectedDrones.has(drone.id) ? '#16A34A' : '#2563EB'} 
                            weight={3} 
                            opacity={0.6}
                         />

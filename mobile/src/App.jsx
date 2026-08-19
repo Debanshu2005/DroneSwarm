@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useDroneContext } from './context/DroneContext';
-import { LayoutDashboard, Map as MapIcon, Route, Network, ShieldAlert, Activity, Settings, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Map as MapIcon, Route, Network, ShieldAlert, Activity, Settings, Menu, X, Navigation } from 'lucide-react';
 import './App.css';
 
-import FleetView from './views/FleetView';
+import DashboardView from './views/DashboardView';
+import DronesView from './views/DronesView';
+import DroneControlView from './views/DroneControlView';
 import MapView from './views/MapView';
 import MissionView from './views/MissionView';
 import SwarmView from './views/SwarmView';
@@ -13,76 +15,86 @@ import DiagnosticsView from './views/DiagnosticsView';
 import SettingsView from './views/SettingsView';
 
 function App() {
-  const { isConnected, testMode, indoorMode } = useDroneContext();
-  const [currentView, setCurrentView] = useState('FLEET');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
+  const { isConnected, testMode, indoorMode, nowMs, wsManager } = useDroneContext();
+  const [currentView, setCurrentView] = useState('DASHBOARD');
+  
+  // Latency calculation from wsManager
+  const latency = wsManager?.latency || 0;
+  
   const renderView = () => {
     switch (currentView) {
-      case 'FLEET': return <FleetView />;
+      case 'DASHBOARD': return <DashboardView />;
+      case 'DRONES': return <DronesView setView={setCurrentView} />;
+      case 'DRONE_CONTROL': return <DroneControlView setView={setCurrentView} />;
       case 'MAP': return <MapView />;
       case 'MISSION': return <MissionView />;
       case 'SWARM': return <SwarmView />;
       case 'SAFETY': return <SafetyView />;
       case 'DIAGNOSTICS': return <DiagnosticsView />;
       case 'SETTINGS': return <SettingsView />;
-      default: return <FleetView />;
+      default: return <DashboardView />;
     }
   };
 
   const navItems = [
-    { id: 'FLEET', label: 'Fleet', icon: <LayoutDashboard size={20}/> },
+    { id: 'DASHBOARD', label: 'Dashboard', icon: <LayoutDashboard size={20}/> },
     { id: 'MAP', label: 'Map', icon: <MapIcon size={20}/> },
     { id: 'MISSION', label: 'Mission', icon: <Route size={20}/> },
+    { id: 'DRONES', label: 'Drones', icon: <Navigation size={20}/> },
     { id: 'SWARM', label: 'Swarm', icon: <Network size={20}/> },
     { id: 'SAFETY', label: 'Safety', icon: <ShieldAlert size={20}/> },
     { id: 'DIAGNOSTICS', label: 'Diagnostics', icon: <Activity size={20}/> },
     { id: 'SETTINGS', label: 'Settings', icon: <Settings size={20}/> },
   ];
 
+  const getConnectionText = () => {
+     if (isConnected === "CONNECTED") return "CONNECTED";
+     if (isConnected === "CONNECTING") return "CONNECTING";
+     return "OFFLINE";
+  };
+
   return (
     <div className="app-layout">
-      {/* Background blobs */}
-      <div className="bg-blob blob-1"></div>
-      <div className="bg-blob blob-2"></div>
-      
-      {testMode && <div className="test-mode-banner">DEMO / TEST MODE</div>}
-      {indoorMode && !testMode && <div className="test-mode-banner" style={{background: 'var(--warning)', color: '#000'}}>INDOOR / BENCH TEST (NO GPS REQ)</div>}
+      {/* Sidebar for desktop/tablet */}
+      <aside className="sidebar">
+        <div className="sidebar-header">
+           <h2>PhoneOS GCS</h2>
+        </div>
+        
+        <div className="connection-pill" style={{margin: '0 16px 24px'}}>
+           <div className={`indicator ${isConnected === "CONNECTED" ? "connected" : "disconnected"}`}></div>
+           <span>{getConnectionText()}</span>
+           {isConnected === "CONNECTED" && <span style={{marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)'}}>{latency}ms</span>}
+        </div>
+
+        <nav className="sidebar-nav">
+          {navItems.map(item => (
+            <button 
+              key={item.id} 
+              className={`nav-btn ${currentView === item.id ? 'active' : ''}`}
+              onClick={() => setCurrentView(item.id)}
+            >
+              {item.icon} <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      </aside>
 
       <div className="app-body">
-        {/* Sidebar for desktop/tablet */}
-        <aside className={`sidebar glass-panel ${mobileMenuOpen ? 'open' : ''}`}>
-          <div className="sidebar-header">
-             <h2>SwarmOS</h2>
-             <button className="icon-btn mobile-close" onClick={() => setMobileMenuOpen(false)}><X/></button>
-          </div>
-          
-          <div className="connection-pill" style={{margin: '0 1rem 1rem'}}>
-             <div className={`indicator ${isConnected === "CONNECTED" ? "connected" : "disconnected"}`}></div>
-             <span>{isConnected}</span>
-          </div>
-
-          <nav className="sidebar-nav">
-            {navItems.map(item => (
-              <button 
-                key={item.id} 
-                className={`nav-btn ${currentView === item.id ? 'active' : ''}`}
-                onClick={() => { setCurrentView(item.id); setMobileMenuOpen(false); }}
-              >
-                {item.icon} <span>{item.label}</span>
-              </button>
-            ))}
-          </nav>
-        </aside>
-
         {/* Mobile Header */}
-        <header className="mobile-header glass-panel">
-           <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-             <button className="icon-btn" onClick={() => setMobileMenuOpen(true)}><Menu/></button>
-             <h2>SwarmOS</h2>
+        <header className="mobile-header">
+           <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
+             <Menu size={24} color="var(--text-main)" />
+             <h2>PhoneOS GCS</h2>
            </div>
-           <div className={`indicator ${isConnected === "CONNECTED" ? "connected" : "disconnected"}`}></div>
+           <div className="connection-pill">
+              <div className={`indicator ${isConnected === "CONNECTED" ? "connected" : "disconnected"}`}></div>
+              <span>{getConnectionText()}</span>
+           </div>
         </header>
+
+        {testMode && <div className="test-mode-banner">DEMO / TEST MODE</div>}
+        {indoorMode && !testMode && <div className="test-mode-banner">INDOOR / BENCH TEST (NO GPS REQ)</div>}
 
         {/* Main View Area */}
         <main className="view-area">
@@ -90,6 +102,19 @@ function App() {
             {renderView()}
           </ErrorBoundary>
         </main>
+
+        {/* Mobile Bottom Nav */}
+        <nav className="mobile-bottom-nav">
+          {navItems.map(item => (
+            <button 
+              key={item.id} 
+              className={`nav-btn ${currentView === item.id ? 'active' : ''}`}
+              onClick={() => setCurrentView(item.id)}
+            >
+              {item.icon} <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
       </div>
     </div>
   );
