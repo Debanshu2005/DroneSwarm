@@ -47,6 +47,22 @@ export default function DroneControlView({ setView }) {
      }
   }, [tel.flight_mode, tel.altitude, takeoffState, takeoffStartAlt, takeoffAltitude]);
 
+  // Joystick safety
+  useEffect(() => {
+     const handleVisibilityChange = () => {
+         if (document.hidden) {
+             cancelHold();
+             stopMove();
+         }
+     };
+     document.addEventListener('visibilitychange', handleVisibilityChange);
+     return () => {
+         document.removeEventListener('visibilitychange', handleVisibilityChange);
+         cancelHold();
+         stopMove();
+     };
+  }, []);
+
   const startHold = (action) => {
      setHoldProgress(0);
      let progress = 0;

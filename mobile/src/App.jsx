@@ -16,6 +16,7 @@ import SettingsView from './views/SettingsView';
 import ParameterView from './views/ParameterView';
 import ProfileConfigView from './views/ProfileConfigView';
 import SensorCalibrationView from './views/SensorCalibrationView';
+import HardwareTestView from './views/HardwareTestView';
 
 function App() {
   const { isConnected, testMode, indoorMode, nowMs, wsManager } = useDroneContext();
@@ -40,6 +41,7 @@ function App() {
       case 'SENSORS': return <SensorCalibrationView />;
       case 'INDOOR_PROFILE': return <ProfileConfigView profileKey="INDOOR_PROFILE" setView={setCurrentView} />;
       case 'OUTDOOR_PROFILE': return <ProfileConfigView profileKey="OUTDOOR_GPS_PROFILE" setView={setCurrentView} />;
+      case 'HARDWARE_TEST': return <HardwareTestView setView={setCurrentView} />;
       default: return <DashboardView setView={setCurrentView} />;
     }
   };
@@ -61,6 +63,7 @@ function App() {
     { id: 'SWARM', label: 'Swarm', icon: <Network size={20}/> },
     { id: 'SAFETY', label: 'Safety', icon: <ShieldAlert size={20}/> },
     { id: 'DIAGNOSTICS', label: 'Diagnostics', icon: <Activity size={20}/> },
+    { id: 'HARDWARE_TEST', label: 'Hardware Test', icon: <Activity size={20}/> },
     { id: 'SETTINGS', label: 'Settings', icon: <Settings size={20}/> },
   ];
 

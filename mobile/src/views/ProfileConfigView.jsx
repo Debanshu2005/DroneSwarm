@@ -83,11 +83,18 @@ export default function ProfileConfigView({ profileKey, setView }) {
     const tel = targetDrone.telemetry || {};
     const diag = targetDrone.diagnostics || {};
     
-    // 1. Check Sensors (mock logic based on telemetry and diagnostics)
-    // In a real scenario, we'd check EKF2_AID_MASK or specific sensor health flags
+    // 1. Check Sensors (Actual Hardware Check)
     const missing = [];
-    if (profile.requiredSensors.includes('GPS') && !tel.gps_valid) missing.push('GPS');
-    if (profile.requiredSensors.includes('Barometer') && tel.sensor_health === 'ERROR') missing.push('Barometer');
+    if (profile.requiredSensors.includes('GPS') && !tel.gps_valid) missing.push('GPS (No Fix)');
+    if (profile.requiredSensors.includes('Barometer') && tel.sensor_health === 'ERROR') missing.push('Barometer Error');
+    if (profile.requiredSensors.includes('Optical Flow') && !tel.optical_flow_valid) missing.push('Optical Flow Unavailable');
+    if (profile.requiredSensors.includes('Rangefinder') && !tel.rangefinder_valid) missing.push('Rangefinder Unavailable');
+    
+    // Check PX4 firmware identity capability
+    if (!diag?.px4?.firmware_version) {
+       missing.push('PX4 Firmware Identity Unknown');
+    }
+    
     setMissingSensors(missing);
 
     // 2. Compare parameters
@@ -182,26 +189,29 @@ export default function ProfileConfigView({ profileKey, setView }) {
 
          {step === 1 && (
             <div>
-               {missingSensors.length > 0 ? (
-                  <div style={{ textAlign: 'center', padding: '20px' }}>
-                     <XCircle size={48} color="#ef4444" style={{ marginBottom: '16px' }} />
-                     <h3 style={{ color: '#ef4444' }}>{profile.name.toUpperCase()} NOT AVAILABLE</h3>
-                     <p className="text-muted" style={{ marginBottom: '24px' }}>Required positioning/sensor source unavailable.</p>
-                     
-                     <div style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: '8px', textAlign: 'left', display: 'inline-block' }}>
-                        <p style={{ fontWeight: 600, marginBottom: '8px' }}>Missing Sensors:</p>
-                        <ul style={{ color: '#ef4444', marginLeft: '20px' }}>
-                           {missingSensors.map(s => <li key={s}>{s}</li>)}
-                        </ul>
+               <div className="card" style={{ marginBottom: '24px' }}>
+                  <h3 style={{marginBottom: '16px'}}>PROFILE COMPATIBILITY</h3>
+                  {missingSensors.length > 0 ? (
+                     <div className="danger-box" style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
+                        <AlertTriangle size={24} style={{flexShrink: 0}} />
+                        <div>
+                           <h4 style={{margin: '0 0 8px 0'}}>PROFILE NOT SUPPORTED</h4>
+                           <p style={{margin: 0, fontSize: '13px'}}>Required capabilities unavailable:</p>
+                           <ul style={{margin: '8px 0 0 16px', fontSize: '13px'}}>
+                              {missingSensors.map(s => <li key={s}>{s}</li>)}
+                           </ul>
+                        </div>
                      </div>
-                  </div>
-               ) : (
-                  <div>
-                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981', marginBottom: '24px' }}>
+                  ) : (
+                     <div className="good-box" style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
                         <CheckCircle2 size={24} />
-                        <h3 style={{ margin: 0 }}>Sensors Verified</h3>
+                        <span>Hardware & Firmware Compatible</span>
                      </div>
-                     
+                  )}
+               </div>
+
+               {missingSensors.length === 0 && (
+                  <>
                      {changes.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '20px' }}>
                            <h3 style={{ marginBottom: '8px' }}>Profile Already Applied</h3>
@@ -235,7 +245,7 @@ export default function ProfileConfigView({ profileKey, setView }) {
                            </div>
                         </>
                      )}
-                  </div>
+                  </>
                )}
             </div>
          )}
