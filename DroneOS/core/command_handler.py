@@ -73,6 +73,16 @@ class CommandHandler:
         elif action == CommandAction.MOVE:
             if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
             if is_emergency: return "Command rejected: Emergency stop active"
+
+        elif action == CommandAction.RTL:
+            if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
+            if is_emergency: return "Command rejected: Emergency stop active"
+            if not getattr(telemetry, 'gps_valid', False): return "Command rejected: GPS unavailable (RTL requires global position)"
+
+        elif action == CommandAction.GOTO:
+            if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
+            if is_emergency: return "Command rejected: Emergency stop active"
+            if not getattr(telemetry, 'gps_valid', False): return "Command rejected: GPS unavailable (GOTO requires global position)"
             
         return ""
 
