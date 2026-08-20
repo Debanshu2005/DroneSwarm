@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(leve
 logger = logging.getLogger("PhoneOS_Relay")
 
 class UdpWebsocketRelay:
-    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14550, udp_target_port=14550, udp_broadcast_addr="255.255.255.255"):
+    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14551, udp_target_port=14550, udp_broadcast_addr="255.255.255.255"):
         self.ws_host = ws_host
         self.ws_port = ws_port
         self.udp_bind_host = udp_bind_host
@@ -129,7 +129,7 @@ class UdpWebsocketRelay:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PhoneOS WebSocket-to-UDP Relay")
     parser.add_argument("--ws-port", type=int, default=8080, help="WebSocket port to listen on")
-    parser.add_argument("--udp-bind-port", type=int, default=14550, help="UDP port to bind for listening")
+    parser.add_argument("--udp-bind-port", type=int, default=14551, help="UDP port to bind for listening")
     parser.add_argument("--udp-target-port", type=int, default=14550, help="UDP port of DroneOS to broadcast to")
     args = parser.parse_args()
 

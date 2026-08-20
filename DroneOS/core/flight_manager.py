@@ -11,6 +11,8 @@ class FlightManager:
     """
     def __init__(self, flight_controller: IFlightController):
         self.fc = flight_controller
+        self._last_move_time = 0.0
+        self._deadman_task = None
 
     async def arm(self, params: Dict[str, Any] = None) -> bool:
         success = await self.fc.arm()
@@ -63,19 +65,44 @@ class FlightManager:
     async def hover(self, params: Dict[str, Any] = None) -> bool:
         return await self.fc.hover()
         
+    async def _move_deadman_monitor(self):
+        import asyncio, time
+        try:
+            while True:
+                await asyncio.sleep(0.1)
+                if time.time() - self._last_move_time > 0.5:
+                    logger.info("Deadman timeout reached. Auto-hovering.")
+                    await self.fc.hover()
+                    self._deadman_task = None
+                    break
+        except asyncio.CancelledError:
+            pass
+
     async def move(self, params: Dict[str, Any]) -> bool:
         telemetry = await self.fc.get_telemetry()
         if getattr(telemetry, 'armed_state', None) != "ARMED":
             logger.error("Cannot move: Drone is not ARMED.")
             return False
             
-        vx = params.get('vx', 0.0)
-        vy = params.get('vy', 0.0)
-        vz = params.get('vz', 0.0)
-        duration = params.get('duration', 1.0)
-        yaw_rate = params.get('yaw_rate', 0.0)
+        vx = float(params.get('vx', 0.0))
+        vy = float(params.get('vy', 0.0))
+        vz = float(params.get('vz', 0.0))
+        yaw_rate = float(params.get('yaw_rate', 0.0))
         
-        return await self.fc.move_velocity(vx, vy, vz, duration, yaw_rate)
+        # Enforce configurable/safe speed limits
+        vx = max(-5.0, min(5.0, vx))
+        vy = max(-5.0, min(5.0, vy))
+        vz = max(-3.0, min(3.0, vz))
+        yaw_rate = max(-90.0, min(90.0, yaw_rate))
+
+        import time, asyncio
+        self._last_move_time = time.time()
+        
+        if self._deadman_task is None or self._deadman_task.done():
+            self._deadman_task = asyncio.create_task(self._move_deadman_monitor())
+
+        # duration is managed by the deadman now, pass 0.5 for fc internal loop if needed
+        return await self.fc.move_velocity(vx, vy, vz, 0.5, yaw_rate)
 
     async def goto(self, params: Dict[str, Any]) -> bool:
         telemetry = await self.fc.get_telemetry()

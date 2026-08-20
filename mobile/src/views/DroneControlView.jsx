@@ -376,8 +376,7 @@ export default function DroneControlView({ setView }) {
       <div className="card" style={{ padding: '20px' }}>
         <h3 style={{marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Quick Actions ({tel.flight_mode || 'HOLD'})</h3>
         <div className="quick-actions" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))'}}>
-           {/* Mode-dependent rendering */}
-           {(!tel.flight_mode || tel.flight_mode === 'HOLD' || tel.flight_mode === 'LOITER' || tel.flight_mode === 'MANUAL' || tel.flight_mode === 'OFFBOARD') && (
+           {(!tel.flight_mode || tel.flight_mode === 'HOLD' || tel.flight_mode === 'LOITER' || tel.flight_mode === 'MANUAL' || tel.flight_mode === 'ALTCTL' || tel.flight_mode === 'OFFBOARD') && (
              <>
                <button className="btn btn-primary" onClick={() => setShowArmModal(true)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'} style={{background: '#ef4444', borderColor: '#ef4444', color: 'white'}}>
                   <ShieldAlert size={16} style={{marginRight: '8px'}}/> ARM
@@ -385,18 +384,21 @@ export default function DroneControlView({ setView }) {
                <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.DISARM)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <ShieldCheck size={16} style={{marginRight: '8px'}}/> DISARM
                </button>
+               <button className="btn btn-primary" onClick={() => sendCommand(CommandAction.EMERGENCY)} style={{background: '#7f1d1d', borderColor: '#7f1d1d', color: 'white', gridColumn: '1 / -1'}}>
+                  EMERGENCY STOP
+               </button>
              </>
            )}
 
            {(!tel.flight_mode || tel.flight_mode === 'HOLD' || tel.flight_mode === 'LOITER') && (
              <>
-               <button className="btn btn-secondary" onClick={() => setShowTakeoffModal(true)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+               <button className="btn btn-secondary" onClick={() => setShowTakeoffModal(true)} disabled={(drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED') || !tel.gps_valid} title={!tel.gps_valid ? 'TAKEOFF NOT AVAILABLE - Position estimate unavailable' : ''}>
                   <ArrowUp size={16}/> TAKEOFF
                </button>
                <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.LAND)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <ArrowDown size={16}/> LAND
                </button>
-               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.RTL)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.RTL)} disabled={(drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED') || !tel.gps_valid} title={!tel.gps_valid ? 'RTL NOT AVAILABLE - Home position unavailable' : ''}>
                   <Navigation size={16}/> RTL
                </button>
              </>
@@ -421,6 +423,7 @@ export default function DroneControlView({ setView }) {
                  <option value="HOLD">HOLD</option>
                  <option value="LOITER">LOITER</option>
                  <option value="OFFBOARD">OFFBOARD</option>
+                 <option value="ALTCTL">ALTCTL</option>
                  <option value="MANUAL">MANUAL</option>
                  <option value="MISSION">MISSION</option>
               </select>
@@ -430,7 +433,7 @@ export default function DroneControlView({ setView }) {
         </div>
       </div>
 
-      {(tel.flight_mode === 'MANUAL' || tel.flight_mode === 'OFFBOARD' || !tel.flight_mode) && (
+      {(tel.flight_mode === 'MANUAL' || tel.flight_mode === 'ALTCTL' || tel.flight_mode === 'OFFBOARD' || !tel.flight_mode) && (
          <div className="card" style={{ padding: '20px' }}>
             <h3 style={{marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Manual Control (RC)</h3>
             

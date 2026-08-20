@@ -150,7 +150,7 @@ export const DroneProvider = ({ children }) => {
             [msg.sender_id]: {
               ...(prev[msg.sender_id] || {}),
               id: msg.sender_id,
-              status: msg.status === 'active' ? 'CONNECTED' : msg.status,
+              status: msg.status === "active" ? "active" : "standby",
               lastSeen: now,
               lastHeartbeat: now,
               connectTime: isNew ? now : (prev[msg.sender_id]?.connectTime || now),
@@ -171,13 +171,22 @@ export const DroneProvider = ({ children }) => {
             path = [...path, [msg.telemetry.latitude, msg.telemetry.longitude]].slice(-100);
           }
           
+          let sanitizedTelemetry = { ...msg.telemetry };
+          if (sanitizedTelemetry.battery_level !== undefined && sanitizedTelemetry.battery_level !== null) {
+              if (isNaN(sanitizedTelemetry.battery_level) || !isFinite(sanitizedTelemetry.battery_level)) {
+                  sanitizedTelemetry.battery_level = null;
+              } else {
+                  sanitizedTelemetry.battery_level = Math.max(0, Math.min(100, Math.round(sanitizedTelemetry.battery_level)));
+              }
+          }
+          
           const now = Date.now();
           return {
             ...prev,
             [msg.sender_id]: {
               ...existing,
               id: msg.sender_id,
-              telemetry: msg.telemetry,
+              telemetry: sanitizedTelemetry,
               lastSeen: now,
               lastTelemetry: now,
               path,

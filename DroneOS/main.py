@@ -258,7 +258,7 @@ class DroneOSApp:
             
             # Fire and forget task to avoid blocking main receive loop
             import asyncio
-                self._dispatch_task(self._handle_param_request(msg))
+            self._dispatch_task(self._handle_param_request(msg))
 
     async def _handle_param_request(self, msg: BaseMessage) -> None:
         from DroneOS.shared.protocol.messages import ParamResponseMessage

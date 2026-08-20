@@ -35,16 +35,16 @@ class MessageType(str, Enum):
     DIAGNOSTICS = "diagnostics"
     TEST_INJECT = "test_inject"
 
-class TestInjectMessage(BaseMessage):
-    msg_type: MessageType = MessageType.TEST_INJECT
-    injection_type: str
-    active: bool = True
-
 class BaseMessage(BaseModel):
     msg_type: MessageType
     sender_id: str
     timestamp: float = Field(description="Unix timestamp")
     target_id: Optional[str] = None
+
+class TestInjectMessage(BaseMessage):
+    msg_type: MessageType = MessageType.TEST_INJECT
+    injection_type: str
+    active: bool = True
 
 class HeartbeatMessage(BaseMessage):
     msg_type: MessageType = MessageType.HEARTBEAT

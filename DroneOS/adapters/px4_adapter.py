@@ -3,6 +3,7 @@ from typing import Optional
 from DroneOS.core.interfaces import IFlightController
 from DroneOS.shared.config.models import FlightConfig
 from DroneOS.shared.utils.logger import setup_logger
+from DroneOS.shared.protocol.messages import TelemetryData
 
 logger = setup_logger("PX4Adapter")
 
@@ -177,30 +178,52 @@ class PX4FlightController(IFlightController):
 
     async def move_velocity(self, vx: float, vy: float, vz: float, duration: float, yaw_rate: float = 0.0) -> bool:
         if not self._connected: return False
+        
+        telemetry = await self.get_telemetry()
+        mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
+        
+        # Determine if we should use offboard or manual_control
+        use_manual = (not telemetry.gps_valid) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
+
         try:
-            # We must enter offboard mode to send velocity commands
-            await self.client.offboard.set_velocity_body(
-                VelocityBodyYawspeed(vx, vy, vz, yaw_rate)
-            )
-            try:
-                await self.client.offboard.start()
-            except Exception as e:
-                logger.debug(f"Offboard start failed or already active: {e}")
-            await asyncio.sleep(duration)
-            return True
+            if use_manual:
+                # Normalize inputs for manual_control
+                pitch = max(-1.0, min(1.0, vx / 5.0))
+                roll = max(-1.0, min(1.0, vy / 5.0))
+                throttle = max(-1.0, min(1.0, -vz / 3.0)) # vz is NED (positive down), throttle is positive up
+                yaw = max(-1.0, min(1.0, yaw_rate / 90.0))
+                
+                await self.client.manual_control.set_manual_control_input(pitch, roll, throttle, yaw)
+                await asyncio.sleep(duration)
+                return True
+            else:
+                # Offboard requires valid GPS
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(vx, vy, vz, yaw_rate)
+                )
+                try:
+                    await self.client.offboard.start()
+                except Exception as e:
+                    logger.debug(f"Offboard start failed or already active: {e}")
+                await asyncio.sleep(duration)
+                return True
         except (OSError, RuntimeError) as e:
             logger.exception(f"PX4 Move failed: {e}")
             return False
         finally:
             if self._connected:
                 try:
-                    # Guarantee neutral command on exit/cancel
-                    await self.client.offboard.set_velocity_body(
-                        VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
-                    )
-                    await self.client.offboard.stop()
+                    if use_manual:
+                        # Neutral command
+                        await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.0, 0.0)
+                    else:
+                        # Guarantee neutral command on exit/cancel
+                        await self.client.offboard.set_velocity_body(
+                            VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                        )
+                        await self.client.offboard.stop()
                 except Exception as e:
-                    logger.error(f"Failed to cleanly terminate offboard stream: {e}")
+                    logger.error(f"Failed to cleanly terminate move stream: {e}")
 
     async def set_mode(self, mode: str) -> bool:
         if not self._connected:
@@ -214,6 +237,11 @@ class PX4FlightController(IFlightController):
                 await self.client.action.land()
             elif mode_upper == "LOITER" or mode_upper == "HOLD":
                 await self.client.action.hold()
+            elif mode_upper == "ALTCTL":
+                await self.client.manual_control.start_altitude_control()
+            elif mode_upper == "MANUAL":
+                # Fallback to altitude control for manual without GPS
+                await self.client.manual_control.start_altitude_control()
             else:
                 # Based on audit, MAVSDK-Python action class in this environment
                 # does NOT expose set_custom_mode. We cannot fake it.

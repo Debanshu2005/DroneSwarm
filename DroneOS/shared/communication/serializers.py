@@ -2,13 +2,16 @@ import json
 from pydantic import ValidationError
 
 from DroneOS.shared.protocol.messages import (
-    BaseMessage, MessageType, HeartbeatMessage, TelemetryMessage, 
+    BaseMessage, MessageType, HeartbeatMessage, TelemetryMessage,
     ControlMessage, StatusMessage, ErrorMessage, EmergencyMessage,
     MissionMessage, MissionProgressMessage, MissionStatusMessage,
     MissionCompleteMessage, MissionAbortMessage, MissionPauseMessage,
     MissionResumeMessage, MissionUploadMessage, MissionStartMessage,
     MissionStopMessage, MissionDeleteMessage, MissionDuplicateMessage,
-    MissionClearMessage
+    MissionClearMessage, CommandLifecycleMessage, TestInjectMessage,
+    ParamRequestMessage, ParamResponseMessage, DiagnosticsMessage,
+    DroneJoinMessage, DroneLeaveMessage, SwarmStateMessage,
+    PeerStateMessage, DroneIdentityMessage, SwarmHeartbeatMessage
 )
 from DroneOS.shared.communication.interfaces import IMessageSerializer
 
@@ -34,7 +37,18 @@ class JsonSerializer(IMessageSerializer):
             MessageType.MISSION_STOP: MissionStopMessage,
             MessageType.MISSION_DELETE: MissionDeleteMessage,
             MessageType.MISSION_DUPLICATE: MissionDuplicateMessage,
-            MessageType.MISSION_CLEAR: MissionClearMessage
+            MessageType.MISSION_CLEAR: MissionClearMessage,
+            MessageType.COMMAND_LIFECYCLE: CommandLifecycleMessage,
+            MessageType.TEST_INJECT: TestInjectMessage,
+            MessageType.PARAM_REQUEST: ParamRequestMessage,
+            MessageType.PARAM_RESPONSE: ParamResponseMessage,
+            MessageType.DIAGNOSTICS: DiagnosticsMessage,
+            MessageType.DRONE_JOIN: DroneJoinMessage,
+            MessageType.DRONE_LEAVE: DroneLeaveMessage,
+            MessageType.SWARM_STATE: SwarmStateMessage,
+            MessageType.PEER_STATE: PeerStateMessage,
+            MessageType.DRONE_IDENTITY: DroneIdentityMessage,
+            MessageType.SWARM_HEARTBEAT: SwarmHeartbeatMessage
         }
 
     def serialize(self, message: BaseMessage) -> bytes:
