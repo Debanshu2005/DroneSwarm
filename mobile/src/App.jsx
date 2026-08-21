@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useDroneContext } from './context/DroneContext';
 import { LayoutDashboard, Map as MapIcon, Route, Network, ShieldAlert, Activity, Settings, Menu, X, Navigation, TestTube } from 'lucide-react';
+import { ScreenOrientation } from '@capacitor/screen-orientation';
 import './App.css';
 
 import DashboardView from './views/DashboardView';
 import DronesView from './views/DronesView';
 import DroneControlView from './views/DroneControlView';
-import MapView from './views/MapView';
 import MissionView from './views/MissionView';
 import SwarmView from './views/SwarmView';
 import SafetyView from './views/SafetyView';
@@ -20,21 +20,36 @@ import HardwareTestView from './views/HardwareTestView';
 import SystemHealthView from './views/SystemHealthView';
 import LogsView from './views/LogsView';
 import AdvancedTestView from './views/AdvancedTestView';
+import MapView from './views/MapView';
 
 function App() {
   const { isConnected, testMode, indoorMode, nowMs, wsManager, drones } = useDroneContext();
   const [currentView, setCurrentView] = useState('DASHBOARD');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const applyOrientation = async () => {
+      try {
+        if (currentView === 'FLIGHT') {
+          await ScreenOrientation.lock({ orientation: 'landscape' });
+        } else {
+          await ScreenOrientation.lock({ orientation: 'portrait' });
+        }
+      } catch (e) {
+        console.warn('Screen orientation lock not supported on this platform', e);
+      }
+    };
+    applyOrientation();
+  }, [currentView]);
+
   
   // Latency calculation from wsManager
   const latency = wsManager?.latency || 0;
   
   const renderView = () => {
     switch (currentView) {
-      case 'DASHBOARD': return <DashboardView setView={setCurrentView} />;
-      case 'FLIGHT': return <DroneControlView setView={setCurrentView} />;
+      case 'DASHBOARD': return <DashboardView />;
       case 'DRONES': return <DronesView setView={setCurrentView} />;
-      case 'MAP': return <MapView />;
       case 'MISSION': return <MissionView />;
       case 'SWARM': return <SwarmView />;
       case 'SAFETY': return <SafetyView />;
@@ -48,7 +63,9 @@ function App() {
       case 'SYSTEM_HEALTH': return <SystemHealthView />;
       case 'LOGS': return <LogsView />;
       case 'ADVANCED_TEST': return <AdvancedTestView />;
-      default: return <DashboardView setView={setCurrentView} />;
+      case 'FLIGHT': return <DroneControlView setView={setCurrentView} />;
+      case 'MAP': return <MapView />;
+      default: return <DashboardView />;
     }
   };
 
@@ -147,77 +164,73 @@ function App() {
   };
 
   return (
-    <div className="app-layout">
-      {/* Sidebar for desktop/tablet */}
-      <aside className={`sidebar ${isDrawerOpen ? 'open' : ''}`}>
-        <div className="sidebar-header">
-           <h2>PhoneOS GCS</h2>
-           <button className="close-drawer-btn" onClick={() => setIsDrawerOpen(false)}>
-             <X size={24} />
-           </button>
-        </div>
-        
-        <div className="connection-pill" style={{margin: '0 16px 24px'}}>
-           <div className={`indicator ${isConnected === "CONNECTED" ? "connected" : "disconnected"}`}></div>
-           <span>{getConnectionText()}</span>
-           {isConnected === "CONNECTED" && <span style={{marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)'}}>{latency}ms</span>}
-        </div>
-
-        <nav className="sidebar-nav">
-          {navCategories.map((cat, i) => (
-            <div key={i} style={{marginBottom: '16px'}}>
-              <div style={{fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', paddingLeft: '16px', letterSpacing: '0.5px'}}>
-                {cat.title}
-              </div>
-              {cat.items.map(item => (
-                <button 
-                  key={item.id} 
-                  className={`nav-btn ${currentView === item.id ? 'active' : ''}`}
-                  onClick={() => navigateTo(item.id)}
-                >
-                  {item.icon} <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-          ))}
-        </nav>
-        
-        <div style={{marginTop: 'auto', padding: '16px', borderTop: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-muted)'}}>
-           <div style={{color: getHardwareIdentityStatus().color, fontWeight: 600}}>
-              {getHardwareIdentityStatus().text}
-           </div>
-        </div>
-      </aside>
-      
-      {isDrawerOpen && <div className="drawer-overlay" onClick={() => setIsDrawerOpen(false)} />}
-
-      <div className="app-body">
-        {/* Mobile Header */}
-        <header className="mobile-header">
-           <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
-             <button className="menu-btn" onClick={handleOpenDrawer}>
-               <Menu size={24} color="var(--text-main)" />
-             </button>
+      <div className="app-layout">
+        {/* Sidebar - hidden ONLY when in Flight Control */}
+        {currentView !== 'FLIGHT' && (
+        <aside className={`sidebar ${isDrawerOpen ? 'open' : ''}`} style={{ zIndex: 1000, position: 'fixed' }}>
+          <div className="sidebar-header">
              <h2>PhoneOS GCS</h2>
+             <button className="close-drawer-btn" onClick={() => setIsDrawerOpen(false)}>
+               <X size={24} />
+             </button>
+          </div>
+
+          <nav className="sidebar-nav">
+            {navCategories.map((cat, i) => (
+              <div key={i} style={{marginBottom: '16px'}}>
+                <div style={{fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', paddingLeft: '16px', letterSpacing: '0.5px'}}>
+                  {cat.title}
+                </div>
+                {cat.items.map(item => {
+                  return (
+                    <button
+                      key={item.id}
+                      className={`nav-btn ${currentView === item.id ? 'active' : ''}`}
+                      onClick={() => {
+                         navigateTo(item.id);
+                      }}
+                    >
+                      {item.icon} <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+
+          <div style={{marginTop: 'auto', padding: '16px', borderTop: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-muted)'}}>
+             <div style={{color: getHardwareIdentityStatus().color, fontWeight: 600}}>
+                {getHardwareIdentityStatus().text}
+             </div>
+          </div>
+        </aside>
+        )}
+
+        {isDrawerOpen && currentView !== 'FLIGHT' && <div className="drawer-overlay" style={{zIndex: 999}} onClick={() => setIsDrawerOpen(false)} />}
+
+        {testMode && <div className="test-mode-banner" style={{position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100}}>DEMO / TEST MODE</div>}
+        {indoorMode && !testMode && <div className="test-mode-banner" style={{position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100}}>INDOOR / BENCH TEST (NO GPS REQ)</div>}
+
+        {currentView === 'FLIGHT' ? (
+           <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 10 }}>
+              <ErrorBoundary>
+                  <DroneControlView setView={setCurrentView} />
+              </ErrorBoundary>
            </div>
-           <div className="connection-pill">
-              <div className={`indicator ${isConnected === "CONNECTED" ? "connected" : "disconnected"}`}></div>
-              <span>{getConnectionText()}</span>
+        ) : (
+           <div style={{ flex: 1, padding: '24px', overflowY: 'auto', zIndex: 10 }}>
+              <div style={{display: 'flex', alignItems: 'center', marginBottom: '24px'}}>
+                 <button className="menu-btn mobile-only" onClick={handleOpenDrawer} style={{marginRight: '16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px', cursor: 'pointer'}}>
+                    <Menu size={24} />
+                 </button>
+                 <h1 style={{margin: 0, fontSize: '24px'}}>{currentView || 'DASHBOARD'}</h1>
+              </div>
+              <ErrorBoundary>
+                 {renderView()}
+              </ErrorBoundary>
            </div>
-        </header>
-
-        {testMode && <div className="test-mode-banner">DEMO / TEST MODE</div>}
-        {indoorMode && !testMode && <div className="test-mode-banner">INDOOR / BENCH TEST (NO GPS REQ)</div>}
-
-        {/* Main View Area */}
-        <main className="view-area">
-          <ErrorBoundary>
-            {renderView()}
-          </ErrorBoundary>
-        </main>
-
+        )}
       </div>
-    </div>
   );
 }
 

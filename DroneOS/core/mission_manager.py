@@ -1,3 +1,4 @@
+import time
 import json
 import os
 from enum import Enum
@@ -196,7 +197,7 @@ class MissionManager:
             sender = getattr(self.network, 'node_id', "DroneOS")
             msg = MissionStatusMessage(
                 sender_id=sender,
-                timestamp=0.0,
+                timestamp=time.time(),
                 mission_id=self.status.active_mission_id or "",
                 status=self.status.state.value
             )
@@ -213,7 +214,7 @@ class MissionManager:
                 
             msg = MissionProgressMessage(
                 sender_id=sender,
-                timestamp=0.0,
+                timestamp=time.time(),
                 mission_id=self.status.active_mission_id or "",
                 current_waypoint=self.tracker.current_index,
                 total_waypoints=self.tracker.total_waypoints,
@@ -285,7 +286,7 @@ class MissionReceiver:
                             from DroneOS.shared.protocol.messages import ErrorMessage
                             feedback = ErrorMessage(
                                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                                timestamp=0.0, target_id=msg.sender_id,
+                                timestamp=time.time(), target_id=msg.sender_id,
                                 error_code=400, error_msg=f"Mission Validation Failed: Altitude {wp.altitude} out of bounds"
                             )
                             self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -298,7 +299,7 @@ class MissionReceiver:
                 from DroneOS.shared.protocol.messages import StatusMessage
                 feedback = StatusMessage(
                     sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                    timestamp=0.0, target_id=msg.sender_id,
+                    timestamp=time.time(), target_id=msg.sender_id,
                     status_text=f"Mission {msg.mission_id} uploaded successfully.", severity="info"
                 )
                 self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -308,7 +309,7 @@ class MissionReceiver:
                 from DroneOS.shared.protocol.messages import ErrorMessage
                 feedback = ErrorMessage(
                     sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                    timestamp=0.0, target_id=msg.sender_id,
+                    timestamp=time.time(), target_id=msg.sender_id,
                     error_code=400, error_msg=f"Mission Validation Failed for {msg.mission_id}"
                 )
                 self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -319,7 +320,7 @@ class MissionReceiver:
             from DroneOS.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                timestamp=0.0, target_id=msg.sender_id,
+                timestamp=time.time(), target_id=msg.sender_id,
                 status_text="Mission PAUSED.", severity="info"
             )
             self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -332,7 +333,7 @@ class MissionReceiver:
                 from DroneOS.shared.protocol.messages import ErrorMessage
                 feedback = ErrorMessage(
                     sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                    timestamp=0.0, target_id=msg.sender_id,
+                    timestamp=time.time(), target_id=msg.sender_id,
                     error_code=403, error_msg=rejection_reason
                 )
                 self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -343,7 +344,7 @@ class MissionReceiver:
             from DroneOS.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                timestamp=0.0, target_id=msg.sender_id,
+                timestamp=time.time(), target_id=msg.sender_id,
                 status_text="Mission RESUMED.", severity="info"
             )
             self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -357,7 +358,7 @@ class MissionReceiver:
             from DroneOS.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                timestamp=0.0, target_id=msg.sender_id,
+                timestamp=time.time(), target_id=msg.sender_id,
                 status_text="Mission ABORTED.", severity="warning"
             )
             self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -370,7 +371,7 @@ class MissionReceiver:
                 from DroneOS.shared.protocol.messages import ErrorMessage
                 feedback = ErrorMessage(
                     sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                    timestamp=0.0, target_id=msg.sender_id,
+                    timestamp=time.time(), target_id=msg.sender_id,
                     error_code=403, error_msg=rejection_reason
                 )
                 self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -381,7 +382,7 @@ class MissionReceiver:
             from DroneOS.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                timestamp=0.0, target_id=msg.sender_id,
+                timestamp=time.time(), target_id=msg.sender_id,
                 status_text="Mission STARTED.", severity="info"
             )
             self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -395,7 +396,7 @@ class MissionReceiver:
             from DroneOS.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                timestamp=0.0, target_id=msg.sender_id,
+                timestamp=time.time(), target_id=msg.sender_id,
                 status_text="Mission STOPPED.", severity="info"
             )
             self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -405,7 +406,7 @@ class MissionReceiver:
             from DroneOS.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                timestamp=0.0, target_id=msg.sender_id,
+                timestamp=time.time(), target_id=msg.sender_id,
                 status_text="Mission DELETED locally.", severity="info"
             )
             self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -415,7 +416,7 @@ class MissionReceiver:
             from DroneOS.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                timestamp=0.0, target_id=msg.sender_id,
+                timestamp=time.time(), target_id=msg.sender_id,
                 status_text="Ignored duplicate command (handled by GroundStation).", severity="info"
             )
             self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
@@ -427,7 +428,7 @@ class MissionReceiver:
             from DroneOS.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
-                timestamp=0.0, target_id=msg.sender_id,
+                timestamp=time.time(), target_id=msg.sender_id,
                 status_text="Mission CLEARED.", severity="info"
             )
             self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))

@@ -4,7 +4,7 @@ import { CommandAction } from '../protocol/messages';
 import { Route, Play, Pause, Square, Trash2, Plus, Upload, CheckCircle, Map } from 'lucide-react';
 
 export default function MissionView() {
-  const { selectedDrones, drones, sendCommand } = useDroneContext();
+  const { selectedDrones, drones, wsManager } = useDroneContext();
   const [waypoints, setWaypoints] = useState([]);
   
   const addWaypoint = () => {
@@ -22,8 +22,28 @@ export default function MissionView() {
   };
 
   const handleUpload = () => {
-    // Note: MISSION_UPLOAD is currently supported in backend, passing array of waypoints
-    sendCommand(CommandAction.MISSION_UPLOAD, { waypoints });
+    if (!wsManager) return;
+    Array.from(selectedDrones).forEach(id => {
+       wsManager.send({
+          msg_type: "mission_upload",
+          sender_id: "gs_phone",
+          target_id: id,
+          timestamp: Date.now() / 1000.0,
+          waypoints: waypoints
+       });
+    });
+  };
+
+  const sendMissionCmd = (type) => {
+    if (!wsManager) return;
+    Array.from(selectedDrones).forEach(id => {
+       wsManager.send({
+          msg_type: type,
+          sender_id: "gs_phone",
+          target_id: id,
+          timestamp: Date.now() / 1000.0
+       });
+    });
   };
 
   const [goToLat, setGoToLat] = useState(0);
@@ -106,15 +126,15 @@ export default function MissionView() {
             
             <div style={{height: '1px', background: 'var(--border-color)', margin: '4px 0'}}></div>
             
-            <button className="btn btn-primary" style={{background: '#10b981', borderColor: '#10b981', display: 'flex', justifyContent: 'center', gap: '8px', padding: '12px'}} disabled={selectedDrones.size === 0} onClick={() => sendCommand(CommandAction.MISSION_START)}>
+            <button className="btn btn-primary" style={{background: '#10b981', borderColor: '#10b981', display: 'flex', justifyContent: 'center', gap: '8px', padding: '12px'}} disabled={selectedDrones.size === 0} onClick={() => sendMissionCmd('mission_start')}>
                <Play size={20}/> START MISSION
             </button>
             
             <div style={{display: 'flex', gap: '12px'}}>
-               <button className="btn btn-secondary" style={{flex: 1, padding: '12px', display: 'flex', justifyContent: 'center', gap: '8px'}} disabled={selectedDrones.size === 0} onClick={() => sendCommand(CommandAction.MISSION_PAUSE)}>
+               <button className="btn btn-secondary" style={{flex: 1, padding: '12px', display: 'flex', justifyContent: 'center', gap: '8px'}} disabled={selectedDrones.size === 0} onClick={() => sendMissionCmd('mission_pause')}>
                   <Pause size={18}/> PAUSE
                </button>
-               <button className="btn btn-primary" style={{flex: 1, padding: '12px', background: '#ef4444', borderColor: '#ef4444', display: 'flex', justifyContent: 'center', gap: '8px'}} disabled={selectedDrones.size === 0} onClick={() => sendCommand(CommandAction.MISSION_ABORT)}>
+               <button className="btn btn-primary" style={{flex: 1, padding: '12px', background: '#ef4444', borderColor: '#ef4444', display: 'flex', justifyContent: 'center', gap: '8px'}} disabled={selectedDrones.size === 0} onClick={() => sendMissionCmd('mission_abort')}>
                   <Square size={18}/> ABORT
                </button>
             </div>

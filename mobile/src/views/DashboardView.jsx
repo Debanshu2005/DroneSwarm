@@ -197,7 +197,7 @@ export default function DashboardView() {
                    <Signal size={12} style={{marginRight: 4}}/> {drone.freshness || 'OFFLINE'}
                  </span>
                  <span className={`status-badge badge-${drone.status === 'CONNECTED' ? 'good' : drone.status === 'DEGRADED' ? 'warning' : 'danger'}`}>
-                   ● {drone.status.toUpperCase()}
+                   ● {(drone.status || 'UNKNOWN').toUpperCase()}
                  </span>
                </div>
                {drone.commandState && drone.commandState.state !== 'IDLE' && (

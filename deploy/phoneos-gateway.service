@@ -1,0 +1,18 @@
+[Unit]
+Description=PhoneOS Gateway Relay Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/Projects/PhoneOS
+Environment="PYTHONPATH=/home/pi/Projects/PhoneOS"
+ExecStart=/bin/bash -c "source venv/bin/activate && python relay/relay.py"
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

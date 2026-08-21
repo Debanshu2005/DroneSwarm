@@ -39,6 +39,16 @@ class UdpWebsocketRelay:
                 self.relay.loop.create_task(self.relay.forward_udp_to_ws(data, addr))
 
     async def forward_udp_to_ws(self, data: bytes, addr: tuple):
+        if not data: return
+        
+        # MAVLink 1 is 0xFE, MAVLink 2 is 0xFD
+        if data[0] in (0xFE, 0xFD):
+            return
+            
+        if data[0] not in (ord('{'), ord('[')):
+            logger.warning(f"UDP packet dropped: Expected JSON but got invalid byte {data[0]} from {addr}")
+            return
+            
         try:
             msg_str = data.decode('utf-8')
             msg_dict = json.loads(msg_str)
@@ -60,6 +70,8 @@ class UdpWebsocketRelay:
                 aws = [ws.send(msg_str) for ws in self.active_websockets]
                 await asyncio.gather(*aws, return_exceptions=True)
                 
+        except json.JSONDecodeError as e:
+            logger.warning(f"Invalid JSON received from UDP: {e}")
         except Exception as e:
             logger.warning(f"Error forwarding UDP to WS: {e}")
 

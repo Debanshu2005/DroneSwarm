@@ -17,7 +17,7 @@ class ConfigurationValidator:
         if not config.network or not config.network.host:
             errors.append("Missing Network Host")
         if config.flight:
-            if config.flight.adapter_type not in ["airsim", "px4"]:
+            if config.flight.adapter_type not in ["airsim", "px4", "mavsdk"]:
                 errors.append(f"Invalid adapter type: {config.flight.adapter_type}")
         if config.mission:
             if not os.path.exists(config.mission.mission_storage_dir):

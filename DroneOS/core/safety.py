@@ -25,7 +25,7 @@ class SafetyModule:
         except Exception as e:
             logger.error(f"Failed to send zero velocity during emergency stop: {e}")
             
-        await self.fc.disarm()
+        await self.fc.kill()
         
         if self.mission_manager:
             self.mission_manager.abort_mission()

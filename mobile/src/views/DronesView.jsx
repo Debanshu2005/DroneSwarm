@@ -8,7 +8,7 @@ export default function DronesView({ setView }) {
   const handleDroneSelect = (id) => {
     selectNone();
     toggleSelect(id);
-    setView('DRONE_CONTROL');
+    setView('FLIGHT');
   };
 
   const renderStatusIcon = (status) => {

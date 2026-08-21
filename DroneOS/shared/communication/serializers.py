@@ -11,7 +11,8 @@ from DroneOS.shared.protocol.messages import (
     MissionClearMessage, CommandLifecycleMessage, TestInjectMessage,
     ParamRequestMessage, ParamResponseMessage, DiagnosticsMessage,
     DroneJoinMessage, DroneLeaveMessage, SwarmStateMessage,
-    PeerStateMessage, DroneIdentityMessage, SwarmHeartbeatMessage
+    PeerStateMessage, DroneIdentityMessage, SwarmHeartbeatMessage,
+    TaskBidMessage
 )
 from DroneOS.shared.communication.interfaces import IMessageSerializer
 
@@ -48,7 +49,8 @@ class JsonSerializer(IMessageSerializer):
             MessageType.SWARM_STATE: SwarmStateMessage,
             MessageType.PEER_STATE: PeerStateMessage,
             MessageType.DRONE_IDENTITY: DroneIdentityMessage,
-            MessageType.SWARM_HEARTBEAT: SwarmHeartbeatMessage
+            MessageType.SWARM_HEARTBEAT: SwarmHeartbeatMessage,
+            MessageType.TASK_BID: TaskBidMessage
         }
 
     def serialize(self, message: BaseMessage) -> bytes:

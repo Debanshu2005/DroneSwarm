@@ -1,521 +1,521 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDroneContext } from '../context/DroneContext';
-import { ShieldAlert, ShieldCheck, Navigation, ArrowUp, ArrowDown, Activity, ArrowLeft, Square, RotateCcw, RotateCw, ArrowRight } from 'lucide-react';
+import {
+  ShieldAlert, ShieldCheck, Navigation, ArrowUp, ArrowDown, Activity,
+  ArrowLeft, Square, RotateCcw, RotateCw, ArrowRight, Map, Video, Menu,
+  Battery, Signal, Wifi, Compass, Gauge, AlertTriangle, Lock, Unlock,
+  Plus, Minus, Settings
+} from 'lucide-react';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
 import { CommandAction } from '../protocol/messages';
 
+
+// Fix Leaflet's default icon path issues in React
+try {
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  });
+} catch (e) {
+  console.warn("Leaflet icon manipulation failed", e);
+}
+
+
+const createDroneIcon = (color, heading) => {
+  const rotation = heading != null && !isNaN(heading) ? `transform: rotate(${heading}deg);` : '';
+  const svg = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="${rotation} transform-origin: center;">
+      <path d="M12 2L22 20L12 16L2 20L12 2Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+    </svg>`;
+  return L.divIcon({ html: svg, className: 'custom-drone-icon', iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -16] });
+};
+
 export default function DroneControlView({ setView }) {
-  const { drones, selectedDrones, nowMs, sendCommand, isConnected, indoorMode, testOverrides } = useDroneContext();
-  
-  const [takeoffAltitude, setTakeoffAltitude] = useState(2.0);
-  const [movementSpeed, setMovementSpeed] = useState(2.0);
-  const [verticalSpeed, setVerticalSpeed] = useState(1.0);
+  const { drones, nowMs, sendCommand, isConnected, indoorMode, wsManager } = useDroneContext();
+
+  const [targetMode, setTargetMode] = useState('ALL'); // 'ALL' or droneId
+  const [targetDroneId, setTargetDroneId] = useState(null);
+
+  // Formation defaults
+  const [formationType, setFormationType] = useState('V');
+  const [formationSpacing, setFormationSpacing] = useState(2.0);
+  const [formationSpeed, setFormationSpeed] = useState(0.5);
+
+  // Speed defaults to 0.10 m/s
+  const [movementSpeed, setMovementSpeed] = useState(0.10);
+  const [verticalSpeed, setVerticalSpeed] = useState(0.10);
   const [yawRate, setYawRate] = useState(15.0);
-  
-  const [showTakeoffModal, setShowTakeoffModal] = useState(false);
-  const [showArmModal, setShowArmModal] = useState(false);
-  const holdIntervalRef = useRef(null);
-  const [holdProgress, setHoldProgress] = useState(0);
+  const [targetAltitude, setTargetAltitude] = useState(1.0);
 
-  const [takeoffState, setTakeoffState] = useState(null);
-  const [takeoffStartAlt, setTakeoffStartAlt] = useState(0);
 
-  const [testControlEnabled, setTestControlEnabled] = useState(false);
-  const [lastCommandResult, setLastCommandResult] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(null); // { action, params, message }
 
-  const activeDroneId = selectedDrones.size > 0 ? Array.from(selectedDrones)[0] : null;
-  const drone = drones[activeDroneId];
-  const tel = drone?.telemetry || {};
+  const [newIp, setNewIp] = useState("192.168.1.100");
+  const [newPort, setNewPort] = useState("8080");
 
   const moveIntervalRef = useRef(null);
+  const [activeMoveParams, setActiveMoveParams] = useState(null);
 
-  const startHold = (action) => {
-     setHoldProgress(0);
-     let progress = 0;
-     holdIntervalRef.current = setInterval(() => {
-        progress += 5;
-        setHoldProgress(progress);
-        if (progress >= 100) {
-           clearInterval(holdIntervalRef.current);
-           action();
-           setHoldProgress(0);
-        }
-     }, 50);
+  // Determine active drone context for telemetry display
+  // If 'ALL', we show aggregate or just pick the first healthy drone as reference.
+  const droneIds = Object.keys(drones || {});
+  const activeId = targetMode === 'ALL' ? (droneIds[0] || null) : targetDroneId;
+  const activeDrone = drones[activeId];
+  const tel = activeDrone?.telemetry || {};
+
+  const handleTargetChange = (e) => {
+    const val = e.target.value;
+    if (val === 'ALL') {
+      setTargetMode('ALL');
+      setTargetDroneId(null);
+    } else {
+      setTargetMode('SINGLE');
+      setTargetDroneId(val);
+    }
   };
-  
-   const cancelHold = () => {
-     if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
-     setHoldProgress(0);
+
+  const getTargetArray = () => {
+    return targetMode === 'ALL' ? droneIds : (targetDroneId ? [targetDroneId] : []);
+  };
+
+  const executeCommand = (action, params = null) => {
+    const targets = getTargetArray();
+    if (targets.length === 0) return;
+
+    if (action === CommandAction.EMERGENCY) {
+      sendCommand(CommandAction.STOP, params, targets, true);
+    } else {
+      sendCommand(action, params, targets);
+    }
+    setShowConfirmModal(null);
+  };
+
+  const requestCommand = (action, params = null, danger = false) => {
+    // LAND, RTL, EMERGENCY are SUPER KEYS - always execute immediately, no confirmation
+    if (action === CommandAction.LAND || action === CommandAction.RTL || action === CommandAction.EMERGENCY) {
+        stopMove(); // High priority commands cancel active movement immediately
+        executeCommand(action, params);
+        return;
+    }
+    if (danger && targetMode === 'ALL') {
+      setShowConfirmModal({ action, params, message: `Are you sure you want to ${action.toUpperCase()} ALL DRONES?` });
+    } else {
+      executeCommand(action, params);
+    }
   };
 
   const startMove = (params) => {
+     if (activeMoveParams) return;
+     setActiveMoveParams(params);
      if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
-     sendCommand(CommandAction.MOVE, params);
-     // Send at 10Hz to maintain offboard control
+     executeCommand(CommandAction.MOVE, params);
      moveIntervalRef.current = setInterval(() => {
-        sendCommand(CommandAction.MOVE, params);
-     }, 100);
+        executeCommand(CommandAction.MOVE, params);
+     }, 200);
   };
 
   const stopMove = () => {
      if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
-     sendCommand(CommandAction.HOVER);
+     setActiveMoveParams(null);
+     executeCommand(CommandAction.HOVER);
   };
-  
-  const dronesRef = useRef(drones);
-  useEffect(() => { dronesRef.current = drones; }, [drones]);
-
-  useEffect(() => {
-     if (takeoffState) {
-        if (takeoffState === 'REQUESTED' && tel.flight_mode === 'TAKEOFF') {
-           setTakeoffState('ACTIVE');
-        } else if (takeoffState === 'ACTIVE' && tel.altitude > takeoffStartAlt + 0.5) {
-           setTakeoffState('RISING');
-        } else if (takeoffState === 'RISING' && tel.altitude >= takeoffAltitude - 0.5) {
-           setTakeoffState('REACHED');
-           setTimeout(() => setTakeoffState(null), 3000);
-        }
-     }
-  }, [tel.flight_mode, tel.altitude, takeoffState, takeoffStartAlt, takeoffAltitude]);
 
   // Joystick safety
   useEffect(() => {
      const handleVisibilityChange = () => {
          if (document.hidden) {
-             cancelHold();
              stopMove();
          }
      };
      document.addEventListener('visibilitychange', handleVisibilityChange);
-     return () => {
+     
+  let mapCenter = [22.315, 87.310]; // Fallback
+  if (activeDrone && tel.latitude && tel.longitude && tel.latitude !== 0) {
+      mapCenter = [tel.latitude, tel.longitude];
+  } else {
+      // Find any drone with valid GPS
+      const validDroneId = droneIds.find(id => drones[id]?.telemetry?.latitude && drones[id]?.telemetry?.latitude !== 0);
+      if (validDroneId) {
+          mapCenter = [drones[validDroneId].telemetry.latitude, drones[validDroneId].telemetry.longitude];
+      }
+  }
+
+  return () => {
          document.removeEventListener('visibilitychange', handleVisibilityChange);
-         cancelHold();
          stopMove();
      };
      // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!drone) {
-    return (
-      <div className="view-container">
-         <div className="card" style={{textAlign: 'center', padding: '40px'}}>
-            <h3 style={{color: 'var(--text-muted)'}}>NO DRONE SELECTED</h3>
-            <button className="btn btn-primary" style={{marginTop: '16px'}} onClick={() => setView('DRONES')}>Back to Fleet</button>
-         </div>
-      </div>
-    );
+  // Aggregate States
+  const isHeartbeatHealthy = activeDrone ? (nowMs - activeDrone.lastSeen) < 2000 : false;
+  const isTelemetryHealthy = isHeartbeatHealthy && isConnected === "CONNECTED";
+  const isPx4Connected = tel.flight_mode && tel.flight_mode !== "disconnected" && tel.flight_mode !== "UNKNOWN";
+  const isBatteryAcceptable = (tel.battery_level || 0) >= 15;
+  const isGpsValid = tel.gps_valid === true;
+  const isHomeValid = tel.home_valid === true;
+  const isArmable = tel.is_armable === true;
+  const isHealthy = tel.health_all_ok === true;
+
+  const connectedDronesCount = droneIds.filter(id => (nowMs - drones[id].lastSeen) < 2000).length;
+
+  
+  let mapCenter = [22.315, 87.310]; // Fallback
+  if (activeDrone && tel.latitude && tel.longitude && tel.latitude !== 0) {
+      mapCenter = [tel.latitude, tel.longitude];
+  } else {
+      // Find any drone with valid GPS
+      const validDroneId = droneIds.find(id => drones[id]?.telemetry?.latitude && drones[id]?.telemetry?.latitude !== 0);
+      if (validDroneId) {
+          mapCenter = [drones[validDroneId].telemetry.latitude, drones[validDroneId].telemetry.longitude];
+      }
   }
 
-  const validateDroneSafety = () => {
-     const isHeartbeatHealthy = (nowMs - drone.lastSeen) < 2000;
-     const isTelemetryHealthy = isHeartbeatHealthy && isConnected === "CONNECTED";
-     const isPx4Connected = tel.flight_mode && tel.flight_mode !== "disconnected" && tel.flight_mode !== "UNKNOWN";
-     const isBatteryAcceptable = (tel.battery_level || 0) >= 20;
-     const isGpsValid = tel.gps_valid === true;
-     const isFailsafe = drone.status === 'failsafe';
-     const isHealthy = tel.system_health === "OK" || tel.system_health == null;
-     
-     const overrides = testOverrides[activeDroneId] || {};
-     
-     let reason = "OK";
-     let armPass = true;
-     
-     if (!isTelemetryHealthy && !overrides.simulate_offline) { armPass = false; reason = "LINK DOWN"; }
-     else if (!isPx4Connected && !overrides.simulate_offline) { armPass = false; reason = "PX4 DISCONNECTED"; }
-     else if (isFailsafe) { armPass = false; reason = "FAILSAFE ACTIVE"; }
-     else if (!isHealthy && !overrides.bypass_sensors) { armPass = false; reason = "PX4 HEALTH NOT READY"; }
-     else if (!isBatteryAcceptable) { armPass = false; reason = "BATTERY LOW"; }
-     else if (!indoorMode && !isGpsValid && !overrides.bypass_gps) { armPass = false; reason = "NO GPS FIX (OUTDOOR MODE)"; }
-     
-     const takeoffPass = armPass && tel.armed_state === "ARMED";
-     const takeoffReason = !armPass ? reason : (tel.armed_state !== "ARMED" ? "NOT ARMED" : "OK");
-     
-     return { armPass, takeoffPass, reason, takeoffReason };
-  };
-
-  const safety = validateDroneSafety();
-
-  const handleTestCommand = (action, params = null) => {
-     sendCommand(action, params);
-  };
-
-  const renderCommandStatus = () => {
-     if (!drone?.commandState?.action) return null;
-     const cs = drone.commandState;
-     let color = 'var(--text-muted)';
-     if (cs.state === 'SUCCESS') color = 'var(--good)';
-     if (cs.state === 'FAILED' || cs.state === 'REJECTED' || cs.state === 'TIMEOUT') color = 'var(--danger)';
-     if (cs.state === 'MAVSDK_REQUESTED' || cs.state === 'BACKEND_RECEIVED') color = 'var(--warning)';
-     
-     return (
-       <div style={{marginTop: '16px', padding: '12px', background: 'var(--bg-card)', borderRadius: '6px', fontSize: '12px', border: `1px solid ${color}`}}>
-          <div style={{fontWeight: 'bold', marginBottom: '4px'}}>LIFECYCLE: {cs.action.toUpperCase()}</div>
-          <div style={{display: 'flex', justifyContent: 'space-between', color}}>
-            <span>Stage: {cs.state}</span>
-          </div>
-          {cs.reason && <div style={{color: 'var(--danger)', marginTop: '4px'}}>Reason: {cs.reason}</div>}
-       </div>
-     );
-  };
-
-  const renderModals = () => {
-    return (
-      <>
-        {showArmModal && (
-           <div className="modal-overlay">
-              <div className="modal-content">
-                 <h2>ARMING SAFETY GATE</h2>
-                 <div className="checklist">
-                    <div style={{display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px'}}>
-                      <h2 style={{fontSize: '20px', margin: 0}}>{drone.id}</h2>
-                      <span className={`status-badge badge-${drone.healthScore === 'HEALTHY' ? 'good' : drone.healthScore === 'WARNING' ? 'warning' : drone.healthScore === 'CRITICAL' ? 'danger' : 'neutral'}`}>
-                        ● {drone.healthScore || 'UNKNOWN'}
-                      </span>
-                      <span className={`status-badge badge-${drone.freshness === 'LIVE' ? 'good' : drone.freshness === 'STALE' ? 'warning' : 'danger'}`}>
-                        {drone.freshness || 'OFFLINE'}
-                      </span>
-                      <span className={`status-badge badge-${drone.status === 'CONNECTED' ? 'good' : drone.status === 'DEGRADED' ? 'warning' : 'danger'}`}>
-                        ● {drone.status.toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="check-item" style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '8px'}}>
-                       <span>Safety Status:</span> 
-                       {safety.armPass ? <span className="good">✓ PASS</span> : <span className="danger">✗ {safety.reason}</span>}
-                    </div>
-                 </div>
-                 <div style={{marginTop: '20px', textAlign: 'center'}}>
-                   {safety.armPass ? (
-                      <>
-                         <h3 className="good" style={{marginBottom: '10px'}}>READY TO ARM</h3>
-                         <button 
-                            className="action-btn action-arm press-hold" style={{width: '100%'}}
-                            onMouseDown={() => startHold(() => {setShowArmModal(false); sendCommand(CommandAction.ARM);})}
-                            onMouseUp={cancelHold} onMouseLeave={cancelHold}
-                            onTouchStart={(e) => { e.preventDefault(); startHold(() => {setShowArmModal(false); sendCommand(CommandAction.ARM);});}}
-                            onTouchEnd={(e) => { e.preventDefault(); cancelHold();}}
-                         >
-                            <div className="progress-bg" style={{width: `${holdProgress}%`}}></div>
-                            <span style={{position: 'relative', zIndex: 2}}>HOLD TO ARM</span>
-                         </button>
-                      </>
-                   ) : (
-                      <>
-                         <h3 className="danger" style={{marginBottom: '10px'}}>ARMING REJECTED</h3>
-                         <button className="action-btn" style={{width: '100%'}} disabled>ARM DISABLED</button>
-                      </>
-                   )}
-                 </div>
-                 <button className="secondary-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setShowArmModal(false)}>CANCEL</button>
-              </div>
-           </div>
-        )}
-
-        {showTakeoffModal && (
-           <div className="modal-overlay">
-              <div className="modal-content">
-                 <h2>TAKEOFF CONFIRMATION</h2>
-                 <div className="checklist">
-                    <div className="check-item" style={{display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '8px', marginBottom: '8px'}}>
-                       <span>Target Altitude:</span> <span>{takeoffAltitude.toFixed(1)} m</span>
-                    </div>
-                    <div className="check-item" style={{display: 'flex', justifyContent: 'space-between'}}>
-                       <span>{drone.id}:</span> 
-                       {safety.takeoffPass ? <span className="good">✓ READY</span> : <span className="danger">✗ {safety.takeoffReason}</span>}
-                    </div>
-                 </div>
-                 <div style={{marginTop: '20px', textAlign: 'center'}}>
-                   {safety.takeoffPass ? (
-                      <>
-                         <h3 className="good" style={{marginBottom: '10px'}}>READY FOR TAKEOFF</h3>
-                         <button 
-                            className="action-btn action-arm press-hold" style={{width: '100%', borderColor: 'var(--primary)', color: '#fff', background: 'var(--primary)'}}
-                            onMouseDown={() => startHold(() => {
-                               setShowTakeoffModal(false); 
-                               setTakeoffState('REQUESTED'); 
-                               setTakeoffStartAlt(tel.altitude || 0); 
-                               sendCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude });
-                            })}
-                            onMouseUp={cancelHold} onMouseLeave={cancelHold}
-                            onTouchStart={(e) => { 
-                               e.preventDefault(); 
-                               startHold(() => {
-                                  setShowTakeoffModal(false); 
-                                  setTakeoffState('REQUESTED'); 
-                                  setTakeoffStartAlt(tel.altitude || 0); 
-                                  sendCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude });
-                               });
-                            }}
-                            onTouchEnd={(e) => { e.preventDefault(); cancelHold();}}
-                         >
-                            <div className="progress-bg" style={{width: `${holdProgress}%`}}></div>
-                            <span style={{position: 'relative', zIndex: 2}}>HOLD TO TAKEOFF</span>
-                         </button>
-                      </>
-                   ) : (
-                      <>
-                         <h3 className="danger" style={{marginBottom: '10px'}}>TAKEOFF REJECTED</h3>
-                         <button className="action-btn" style={{width: '100%'}} disabled>TAKEOFF DISABLED</button>
-                      </>
-                   )}
-                 </div>
-                 <button className="secondary-btn" style={{marginTop: '10px', width: '100%'}} onClick={() => setShowTakeoffModal(false)}>CANCEL</button>
-              </div>
-           </div>
-        )}
-      </>
-    );
-  };
-
   return (
-    <div className="view-container">
-      
-      {indoorMode && (
-         <div className="card" style={{ background: 'var(--primary)', color: 'white', padding: '12px 16px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Activity size={20} />
-            <div>
-               <h4 style={{ margin: 0, fontSize: '14px' }}>INDOOR MODE ACTIVE</h4>
-               <p style={{ margin: 0, fontSize: '12px', opacity: 0.9 }}>GPS: NOT REQUIRED FOR SELECTED CONTROL MODE</p>
+    <div className="drone-control-view" style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', backgroundColor: 'var(--bg-color)', position: 'relative', overflow: 'hidden' }}>
+
+      {/* BACKGROUND MAP LAYER (Z: 0) */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 0, backgroundColor: '#E2E8F0' }}>
+         <ErrorBoundary fallback={
+            <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
+                <div style={{color: '#94A3B8', fontSize: '14px', fontWeight: 'bold'}}>MAP OFFLINE</div>
+                <div style={{color: '#94A3B8', fontSize: '12px'}}>Flight controls remain fully active.</div>
             </div>
-         </div>
-      )}
-
-      <div className="view-header" style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-         <button className="btn btn-secondary" style={{padding: '8px'}} onClick={() => setView('DRONES')}>
-           <ArrowLeft size={20} />
-         </button>
-         <div>
-             <h2 style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-               Control: {drone.id}
-               <span className={`status-badge badge-${drone.healthScore === 'HEALTHY' ? 'good' : drone.healthScore === 'WARNING' ? 'warning' : drone.healthScore === 'CRITICAL' ? 'danger' : 'neutral'}`} style={{fontSize: '12px'}}>
-                 {drone.healthScore || 'UNKNOWN'}
-               </span>
-               <span className={`status-badge badge-${drone.freshness === 'LIVE' ? 'good' : drone.freshness === 'STALE' ? 'warning' : 'danger'}`} style={{fontSize: '12px'}}>
-                 {drone.freshness || 'OFFLINE'}
-               </span>
-               <span className={`status-badge badge-${drone.status === 'CONNECTED' ? 'good' : drone.status === 'DEGRADED' ? 'warning' : 'danger'}`} style={{fontSize: '12px'}}>
-                 {drone.status.toUpperCase()}
-               </span>
-             </h2>
-            <div style={{display: 'flex', gap: '12px', marginTop: '8px'}}>
-               <button className="btn btn-secondary text-sm" onClick={() => setView('PARAMETERS')} style={{padding: '4px 8px'}}>Parameters</button>
-               <button className="btn btn-secondary text-sm" onClick={() => setView('SENSOR_CALIBRATION')} style={{padding: '4px 8px'}}>Sensors</button>
-            </div>
-         </div>
-      </div>
-
-      <div className="metrics-row" style={{marginBottom: 0}}>
-         <div className="metric-card">
-            <span className="metric-label">Mode</span>
-            <span className="metric-value">{tel.flight_mode || 'UNK'}</span>
-         </div>
-         <div className="metric-card">
-            <span className="metric-label">Armed</span>
-            <span className={`metric-value ${tel.armed_state === 'ARMED' ? 'danger' : 'good'}`}>{tel.armed_state || 'DISARMED'}</span>
-         </div>
-         <div className="metric-card">
-            <span className="metric-label">Battery</span>
-            <span className="metric-value">{tel.battery_level ?? '--'}%</span>
-         </div>
-         <div className="metric-card">
-            <span className="metric-label">GPS Fix</span>
-            <span className={`metric-value ${tel.gps_valid ? 'good' : 'danger'}`}>{tel.gps_valid ? '3D FIX' : 'NO FIX'}</span>
-         </div>
-      </div>
-
-      <div className="card" style={{ padding: '16px', marginBottom: '16px', background: testControlEnabled ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-main)' }}>
-         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-            <h3 style={{fontSize: '14px', color: testControlEnabled ? '#ef4444' : 'var(--text-muted)'}}>
-               {testControlEnabled ? 'TEST CONTROL MODE ACTIVE' : 'TEST CONTROL MODE'}
-            </h3>
-            <button className={`btn ${testControlEnabled ? 'btn-primary' : 'btn-secondary'}`} style={{background: testControlEnabled ? '#ef4444' : '', borderColor: testControlEnabled ? '#ef4444' : ''}} onClick={() => setTestControlEnabled(!testControlEnabled)}>
-               {testControlEnabled ? 'EXIT TEST MODE' : 'ENTER TEST MODE'}
-            </button>
-         </div>
-         
-         {testControlEnabled && (
-            <div style={{marginTop: '16px'}}>
-               <p className="text-muted" style={{fontSize: '12px', marginBottom: '16px'}}>
-                  WARNING: UI Safety gates are disabled. Commands are sent directly to the backend. PX4 has final authority.
-               </p>
-               <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '8px'}}>
-                  <button className="btn btn-primary" style={{background: '#ef4444', borderColor: '#ef4444'}} onClick={() => handleTestCommand(CommandAction.ARM)}>ARM</button>
-                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.DISARM)}>DISARM</button>
-                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude })}>TAKEOFF</button>
-                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.LAND)}>LAND</button>
-                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.SET_MODE, { mode: 'HOLD' })}>HOLD</button>
-                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.RTL)}>RTL</button>
-                  <button className="btn btn-secondary" onClick={() => handleTestCommand(CommandAction.HOVER)}>STOP</button>
-               </div>
-               
-               {lastCommandResult && (
-                  <div style={{marginTop: '16px', padding: '12px', background: 'var(--bg-color)', borderRadius: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between'}}>
-                     <span><strong>Last Command:</strong> {lastCommandResult.action}</span>
-                     <span className={lastCommandResult.status.includes('REJECTED') ? 'danger' : 'good'}>
-                        {lastCommandResult.status} {lastCommandResult.reason ? `(${lastCommandResult.reason})` : ''}
-                     </span>
-                  </div>
-               )}
-            </div>
-         )}
-      </div>
-
-      {takeoffState && (
-         <div className="card" style={{ padding: '16px', background: 'var(--bg-main)', border: '1px solid var(--primary)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <Activity color="var(--primary)" className={takeoffState !== 'REACHED' ? 'spin' : ''} />
-            <div style={{ flex: 1 }}>
-               <h4 style={{ margin: 0, fontSize: '13px', color: 'var(--primary)' }}>TAKEOFF SEQUENCE: {takeoffState}</h4>
-               <div style={{ background: 'var(--bg-color)', height: '6px', borderRadius: '3px', marginTop: '8px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', background: 'var(--primary)', width: takeoffState === 'REQUESTED' ? '25%' : takeoffState === 'ACTIVE' ? '50%' : takeoffState === 'RISING' ? '75%' : '100%', transition: 'width 0.3s' }}></div>
-               </div>
-            </div>
-            <div style={{ fontSize: '18px', fontWeight: 600, fontFamily: 'monospace' }}>
-               {(tel.altitude || 0).toFixed(1)}m / {takeoffAltitude.toFixed(1)}m
-            </div>
-         </div>
-      )}
-
-      <div className="card" style={{ padding: '20px' }}>
-        <h3 style={{marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Quick Actions ({tel.flight_mode || 'HOLD'})</h3>
-        <div className="quick-actions" style={{gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))'}}>
-           {(!tel.flight_mode || tel.flight_mode === 'HOLD' || tel.flight_mode === 'LOITER' || tel.flight_mode === 'MANUAL' || tel.flight_mode === 'ALTCTL' || tel.flight_mode === 'OFFBOARD') && (
-             <>
-               <button className="btn btn-primary" onClick={() => setShowArmModal(true)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'} style={{background: '#ef4444', borderColor: '#ef4444', color: 'white'}}>
-                  <ShieldAlert size={16} style={{marginRight: '8px'}}/> ARM
-               </button>
-               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.DISARM)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
-                  <ShieldCheck size={16} style={{marginRight: '8px'}}/> DISARM
-               </button>
-               <button className="btn btn-primary" onClick={() => sendCommand(CommandAction.EMERGENCY)} style={{background: '#7f1d1d', borderColor: '#7f1d1d', color: 'white', gridColumn: '1 / -1'}}>
-                  EMERGENCY STOP
-               </button>
-             </>
-           )}
-
-           {(!tel.flight_mode || tel.flight_mode === 'HOLD' || tel.flight_mode === 'LOITER') && (
-             <>
-               <button className="btn btn-secondary" onClick={() => setShowTakeoffModal(true)} disabled={(drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED') || !tel.gps_valid} title={!tel.gps_valid ? 'TAKEOFF NOT AVAILABLE - Position estimate unavailable' : ''}>
-                  <ArrowUp size={16}/> TAKEOFF
-               </button>
-               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.LAND)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
-                  <ArrowDown size={16}/> LAND
-               </button>
-               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.RTL)} disabled={(drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED') || !tel.gps_valid} title={!tel.gps_valid ? 'RTL NOT AVAILABLE - Home position unavailable' : ''}>
-                  <Navigation size={16}/> RTL
-               </button>
-             </>
-           )}
-
-           {tel.flight_mode === 'MISSION' && (
-             <>
-               <button className="btn btn-primary" style={{background: '#10b981', borderColor: '#10b981'}} onClick={() => sendCommand(CommandAction.MISSION_START)}>START</button>
-               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.MISSION_PAUSE)}>PAUSE</button>
-               <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.MISSION_START)}>RESUME</button>
-               <button className="btn btn-primary" style={{background: '#ef4444', borderColor: '#ef4444'}} onClick={() => sendCommand(CommandAction.MISSION_ABORT)}>CANCEL</button>
-             </>
-           )}
-
-           <button className="btn btn-secondary" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'HOLD'})} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
-              HOLD
-           </button>
-
-           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <select className="input-field" style={{ width: '100%', padding: '8px', fontSize: '12px' }} onChange={(e) => sendCommand(CommandAction.SET_MODE, {mode: e.target.value})}>
-                 <option value="">Set Mode...</option>
-                 <option value="HOLD">HOLD</option>
-                 <option value="LOITER">LOITER</option>
-                 <option value="OFFBOARD">OFFBOARD</option>
-                 <option value="ALTCTL">ALTCTL</option>
-                 <option value="MANUAL">MANUAL</option>
-                 <option value="MISSION">MISSION</option>
-              </select>
-           </div>
-           
-           {renderCommandStatus()}
-        </div>
-      </div>
-
-      {(tel.flight_mode === 'MANUAL' || tel.flight_mode === 'ALTCTL' || tel.flight_mode === 'OFFBOARD' || !tel.flight_mode) && (
-         <div className="card" style={{ padding: '20px' }}>
-            <h3 style={{marginBottom: '16px', fontSize: '14px', color: 'var(--text-muted)', textTransform: 'uppercase'}}>Manual Control (RC)</h3>
+         }>
+             <MapContainer center={mapCenter} zoom={18} style={{ height: '100%', width: '100%' }} zoomControl={false}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="" />
             
-            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '24px'}}>
-               <div className="input-group">
-                  <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>XY Speed: {movementSpeed.toFixed(1)}m/s</label>
-                  <input type="range" min="0.5" max="10.0" step="0.5" value={movementSpeed} onChange={(e) => setMovementSpeed(parseFloat(e.target.value))} />
-               </div>
-               <div className="input-group">
-                  <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>Z Speed: {verticalSpeed.toFixed(1)}m/s</label>
-                  <input type="range" min="0.5" max="5.0" step="0.5" value={verticalSpeed} onChange={(e) => setVerticalSpeed(parseFloat(e.target.value))} />
-               </div>
-               <div className="input-group">
-                  <label style={{fontSize: '12px', color: 'var(--text-muted)'}}>Yaw Rate: {yawRate.toFixed(1)}°/s</label>
-                  <input type="range" min="5" max="90" step="5" value={yawRate} onChange={(e) => setYawRate(parseFloat(e.target.value))} />
-               </div>
-            </div>
-
-            <div className="joystick-container" style={{background: 'var(--bg-main)', padding: '24px', borderRadius: '12px', display: 'flex', justifyContent: 'center', gap: '40px', flexWrap: 'wrap'}}>
+            {droneIds.map(id => {
+               const d = drones[id];
+               const t = d?.telemetry;
+               if (!t || t.latitude == null || t.longitude == null || isNaN(t.latitude) || isNaN(t.longitude) || t.latitude === 0) return null;
                
-               {/* Left Stick (Altitude / Yaw) */}
-               <div className="d-pad">
-                  <div></div>
-                  <button className="d-btn" 
-                     onPointerDown={() => startMove({vz: -verticalSpeed})}
-                     onPointerUp={stopMove}
-                     onPointerLeave={stopMove}
-                  ><ArrowUp/></button>
-                  <div></div>
-                  <button className="d-btn" 
-                     onPointerDown={() => startMove({yaw_rate: -yawRate})}
-                     onPointerUp={stopMove}
-                     onPointerLeave={stopMove}
-                  ><RotateCcw/></button>
-                  <div className="d-center" onClick={stopMove} title="Hover/Stop"><Square size={20}/></div>
-                  <button className="d-btn" 
-                     onPointerDown={() => startMove({yaw_rate: yawRate})}
-                     onPointerUp={stopMove}
-                     onPointerLeave={stopMove}
-                  ><RotateCw/></button>
-                  <div></div>
-                  <button className="d-btn" 
-                     onPointerDown={() => startMove({vz: verticalSpeed})}
-                     onPointerUp={stopMove}
-                     onPointerLeave={stopMove}
-                  ><ArrowDown/></button>
-                  <div></div>
-               </div>
+               const isTargeted = targetMode === 'ALL' || targetDroneId === id;
+               const color = isTargeted ? '#10B981' : '#3B82F6';
+               const icon = createDroneIcon(color, t.heading);
+               
+               return (
+                  <Marker key={id} position={[t.latitude, t.longitude]} icon={icon}>
+                     <Popup>
+                        <div style={{color: '#000', fontWeight: 'bold'}}>{id}</div>
+                     </Popup>
+                  </Marker>
+               );
+            })}
+         </MapContainer>
+         </ErrorBoundary>
+      </div>
 
-               {/* Right Stick (XY Movement) */}
-               <div className="d-pad">
-                  <div></div>
-                  <button className="d-btn" 
-                     onPointerDown={() => startMove({vx: movementSpeed})}
-                     onPointerUp={stopMove}
-                     onPointerLeave={stopMove}
-                  ><ArrowUp/></button>
-                  <div></div>
-                  <button className="d-btn" 
-                     onPointerDown={() => startMove({vy: -movementSpeed})}
-                     onPointerUp={stopMove}
-                     onPointerLeave={stopMove}
-                  ><ArrowLeft/></button>
-                  <div className="d-center" onClick={stopMove} title="Hover/Stop"><Square size={20}/></div>
-                  <button className="d-btn" 
-                     onPointerDown={() => startMove({vy: movementSpeed})}
-                     onPointerUp={stopMove}
-                     onPointerLeave={stopMove}
-                  ><ArrowRight/></button>
-                  <div></div>
-                  <button className="d-btn" 
-                     onPointerDown={() => startMove({vx: -movementSpeed})}
-                     onPointerUp={stopMove}
-                     onPointerLeave={stopMove}
-                  ><ArrowDown/></button>
-                  <div></div>
+      {/* HEADER & TELEMETRY STRIP (Z: 20) */}
+      <div style={{ zIndex: 20, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface)', borderBottom: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)' }}>
+         
+         {/* Top Header */}
+          <div style={{display: 'flex', padding: '4px 12px', alignItems: 'center', justifyContent: 'space-between'}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
+                  {/* BACK BUTTON */}
+                  <button onClick={() => setView('DASHBOARD')} style={{background: 'var(--bg-color)', border: '1px solid var(--border)', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', fontWeight: 'bold', color: 'var(--text-muted)'}}>
+                    <Menu size={14}/> ← BACK
+                  </button>
+                  
+                  {/* TARGET DROPDOWN */}
+                  <div style={{display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-color)', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border)'}}>
+                     <span style={{fontSize: '9px', fontWeight: 'bold', color: 'var(--text-muted)'}}>TARGET:</span>
+                     <select value={targetMode === 'ALL' ? 'ALL' : targetDroneId || ''} onChange={handleTargetChange} style={{border: 'none', background: 'transparent', fontSize: '10px', fontWeight: 'bold', outline: 'none', cursor: 'pointer', color: 'var(--primary)'}}>
+                        <option value="ALL">ALL DRONES</option>
+                        {droneIds.map(id => <option key={id} value={id}>{id}</option>)}
+                     </select>
+                  </div>
+              </div>
+              {/* Compact Status Row */}
+              <div style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
+                 <div style={{display: 'flex', alignItems: 'center', gap: '3px'}}>
+                    <div style={{width: '6px', height: '6px', borderRadius: '50%', background: isConnected === 'CONNECTED' ? 'var(--success)' : 'var(--danger)'}}></div>
+                    <span style={{fontSize: '8px', fontWeight: 'bold', color: 'var(--text-muted)'}}>{isConnected === 'CONNECTED' ? 'ONLINE' : 'OFFLINE'}</span>
+                 </div>
+                 <div style={{display: 'flex', alignItems: 'center', gap: '3px'}}>
+                    <div style={{width: '6px', height: '6px', borderRadius: '50%', background: connectedDronesCount > 0 ? 'var(--success)' : 'var(--danger)'}}></div>
+                    <span style={{fontSize: '8px', fontWeight: 'bold', color: 'var(--text-muted)'}}>{connectedDronesCount} DRN</span>
+                 </div>
+                 <div style={{display: 'flex', alignItems: 'center', gap: '3px'}}>
+                    <div style={{width: '6px', height: '6px', borderRadius: '50%', background: isPx4Connected ? 'var(--success)' : 'var(--danger)'}}></div>
+                    <span style={{fontSize: '8px', fontWeight: 'bold', color: 'var(--text-muted)'}}>PX4</span>
+                 </div>
+                 <span style={{fontSize: '9px', fontWeight: 'bold', color: tel.armed_state === 'ARMED' ? 'var(--danger)' : 'var(--success)'}}>{tel.armed_state || 'DISARMED'}</span>
+                 <span style={{fontSize: '8px', fontWeight: 'bold', color: 'var(--text-muted)'}}>{tel.flight_mode || '---'}</span>
+                 <button onClick={() => setView('SETTINGS')} style={{background: 'var(--bg-color)', border: '1px solid var(--border)', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '8px', fontWeight: 'bold', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '2px'}}>
+                    <Settings size={10}/> SET
+                 </button>
+              </div>
+          </div>
+             
+         {/* Telemetry Strip */}
+          <div style={{display: 'flex', gap: '3px', padding: '3px 8px', backgroundColor: 'var(--bg-color)'}}>
+            <div className="telemetry-card" style={{flex: 1}}>
+               <div className="t-header"><Battery size={10}/> BAT</div>
+               <div className={`t-main ${tel.battery_level > 20 ? 'good' : 'danger'}`}>{tel.battery_level != null ? `${tel.battery_level.toFixed(0)}%` : '--'}</div>
+               <div className="t-sub">{tel.voltage ? `${tel.voltage.toFixed(1)}V` : '--'}</div>
+            </div>
+            <div className="telemetry-card" style={{flex: 1}}>
+               <div className="t-header"><Compass size={10}/> GPS</div>
+               <div className={`t-main ${isGpsValid ? 'good' : 'danger'}`}>{isGpsValid ? 'FIX' : 'NO FIX'}</div>
+               <div className="t-sub">{tel.satellites || 0} Sat</div>
+            </div>
+            <div className="telemetry-card" style={{flex: 1}}>
+               <div className="t-header"><Navigation size={10}/> HOME</div>
+               <div className={`t-main ${isHomeValid ? 'good' : 'danger'}`}>{isHomeValid ? 'OK' : 'N/A'}</div>
+               <div className="t-sub">{tel.distance_to_home != null ? `${tel.distance_to_home.toFixed(0)}m` : '--'}</div>
+            </div>
+            <div className="telemetry-card" style={{flex: 1}}>
+               <div className="t-header"><ArrowUp size={10}/> ALT</div>
+               <div className="t-main">{tel.altitude != null ? `${tel.altitude.toFixed(1)}` : '--'}</div>
+               <div className="t-sub">m AGL</div>
+            </div>
+            <div className="telemetry-card" style={{flex: 1}}>
+               <div className="t-header"><Gauge size={10}/> SPD</div>
+               <div className="t-main">{tel.ground_speed != null ? `${tel.ground_speed.toFixed(1)}` : '--'}</div>
+               <div className="t-sub">m/s</div>
+            </div>
+            <div className="telemetry-card" style={{flex: 1}}>
+               <div className="t-header"><RotateCw size={10}/> HDG</div>
+               <div className="t-main">{tel.heading != null ? `${tel.heading.toFixed(0)}°` : '--'}</div>
+            </div>
+          </div>
+      </div>
+
+      {/* LEFT OVERLAY: HORIZONTAL MOVEMENT D-PAD (Z: 10) */}
+       <div style={{ position: 'absolute', bottom: '56px', left: '8px', zIndex: 10 }}>
+          <div className="control-panel" style={{backgroundColor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)'}}>
+             <div className="panel-header" style={{textAlign: 'center', marginBottom: '4px'}}>MOVE</div>
+             <div className="d-pad">
+               <div></div>
+               <button className={`d-btn ${activeMoveParams?.vx > 0 ? 'active' : ''}`} onPointerDown={(e) => { e.preventDefault(); startMove({vx: movementSpeed}); }} onPointerUp={stopMove} onPointerLeave={stopMove} onContextMenu={(e) => e.preventDefault()}>
+                 <ArrowUp size={16}/><span className="d-label">FWD</span>
+               </button>
+               <div></div>
+               <button className={`d-btn ${activeMoveParams?.vy < 0 ? 'active' : ''}`} onPointerDown={(e) => { e.preventDefault(); startMove({vy: -movementSpeed}); }} onPointerUp={stopMove} onPointerLeave={stopMove} onContextMenu={(e) => e.preventDefault()}>
+                 <ArrowLeft size={16}/><span className="d-label">L</span>
+               </button>
+               <div className="d-center" onPointerDown={(e) => { e.preventDefault(); stopMove(); }}>
+                 <Square size={14}/>
+               </div>
+               <button className={`d-btn ${activeMoveParams?.vy > 0 ? 'active' : ''}`} onPointerDown={(e) => { e.preventDefault(); startMove({vy: movementSpeed}); }} onPointerUp={stopMove} onPointerLeave={stopMove} onContextMenu={(e) => e.preventDefault()}>
+                 <ArrowRight size={16}/><span className="d-label">R</span>
+               </button>
+               <div></div>
+               <button className={`d-btn ${activeMoveParams?.vx < 0 ? 'active' : ''}`} onPointerDown={(e) => { e.preventDefault(); startMove({vx: -movementSpeed}); }} onPointerUp={stopMove} onPointerLeave={stopMove} onContextMenu={(e) => e.preventDefault()}>
+                 <ArrowDown size={16}/><span className="d-label">BCK</span>
+               </button>
+               <div></div>
+             </div>
+          </div>
+       </div>
+
+       {/* RIGHT OVERLAY: VERTICAL, YAW, SPEED, ALT (Z: 10) */}
+       <div style={{ position: 'absolute', bottom: '56px', right: '8px', zIndex: 10, display: 'flex', gap: '3px' }}>
+          
+          {/* Speed Control */}
+          <div className="control-panel" style={{backgroundColor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: '42px'}}>
+              <div className="panel-header" style={{textAlign: 'center', marginBottom: '2px'}}>SPD</div>
+              <button className="d-btn h-btn" onClick={() => setMovementSpeed(Math.min(5.0, movementSpeed + 0.05))}><Plus size={12}/></button>
+              <div style={{fontSize: '12px', fontWeight: 'bold', color: 'var(--primary)', margin: '2px 0'}}>{movementSpeed.toFixed(2)}</div>
+              <div style={{fontSize: '8px', color: 'var(--text-muted)'}}>m/s</div>
+              <button className="d-btn h-btn" onClick={() => setMovementSpeed(Math.max(0.05, movementSpeed - 0.05))}><Minus size={12}/></button>
+          </div>
+          {/* Altitude Hold */}
+          <div className="control-panel" style={{backgroundColor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: '42px'}}>
+              <div className="panel-header" style={{textAlign: 'center', marginBottom: '2px'}}>ALT</div>
+              <button className="d-btn h-btn" onClick={() => setTargetAltitude(targetAltitude + 0.5)}><Plus size={12}/></button>
+              <div style={{fontSize: '12px', fontWeight: 'bold', color: 'var(--primary)', margin: '2px 0'}}>{targetAltitude.toFixed(1)}</div>
+              <div style={{fontSize: '8px', color: 'var(--text-muted)'}}>m</div>
+              <button className="d-btn h-btn" onClick={() => setTargetAltitude(Math.max(0.5, targetAltitude - 0.5))}><Minus size={12}/></button>
+          </div>
+
+          {/* Formation Control */}
+          <div className="control-panel" style={{backgroundColor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: '50px'}}>
+              <div className="panel-header" style={{textAlign: 'center', marginBottom: '2px'}}>FORM</div>
+              <select value={formationType} onChange={e => setFormationType(e.target.value)} style={{fontSize: '9px', padding: '2px', marginBottom: '4px', width: '48px', borderRadius: '4px', border: '1px solid var(--border)'}}>
+                 <option value="V">V</option>
+                 <option value="COLUMN">COL</option>
+                 <option value="LINE">LINE</option>
+                 <option value="SQUARE">SQ</option>
+                 <option value="GRID">GRID</option>
+                 <option value="CIRCLE">CIR</option>
+              </select>
+              <button className="d-btn h-btn" style={{fontSize: '8px', width: '48px'}} onClick={() => requestCommand(CommandAction.FORMATION_UPDATE, { type: formationType, spacing: formationSpacing })}>APPLY</button>
+          </div>
+
+          {/* Vertical / Yaw D-Pad */}
+          <div className="control-panel" style={{backgroundColor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)'}}>
+             <div className="panel-header" style={{textAlign: 'center', marginBottom: '2px'}}>VERT/YAW</div>
+             <div className="d-pad">
+               <button className={`d-btn h-btn ${activeMoveParams?.yaw_rate < 0 ? 'active' : ''}`} onPointerDown={(e) => { e.preventDefault(); startMove({yaw_rate: -yawRate}); }} onPointerUp={stopMove} onPointerLeave={stopMove} onContextMenu={(e) => e.preventDefault()}>
+                 <RotateCcw size={12}/><span className="d-label">YL</span>
+               </button>
+               <button className={`d-btn h-btn ${activeMoveParams?.vz < 0 ? 'active' : ''}`} onPointerDown={(e) => { e.preventDefault(); startMove({vz: -verticalSpeed}); }} onPointerUp={stopMove} onPointerLeave={stopMove} onContextMenu={(e) => e.preventDefault()}>
+                 <ArrowUp size={12}/><span className="d-label">UP</span>
+               </button>
+               <button className={`d-btn h-btn ${activeMoveParams?.yaw_rate > 0 ? 'active' : ''}`} onPointerDown={(e) => { e.preventDefault(); startMove({yaw_rate: yawRate}); }} onPointerUp={stopMove} onPointerLeave={stopMove} onContextMenu={(e) => e.preventDefault()}>
+                 <RotateCw size={12}/><span className="d-label">YR</span>
+               </button>
+               <div></div>
+               <button className={`d-btn h-btn ${activeMoveParams?.vz > 0 ? 'active' : ''}`} onPointerDown={(e) => { e.preventDefault(); startMove({vz: verticalSpeed}); }} onPointerUp={stopMove} onPointerLeave={stopMove} onContextMenu={(e) => e.preventDefault()}>
+                 <ArrowDown size={12}/><span className="d-label">DN</span>
+               </button>
+               <div></div>
+             </div>
+          </div>
+       </div>
+
+       {/* BOTTOM COMMAND BAR (Z: 30) */}
+       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 30, display: 'flex', padding: '4px 8px', backgroundColor: 'var(--surface)', borderTop: '1px solid var(--border)', gap: '3px', boxShadow: '0 -2px 6px -1px rgba(0,0,0,0.1)' }}>
+          <button className="command-btn btn-arm" onClick={() => requestCommand(CommandAction.ARM, null, true)}>
+             <Lock size={12}/> ARM
+          </button>
+          <button className="command-btn btn-disarm" onClick={() => requestCommand(CommandAction.DISARM, null, true)}>
+             <Unlock size={12}/> DISARM
+          </button>
+          <button className="command-btn btn-hold" onClick={() => requestCommand(CommandAction.HOVER, null, false)}>
+             <Square size={12}/> HOLD
+          </button>
+          <button className="command-btn btn-takeoff" onClick={() => requestCommand(CommandAction.TAKEOFF, { altitude_m: targetAltitude }, true)}>
+             <ArrowUp size={12}/> TAKEOFF
+          </button>
+          {/* LAND & RTL = SUPER KEYS - always execute immediately */}
+          <button className="command-btn btn-land super-key" onClick={() => requestCommand(CommandAction.LAND)}>
+             <ArrowDown size={14}/> LAND
+          </button>
+          <button className="command-btn btn-rtl super-key" onClick={() => requestCommand(CommandAction.RTL)}>
+             <Navigation size={14}/> RTL
+          </button>
+          <button className="command-btn btn-emergency" onClick={() => requestCommand(CommandAction.EMERGENCY, null, true)}>
+             <AlertTriangle size={12}/> E-STOP
+          </button>
+       </div>
+
+      
+      {/* COMMAND LIFECYCLE OVERLAY (Z: 40) */}
+      <div style={{ position: 'absolute', top: '80px', right: '24px', zIndex: 40, display: 'flex', flexDirection: 'column', gap: '4px', width: '220px', pointerEvents: 'none' }}>
+         {droneIds.map(id => {
+            const cs = drones[id]?.commandState;
+            if (!cs || !cs.action) return null;
+            if (cs.state === 'SUCCESS' && (nowMs - (cs.timestamp || nowMs)) > 5000) return null; // hide success after 5s
+            
+            let color = 'var(--text-muted)';
+            let bg = 'rgba(255,255,255,0.85)';
+            if (cs.state === 'SUCCESS') { color = 'var(--success)'; bg = 'rgba(16, 185, 129, 0.1)'; }
+            if (cs.state === 'FAILED' || cs.state === 'REJECTED' || cs.state === 'TIMEOUT') { color = 'var(--danger)'; bg = 'rgba(239, 68, 68, 0.1)'; }
+            if (cs.state === 'MAVSDK_REQUESTED' || cs.state === 'BACKEND_RECEIVED') { color = 'var(--warning)'; }
+
+            return (
+               <div key={id} style={{ padding: '8px 12px', background: bg, backdropFilter: 'blur(4px)', borderRadius: '6px', fontSize: '11px', border: `1px solid ${color}`, boxShadow: 'var(--shadow-sm)' }}>
+                  <div style={{fontWeight: 'bold', marginBottom: '2px', color: 'var(--text-main)'}}>{id}: <span style={{color}}>{cs.action.toUpperCase()}</span></div>
+                  <div style={{color}}>{cs.state}</div>
+                  {cs.reason && <div style={{color: 'var(--danger)', marginTop: '2px', fontSize: '10px'}}>{cs.reason}</div>}
+               </div>
+            );
+         })}
+      </div>
+
+      {/* CONFIRMATION MODAL */}
+      {showConfirmModal && (
+         <div className="modal-overlay">
+            <div className="modal-content" style={{maxWidth: '400px'}}>
+               <h2 style={{marginTop: 0}}>Confirm Action</h2>
+               <p>{showConfirmModal.message}</p>
+               <div style={{display: 'flex', gap: '4px', marginTop: '24px'}}>
+                  <button className="action-btn" style={{flex: 1}} onClick={() => setShowConfirmModal(null)}>CANCEL</button>
+                  <button className="action-btn btn-emergency" style={{flex: 1}} onClick={() => executeCommand(showConfirmModal.action, showConfirmModal.params)}>CONFIRM</button>
                </div>
             </div>
          </div>
       )}
-      
-      {renderModals()}
+
+      {/* STYLES */}
+      <style dangerouslySetInnerHTML={{__html: `
+        :root {
+           --bg-color: #F6F7F9;
+           --surface: #FFFFFF;
+           --border: #E5E7EB;
+           --text-main: #111827;
+           --text-muted: #6B7280;
+           --primary: #2563EB;
+           --success: #10B981;
+           --warning: #F59E0B;
+           --danger: #EF4444;
+           --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .status-indicator { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-width: max-content; }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; margin-bottom: 2px; }
+        .status-dot.good { background-color: var(--success); box-shadow: 0 0 4px var(--success); }
+        .status-dot.danger { background-color: var(--danger); }
+        .status-text { display: flex; flex-direction: column; }
+        .status-text .label { font-size: 8px; color: var(--text-muted); font-weight: bold; line-height: 1; margin-bottom: 2px; }
+        .status-text .val { font-size: 10px; font-weight: 800; color: var(--text-main); line-height: 1; }
+
+        .telemetry-card {
+           background: var(--surface);
+           border: 1px solid var(--border);
+           border-radius: 6px;
+           padding: 4px 6px;
+           display: flex;
+           flex-direction: column;
+           box-shadow: var(--shadow-sm);
+           min-width: 60px;
+        }
+        .t-header { font-size: 8px; color: var(--text-muted); font-weight: bold; display: flex; align-items: center; gap: 4px; margin-bottom: 2px; }
+        .t-main { font-size: 13px; font-weight: 800; font-family: monospace; line-height: 1; margin-bottom: 2px; }
+        .t-main.good { color: var(--success); }
+        .t-main.danger { color: var(--danger); }
+        .t-sub { font-size: 8px; color: var(--text-muted); line-height: 1; }
+
+        .control-panel {
+           background: rgba(255, 255, 255, 0.9);
+           border: 1px solid var(--border);
+           border-radius: 8px;
+           padding: 6px;
+           box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .panel-header { font-size: 9px; font-weight: bold; color: var(--text-muted); text-transform: uppercase; }
+
+        .d-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+        .d-btn {
+           background: var(--bg-color); border: 1px solid var(--border); border-radius: 6px;
+           display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+           width: 40px; height: 40px; cursor: pointer; color: var(--text-main); user-select: none; touch-action: none;
+           transition: all 0.1s;
+        }
+        .h-btn { width: 36px; height: 36px; }
+        .d-btn .d-label { font-size: 7px; font-weight: bold; }
+        .d-btn:active, .d-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); transform: scale(0.95); }
+        .d-center { display: flex; align-items: center; justify-content: center; color: var(--text-muted); cursor: pointer; }
+
+        .command-btn {
+           flex: 1; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 4px;
+           height: 40px; border-radius: 6px; border: none; font-weight: bold; font-size: 10px;
+           cursor: pointer; transition: transform 0.1s, opacity 0.2s; color: #fff;
+           white-space: nowrap;
+        }
+        .command-btn:active { transform: scale(0.95); }
+        .command-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .btn-arm { background: var(--success); }
+        .btn-disarm { background: #991B1B; }
+        .btn-hold { background: #4B5563; }
+        .btn-takeoff { background: var(--primary); }
+        .btn-land { background: #DC2626; }
+        .btn-rtl { background: #7C3AED; }
+        .btn-emergency { background: #7F1D1D; flex: 1.3; font-size: 9px; }
+        .super-key { flex: 1.3; font-size: 12px; font-weight: 900; box-shadow: 0 0 8px rgba(0,0,0,0.3); border: 2px solid rgba(255,255,255,0.4); }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: var(--surface); padding: 24px; border-radius: 12px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+      `}} />
     </div>
   );
 }

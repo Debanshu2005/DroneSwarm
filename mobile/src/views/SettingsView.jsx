@@ -1,15 +1,21 @@
 import React, { useState } from 'react';
 import { useDroneContext } from '../context/DroneContext';
-import { Settings, RefreshCw } from 'lucide-react';
+import { Settings, RefreshCw, Network, Trash, Play, Activity } from 'lucide-react';
 
 export default function SettingsView() {
-  const { wsUrl, setWsUrl, testMode, setTestMode, indoorMode, setIndoorMode, isConnected } = useDroneContext();
-  const [localWsUrl, setLocalWsUrl] = useState(wsUrl);
+  const { testMode, setTestMode, indoorMode, setIndoorMode, isConnected, wsManager, drones } = useDroneContext();
+  const [newId, setNewId] = useState("drone1");
+  const [newIp, setNewIp] = useState("192.168.1.100");
+  const [newPort, setNewPort] = useState("8080");
 
-  const handleSave = (e) => {
-    e.preventDefault();
-    setWsUrl(localWsUrl);
-    window.location.reload(); // Force WS reconnect
+  const handleConnectAll = () => {
+     if (!wsManager) return;
+     Object.values(wsManager.connections).forEach(c => c.connect());
+  };
+
+  const handleDisconnectAll = () => {
+     if (!wsManager) return;
+     Object.values(wsManager.connections).forEach(c => c.disconnect());
   };
 
   return (
@@ -22,26 +28,64 @@ export default function SettingsView() {
          
          {/* Network Settings */}
          <div className="glass-panel">
-            <h3 style={{marginBottom: '8px'}}><Settings size={18} style={{marginRight: '8px', verticalAlign: 'middle'}}/> Network Configuration</h3>
-            <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Configure the connection to the PhoneOS Relay.</p>
-            
-            <form onSubmit={handleSave} style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
-               <div className="input-group">
-                  <label style={{fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)'}}>Relay WebSocket URL</label>
-                  <input type="text" value={localWsUrl} onChange={e => setLocalWsUrl(e.target.value)} style={{padding: '10px', borderRadius: '6px', border: '1px solid var(--border)', width: '100%'}} />
+            <h3 style={{marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px'}}><Network size={18} /> MULTI-DRONE CONNECTIONS</h3>
+            <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Configure connections to multiple PhoneOS Relays (Swarm).</p>
+
+            <div style={{display: 'flex', gap: '8px', marginBottom: '16px'}}>
+               <button className="primary-btn" style={{flex: 1}} onClick={handleConnectAll}>CONNECT ALL</button>
+               <button className="secondary-btn" style={{flex: 1, borderColor: 'var(--danger)', color: 'var(--danger)'}} onClick={handleDisconnectAll}>DISCONNECT ALL</button>
+            </div>
+
+            <div style={{display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px'}}>
+               <div style={{display: 'flex', gap: '8px'}}>
+                  <input type="text" placeholder="DRONE ID" value={newId} onChange={e => setNewId(e.target.value)} style={{flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid var(--border)'}} />
+                  <input type="text" placeholder="IP ADDRESS" value={newIp} onChange={e => setNewIp(e.target.value)} style={{flex: 2, padding: '10px', borderRadius: '6px', border: '1px solid var(--border)'}} />
+                  <input type="text" placeholder="PORT" value={newPort} onChange={e => setNewPort(e.target.value)} style={{flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid var(--border)'}} />
                </div>
-               <button type="submit" className="primary-btn">Save & Reconnect</button>
-            </form>
+               <button className="primary-btn" onClick={() => { if(newIp && newPort && wsManager) wsManager.addConnection(newIp, parseInt(newPort)); }}>+ ADD DRONE</button>
+            </div>
+
+            <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+               {(!wsManager || Object.keys(wsManager.connections).length === 0) ? (
+                  <div style={{fontSize: '12px', color: 'var(--text-muted)'}}>No active relay connections.</div>
+               ) : (
+                  Object.entries(wsManager.connections).map(([url, conn]) => {
+                     const isOnline = conn.ws?.readyState === WebSocket.OPEN;
+                     const isTesting = conn.connected && !isOnline;
+                     return (
+                        <div key={url} style={{background: 'var(--bg-color)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border)'}}>
+                           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
+                              <div>
+                                 <div style={{fontSize: '14px', fontWeight: 'bold'}}>{url}</div>
+                                 <div style={{fontSize: '11px', color: 'var(--text-muted)'}}>Protocol: WebSocket</div>
+                              </div>
+                              <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end'}}>
+                                 <span style={{fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)'}}>STATUS:</span>
+                                 <span style={{fontSize: '13px', fontWeight: 'bold', color: isOnline ? 'var(--success)' : (isTesting ? 'var(--warning)' : 'var(--danger)')}}>
+                                    ● {isOnline ? 'ONLINE' : (isTesting ? 'CONNECTING...' : 'OFFLINE')}
+                                 </span>
+                              </div>
+                           </div>
+                           <div style={{display: 'flex', gap: '8px'}}>
+                              <button className="action-btn" style={{flex: 1, padding: '6px', fontSize: '11px', background: 'var(--primary)', color: '#fff'}} onClick={() => conn.connect()}><Play size={12}/> CONNECT</button>
+                              <button className="action-btn" style={{flex: 1, padding: '6px', fontSize: '11px', border: '1px solid var(--border)'}} onClick={() => conn.connect()}><Activity size={12}/> TEST</button>
+                              <button className="action-btn" style={{flex: 1, padding: '6px', fontSize: '11px', border: '1px solid var(--danger)', color: 'var(--danger)'}} onClick={() => wsManager.removeConnection(url)}><Trash size={12}/> REMOVE</button>
+                           </div>
+                        </div>
+                     )
+                  })
+               )}
+            </div>
          </div>
 
          {/* Advanced */}
          <div className="glass-panel">
-            <h3 style={{marginBottom: '8px'}}>Advanced & Developer</h3>
+            <h3 style={{marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px'}}><Settings size={18}/> Advanced & Developer</h3>
             <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Simulation and experimental features.</p>
             
             <div style={{background: 'var(--bg-color)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '16px'}}>
                <div style={{fontWeight: 600, marginBottom: '8px'}}>System Mode</div>
-               <div style={{display: 'flex', gap: '16px'}}>
+               <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
                   <label style={{display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}>
                      <input type="radio" name="systemMode" checked={!testMode} onChange={() => setTestMode(false)} />
                      <span>REAL HARDWARE (Production)</span>

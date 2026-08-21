@@ -4,15 +4,21 @@ from typing import Tuple
 
 class FormationType(str, Enum):
     LINE = "LINE"
+    COLUMN = "COLUMN"
     V = "V"
     DIAMOND = "DIAMOND"
     SQUARE = "SQUARE"
     CIRCLE = "CIRCLE"
+    ECHELON_LEFT = "ECHELON_LEFT"
+    ECHELON_RIGHT = "ECHELON_RIGHT"
+    GRID = "GRID"
+    WEDGE = "WEDGE"
 
 class FormationManager:
     """
     Computes spatial offsets for drones in a swarm to maintain a specific formation.
-    The leader is at (0, 0, 0). Offsets are given in relative (x, y, z) meters.
+    The leader (index 0) is at (0, 0, 0). Offsets are given in relative (x, y, z) meters.
+    X is forward, Y is right, Z is down.
     """
     def __init__(self):
         self.spacing: float = 5.0
@@ -23,49 +29,55 @@ class FormationManager:
         self.spacing = spacing
 
     def get_offset(self, my_index: int, total_drones: int) -> Tuple[float, float, float]:
-        """
-        Calculate relative offset for a drone based on its index (0 is leader).
-        X is forward, Y is right, Z is down.
-        """
         if my_index == 0:
             return (0.0, 0.0, 0.0)
 
-        if self.formation_type == FormationType.LINE:
-            # Line abreast (side by side)
-            # 1: right, 2: left, 3: right further, 4: left further
+        t = self.formation_type
+        s = self.spacing
+
+        if t == FormationType.LINE:
             sign = 1 if my_index % 2 != 0 else -1
-            y_offset = sign * math.ceil(my_index / 2.0) * self.spacing
+            y_offset = sign * math.ceil(my_index / 2.0) * s
             return (0.0, y_offset, 0.0)
 
-        elif self.formation_type == FormationType.V:
-            # V formation trailing behind leader
+        elif t == FormationType.COLUMN:
+            return (-my_index * s, 0.0, 0.0)
+
+        elif t in (FormationType.V, FormationType.WEDGE):
             sign = 1 if my_index % 2 != 0 else -1
             tier = math.ceil(my_index / 2.0)
-            x_offset = -tier * self.spacing
-            y_offset = sign * tier * self.spacing
-            return (x_offset, y_offset, 0.0)
+            return (-tier * s, sign * tier * s, 0.0)
 
-        elif self.formation_type == FormationType.DIAMOND:
-            # Simple diamond for 4 drones
-            if my_index == 1: return (-self.spacing, self.spacing, 0.0)
-            if my_index == 2: return (-self.spacing, -self.spacing, 0.0)
-            if my_index == 3: return (-2.0 * self.spacing, 0.0, 0.0)
-            return (0.0, 0.0, 0.0) # Fallback
+        elif t == FormationType.ECHELON_LEFT:
+            return (-my_index * s, -my_index * s, 0.0)
 
-        elif self.formation_type == FormationType.SQUARE:
-            # Simple square for 4 drones
-            if my_index == 1: return (0.0, self.spacing, 0.0)
-            if my_index == 2: return (-self.spacing, 0.0, 0.0)
-            if my_index == 3: return (-self.spacing, self.spacing, 0.0)
-            return (0.0, 0.0, 0.0) # Fallback
+        elif t == FormationType.ECHELON_RIGHT:
+            return (-my_index * s, my_index * s, 0.0)
 
-        elif self.formation_type == FormationType.CIRCLE:
-            # Circle around leader
+        elif t == FormationType.CIRCLE:
             if total_drones > 1:
                 angle_step = (2.0 * math.pi) / (total_drones - 1)
                 angle = (my_index - 1) * angle_step
-                x_offset = self.spacing * math.cos(angle)
-                y_offset = self.spacing * math.sin(angle)
-                return (x_offset, y_offset, 0.0)
+                return (s * math.cos(angle), s * math.sin(angle), 0.0)
+
+        elif t == FormationType.DIAMOND:
+            # Scale dynamically based on tiers, but simplified for now
+            if total_drones == 2:
+                return (-s, 0.0, 0.0) # Fallback to column for 2
+            if my_index == 1: return (-s, s, 0.0)
+            if my_index == 2: return (-s, -s, 0.0)
+            if my_index == 3: return (-2.0 * s, 0.0, 0.0)
+            # Default to trailing V if more than 4
+            sign = 1 if my_index % 2 != 0 else -1
+            tier = math.ceil(my_index / 2.0)
+            return (-tier * s * 2, sign * s, 0.0)
+
+        elif t == FormationType.SQUARE or t == FormationType.GRID:
+            if total_drones == 2:
+                return (0.0, s, 0.0) # Line for 2
+            cols = math.ceil(math.sqrt(total_drones))
+            row = my_index // cols
+            col = my_index % cols
+            return (-row * s, col * s, 0.0)
             
         return (0.0, 0.0, 0.0)

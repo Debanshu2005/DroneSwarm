@@ -33,43 +33,59 @@ class PX4FlightController(IFlightController):
         if not System:
             logger.error("Cannot connect to PX4: MAVSDK is not installed.")
             return False
-            
-        self.client = System()
-        
-        import glob
-        conn_str = self.config.px4_connection_string
-        
-        if conn_str.startswith("serial://auto:"):
-            baud = conn_str.split(":")[-1]
-            device = None
-            while not device:
-                # 1. stable /dev/serial/by-id/ Pixhawk device
-                by_id_paths = glob.glob("/dev/serial/by-id/*")
-                if by_id_paths:
-                    device = by_id_paths[0]
-                # 2. /dev/ttyACM*
-                elif glob.glob("/dev/ttyACM*"):
-                    device = glob.glob("/dev/ttyACM*")[0]
-                # 3. /dev/ttyUSB*
-                elif glob.glob("/dev/ttyUSB*"):
-                    device = glob.glob("/dev/ttyUSB*")[0]
-                
-                if device:
-                    conn_str = f"serial://{device}:{baud}"
-                    logger.info(f"Auto-discovered Pixhawk at {conn_str}")
-                    break
-                else:
-                    logger.info("Waiting for Pixhawk USB device...")
-                    await asyncio.sleep(2.0)
-        
-        logger.info(f"Connecting to PX4 via {conn_str}...")
-        await self.client.connect(system_address=conn_str)
 
-        logger.info("Waiting for drone to connect...")
-        async for state in self.client.core.connection_state():
-            if state.is_connected:
-                logger.info("Connected to PX4 drone!")
-                break
+        import glob
+        import os
+        import signal
+        
+        def kill_orphaned_mavsdk():
+            pass # Removed aggressive pkill to support multi-drone SITL
+
+        while not self._connected:
+            kill_orphaned_mavsdk()
+            self.client = System()
+            conn_str = self.config.px4_connection_string
+
+            if conn_str.startswith("serial://auto:"):
+                baud = conn_str.split(":")[-1]
+                device = None
+                while not device:
+                    by_id_paths = glob.glob("/dev/serial/by-id/*")
+                    if by_id_paths:
+                        device = by_id_paths[0]
+                    elif glob.glob("/dev/ttyACM*"):
+                        device = glob.glob("/dev/ttyACM*")[0]
+                    elif glob.glob("/dev/ttyUSB*"):
+                        device = glob.glob("/dev/ttyUSB*")[0]
+                    
+                    if device:
+                        conn_str = f"serial://{device}:{baud}"
+                        break
+                    else:
+                        logger.info("PX4 DEVICE WAITING")
+                        await asyncio.sleep(2.0)
+
+            logger.info("PX4 CONNECTING")
+            try:
+                # Wrap connect in a timeout to prevent hanging forever
+                await asyncio.wait_for(self.client.connect(system_address=conn_str), timeout=10.0)
+                
+                async def wait_for_connection():
+                    async for state in self.client.core.connection_state():
+                        if state.is_connected:
+                            return True
+                    return False
+                
+                # Wrap connection state in a timeout as well
+                is_connected = await asyncio.wait_for(wait_for_connection(), timeout=15.0)
+                if is_connected:
+                    logger.info("PX4 CONNECTED")
+                    self._connected = True
+                    break
+            except (asyncio.TimeoutError, Exception) as e:
+                logger.warning(f"Connection attempt failed ({type(e).__name__}). Retrying in 5s...")
+                self.client = None
+                await asyncio.sleep(5.0)
                 
         self._connected = True
         
@@ -97,8 +113,9 @@ class PX4FlightController(IFlightController):
         t5 = asyncio.create_task(self._subscribe_gps_info())
         t6 = asyncio.create_task(self._subscribe_armed())
         t7 = asyncio.create_task(self._subscribe_attitude())
-        
-        self._active_tasks.update([t1, t2, t3, t4, t5, t6, t7])
+        t8 = asyncio.create_task(self._subscribe_health())
+
+        self._active_tasks.update([t1, t2, t3, t4, t5, t6, t7, t8])
         
         return True
 
@@ -108,7 +125,7 @@ class PX4FlightController(IFlightController):
             task.cancel()
         self._active_tasks.clear()
         self.client = None
-        logger.info("Disconnected from PX4.")
+        logger.info("PX4 DISCONNECTED")
 
     async def arm(self) -> bool:
         if not self._connected: return False
@@ -151,10 +168,15 @@ class PX4FlightController(IFlightController):
 
     async def rtl(self) -> bool:
         if not self._connected: return False
+        if not self._telemetry.home_valid:
+            logger.warning("PX4 RTL rejected: Home position invalid")
+            return False
         try:
             await self.client.action.return_to_launch()
             return True
         except Exception as e:
+            if "ActionError" in str(type(e)):
+                raise RuntimeError(f"Pixhawk rejected RTL request: {e}")
             logger.exception(f"PX4 RTL failed: {e}")
             return False
 
@@ -165,6 +187,15 @@ class PX4FlightController(IFlightController):
             return True
         except (OSError, RuntimeError) as e:
             logger.exception(f"PX4 Hover failed: {e}")
+            return False
+            
+    async def kill(self) -> bool:
+        if not self._connected: return False
+        try:
+            await self.client.action.kill()
+            return True
+        except Exception as e:
+            logger.exception(f"PX4 Kill failed: {e}")
             return False
 
     async def goto_location(self, lat: float, lon: float, alt: float, yaw: float = 0.0) -> bool:
@@ -298,30 +329,36 @@ class PX4FlightController(IFlightController):
 
     async def _subscribe_position(self):
         try:
+            import math
             async for pos in self.client.telemetry.position():
                 self._mark_telemetry_fresh()
-                self._telemetry.latitude = pos.latitude_deg
-                self._telemetry.longitude = pos.longitude_deg
-                self._telemetry.altitude = pos.absolute_altitude_m
+                self._telemetry.latitude = pos.latitude_deg if not math.isnan(pos.latitude_deg) else None
+                self._telemetry.longitude = pos.longitude_deg if not math.isnan(pos.longitude_deg) else None
+                self._telemetry.altitude = pos.relative_altitude_m if not math.isnan(pos.relative_altitude_m) else None
         except asyncio.CancelledError:
             raise
         except Exception as e:
             logger.error(f"PX4 position subscription failed: {e}")
+            self._connected = False
 
     async def _subscribe_velocity(self):
         try:
+            import math
             async for vel in self.client.telemetry.velocity_ned():
                 self._mark_telemetry_fresh()
-                self._telemetry.velocity_x = vel.north_m_s
-                self._telemetry.velocity_y = vel.east_m_s
-                self._telemetry.velocity_z = vel.down_m_s
+                self._telemetry.velocity_x = vel.north_m_s if not math.isnan(vel.north_m_s) else None
+                self._telemetry.velocity_y = vel.east_m_s if not math.isnan(vel.east_m_s) else None
+                self._telemetry.velocity_z = vel.down_m_s if not math.isnan(vel.down_m_s) else None
                 # calculate ground speed
-                import math
-                self._telemetry.ground_speed = math.sqrt(vel.north_m_s**2 + vel.east_m_s**2)
+                if self._telemetry.velocity_x is not None and self._telemetry.velocity_y is not None:
+                    self._telemetry.ground_speed = math.sqrt(vel.north_m_s**2 + vel.east_m_s**2)
+                else:
+                    self._telemetry.ground_speed = None
         except asyncio.CancelledError:
             raise
         except Exception as e:
             logger.error(f"PX4 velocity_ned subscription failed: {e}")
+            self._connected = False
 
     async def _subscribe_attitude(self):
         try:
@@ -339,17 +376,25 @@ class PX4FlightController(IFlightController):
             raise
         except Exception as e:
             logger.error(f"PX4 attitude_euler subscription failed: {e}")
+            self._connected = False
 
     async def _subscribe_battery(self):
         try:
             async for battery in self.client.telemetry.battery():
                 self._mark_telemetry_fresh()
-                self._telemetry.battery_level = battery.remaining_percent * 100.0
+                val = battery.remaining_percent
+                if val < 0 or math.isnan(val):
+                    self._telemetry.battery_level = None
+                else:
+                    # Some MAVSDK versions report 0-1, others 0-100.
+                    pct = val if val > 1.0 else val * 100.0
+                    self._telemetry.battery_level = max(0.0, min(100.0, pct))
                 self._telemetry.voltage = battery.voltage_v
         except asyncio.CancelledError:
             raise
         except Exception as e:
             logger.error(f"PX4 battery subscription failed: {e}")
+            self._connected = False
 
     async def _subscribe_flight_mode(self):
         try:
@@ -360,6 +405,7 @@ class PX4FlightController(IFlightController):
             raise
         except Exception as e:
             logger.error(f"PX4 flight_mode subscription failed: {e}")
+            self._connected = False
 
     async def _subscribe_gps_info(self):
         try:
@@ -370,6 +416,7 @@ class PX4FlightController(IFlightController):
             raise
         except Exception as e:
             logger.error(f"PX4 gps_info subscription failed: {e}")
+            self._connected = False
 
     async def _subscribe_armed(self):
         try:
@@ -380,6 +427,26 @@ class PX4FlightController(IFlightController):
             raise
         except Exception as e:
             logger.error(f"PX4 armed subscription failed: {e}")
+            self._connected = False
+
+    async def _subscribe_health(self):
+        try:
+            async for health in self.client.telemetry.health():
+                self._mark_telemetry_fresh()
+                self._telemetry.health_all_ok = (
+                    health.is_gyrometer_calibration_ok and
+                    health.is_accelerometer_calibration_ok and
+                    health.is_magnetometer_calibration_ok and
+                    health.is_local_position_ok and
+                    health.is_global_position_ok
+                )
+                self._telemetry.is_armable = health.is_armable
+                self._telemetry.home_valid = health.is_home_position_ok
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"PX4 health subscription failed: {e}")
+            self._connected = False
 
     def _empty_telemetry(self) -> TelemetryData:
         return TelemetryData(

@@ -66,6 +66,9 @@ class TelemetryData(BaseModel):
     pitch: Optional[float] = None
     roll: Optional[float] = None
     yaw: Optional[float] = None
+    health_all_ok: Optional[bool] = None
+    is_armable: Optional[bool] = None
+    home_valid: Optional[bool] = None
     flight_mode: str
     armed_state: Optional[str] = None
     mission_state: str = "IDLE"      # Added for decentralized mission awareness
@@ -89,6 +92,7 @@ class CommandAction(str, Enum):
     LAND = "land"
     RTL = "rtl"
     HOVER = "hover"
+    STOP = "stop"
     MOVE = "move"
     FORMATION_UPDATE = "formation_update"
     SET_MODE = "set_mode"
@@ -98,6 +102,7 @@ class ControlMessage(BaseMessage):
     msg_type: MessageType = MessageType.CONTROL
     action: CommandAction
     params: Optional[Dict[str, Any]] = None
+    cmd_id: Optional[str] = None
 
 class StatusMessage(BaseMessage):
     msg_type: MessageType = MessageType.STATUS

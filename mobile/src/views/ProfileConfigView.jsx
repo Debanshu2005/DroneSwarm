@@ -231,7 +231,7 @@ export default function ProfileConfigView({ profileKey, setView }) {
                         <div style={{ textAlign: 'center', padding: '20px' }}>
                            <h3 style={{ marginBottom: '8px' }}>Profile Already Applied</h3>
                            <p className="text-muted">No parameter changes are required.</p>
-                           <button className="btn btn-primary" style={{ marginTop: '16px' }} onClick={() => setView('DRONE_CONTROL')}>PROCEED TO CONTROL</button>
+                           <button className="btn btn-primary" style={{ marginTop: '16px' }} onClick={() => setView('FLIGHT')}>PROCEED TO CONTROL</button>
                         </div>
                      ) : (
                         <>
@@ -255,7 +255,7 @@ export default function ProfileConfigView({ profileKey, setView }) {
                               </tbody>
                            </table>
                            <div style={{ display: 'flex', gap: '12px' }}>
-                              <button className="btn btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setView('DRONE_CONTROL')}>CANCEL</button>
+                              <button className="btn btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setView('FLIGHT')}>CANCEL</button>
                               <button className="btn btn-primary" style={{ flex: 1, padding: '12px' }} onClick={handleApply}>APPLY PROFILE</button>
                            </div>
                         </>
@@ -298,7 +298,7 @@ export default function ProfileConfigView({ profileKey, setView }) {
                <CheckCircle2 size={48} color="#10b981" style={{ marginBottom: '16px' }} />
                <h3 style={{ color: '#10b981' }}>{profile.name.toUpperCase()} READY</h3>
                <p className="text-muted" style={{ marginBottom: '24px' }}>Successfully applied parameters and verified vehicle health.</p>
-               <button className="btn btn-primary" style={{ padding: '12px 24px' }} onClick={() => setView('DRONE_CONTROL')}>PROCEED TO CONTROL</button>
+               <button className="btn btn-primary" style={{ padding: '12px 24px' }} onClick={() => setView('FLIGHT')}>PROCEED TO CONTROL</button>
             </div>
          )}
 
@@ -322,7 +322,7 @@ export default function ProfileConfigView({ profileKey, setView }) {
                    </div>
                )}
                
-               <button className="btn btn-secondary" style={{ padding: '12px 24px' }} onClick={() => setView('DRONE_CONTROL')}>RETURN</button>
+               <button className="btn btn-secondary" style={{ padding: '12px 24px' }} onClick={() => setView('FLIGHT')}>RETURN</button>
             </div>
          )}
       </div>

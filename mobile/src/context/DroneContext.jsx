@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { WebSocketManager } from '../networking/WebSocketManager';
-import { MessageType, CommandAction, ControlMessage, EmergencyMessage, HeartbeatMessage, TestInjectMessage } from '../protocol/messages';
+import { MultiWebSocketManager } from '../networking/MultiWebSocketManager';
+import { MessageType, CommandAction, ControlMessage, EmergencyMessage, HeartbeatMessage, TestInjectMessage, ParamRequestMessage } from '../protocol/messages';
 import { evaluateDroneHealth, evaluateTelemetryFreshness } from '../utils/DroneHealth';
 
 const DroneContext = createContext();
@@ -9,6 +9,25 @@ export const useDroneContext = () => useContext(DroneContext);
 
 const GS_ID = "gs_mobile_01";
 
+const safeStorageGet = (key, fallback) => {
+  try {
+    const val = localStorage.getItem(key);
+    return val !== null ? val : fallback;
+  } catch (e) {
+    console.warn(`Storage access failed for ${key}`, e);
+    return fallback;
+  }
+};
+
+const safeStorageSet = (key, value) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn(`Storage set failed for ${key}`, e);
+  }
+};
+
+
 export const DroneProvider = ({ children }) => {
   const [wsManager, setWsManager] = useState(null);
   const [isConnected, setIsConnected] = useState("DISCONNECTED");
@@ -16,9 +35,9 @@ export const DroneProvider = ({ children }) => {
   const [drones, setDrones] = useState({});
   const [selectedDrones, setSelectedDrones] = useState(new Set());
   
-  const [wsUrl, setWsUrl] = useState(() => localStorage.getItem("PhoneOS_WsUrl") || "ws://swarmos-pi.local:8080");
-  const [testMode, setTestMode] = useState(() => localStorage.getItem("PhoneOS_TestMode") === "true");
-  const [indoorMode, setIndoorMode] = useState(() => localStorage.getItem("PhoneOS_IndoorMode") === "true");
+  const [wsUrl, setWsUrl] = useState(() => safeStorageGet("PhoneOS_WsUrl", "ws://swarmos-pi.local:8080"));
+  const [testMode, setTestMode] = useState(() => safeStorageGet("PhoneOS_TestMode", "false") === "true");
+  const [indoorMode, setIndoorMode] = useState(() => safeStorageGet("PhoneOS_IndoorMode", "false") === "true");
   const [eventLog, setEventLog] = useState([]);
   
   // Advanced Test Overrides
@@ -69,9 +88,9 @@ export const DroneProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    localStorage.setItem("PhoneOS_WsUrl", wsUrl);
-    localStorage.setItem("PhoneOS_TestMode", testMode);
-    localStorage.setItem("PhoneOS_IndoorMode", indoorMode);
+    safeStorageSet("PhoneOS_WsUrl", wsUrl);
+    safeStorageSet("PhoneOS_TestMode", testMode);
+    safeStorageSet("PhoneOS_IndoorMode", indoorMode);
   }, [wsUrl, testMode, indoorMode]);
   
   // Drone cleanup task & demo mode
@@ -132,13 +151,24 @@ export const DroneProvider = ({ children }) => {
 
   // Network Initialization
   useEffect(() => {
-    const manager = new WebSocketManager(wsUrl);
+    const manager = new MultiWebSocketManager();
+
+    // Load any previously saved connections
+    manager.loadSavedConnections();
     
-    manager.onConnectionChange = (status) => {
-      setIsConnected(status);
-      addLog(`Relay connection: ${status}`);
+    // Add default configured connection for backward compatibility or dev (if no others exist)
+    if (wsUrl && Object.keys(manager.connections).length === 0) {
+      const [ip, portStr] = wsUrl.replace('ws://', '').split(':');
+      manager.addConnection(ip, portStr ? parseInt(portStr) : 8080);
+    }
+
+    manager.onConnectionChange = (url, status) => {
+      // Could track individual statuses, for now just global "CONNECTED" if any are connected
+      const anyConnected = Object.values(manager.connections).some(ws => ws.connected);
+      setIsConnected(anyConnected ? "CONNECTED" : "DISCONNECTED");
+      addLog(`Connection ${url}: ${status}`);
     };
-    
+
     manager.subscribe(MessageType.HEARTBEAT, (msg) => {
       if (msg.sender_id && msg.sender_id.startsWith("drone")) {
         setDrones(prev => {
@@ -317,16 +347,15 @@ export const DroneProvider = ({ children }) => {
        });
     });
 
-    manager.connect();
     setWsManager(manager);
 
     const hbInterval = setInterval(() => {
-      if (manager.connected) manager.send(new HeartbeatMessage(GS_ID, null, "active"));
+      manager.send(new HeartbeatMessage(GS_ID, null, "active"));
     }, 1000);
 
     return () => {
       clearInterval(hbInterval);
-      manager.disconnect();
+      manager.disconnectAll();
     };
   }, [wsUrl]);
 
@@ -368,18 +397,16 @@ export const DroneProvider = ({ children }) => {
     const targets = targetId ? [targetId] : Array.from(selectedDrones);
     if (targets.length === 0) return;
     
-    import('../protocol/messages').then(({ ParamRequestMessage }) => {
-      targets.forEach(id => {
-         wsManager.send(new ParamRequestMessage(GS_ID, id, action, param_name, param_value, param_type));
-         
-         setDrones(prev => ({
-            ...prev,
-            [id]: {
-               ...(prev[id] || {}),
-               paramSyncState: { pending: true, lastSync: prev[id]?.paramSyncState?.lastSync || 0 }
-            }
-         }));
-      });
+    targets.forEach(id => {
+       wsManager.send(new ParamRequestMessage(GS_ID, id, action, param_name, param_value, param_type));
+       
+       setDrones(prev => ({
+          ...prev,
+          [id]: {
+             ...(prev[id] || {}),
+             paramSyncState: { pending: true, lastSync: prev[id]?.paramSyncState?.lastSync || 0 }
+          }
+       }));
     });
   };
 

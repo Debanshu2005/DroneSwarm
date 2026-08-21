@@ -146,6 +146,8 @@ class DroneOSApp:
             self.swarm_manager,
             self.mission_manager
         )
+        # Inject SwarmMembership into FlightManager for formation logic
+        self.flight_manager.set_swarm_manager(self.swarm_manager)
         
         # Register commands
         self.command_handler.register_handler(CommandAction.ARM, self.flight_manager.arm)
@@ -154,9 +156,11 @@ class DroneOSApp:
         self.command_handler.register_handler(CommandAction.LAND, self.flight_manager.land)
         self.command_handler.register_handler(CommandAction.RTL, self.flight_manager.rtl)
         self.command_handler.register_handler(CommandAction.HOVER, self.flight_manager.hover)
+        self.command_handler.register_handler(CommandAction.STOP, self.flight_manager.stop)
         self.command_handler.register_handler(CommandAction.MOVE, self.flight_manager.move)
         self.command_handler.register_handler(CommandAction.SET_MODE, self.flight_manager.set_mode)
         self.command_handler.register_handler(CommandAction.GOTO, self.flight_manager.goto)
+        self.command_handler.register_handler(CommandAction.FORMATION_UPDATE, self.flight_manager.formation_update)
         
         # Register safety callbacks
         self.health_monitor.on_connection_lost = self.safety_module.trigger_connection_lost_failsafe
@@ -237,8 +241,8 @@ class DroneOSApp:
                 if hasattr(self.flight_controller, '_injections'):
                     self.flight_controller._injections.clear()
                 # Also restore any manually dropped peers
-                self.swarm_manager.heartbeat_mgr.active_peers = {
-                   k: v for k, v in self.swarm_manager.heartbeat_mgr.active_peers.items()
+                self.swarm_manager.heartbeat_mgr.registry.peers = {
+                   k: v for k, v in self.swarm_manager.heartbeat_mgr.registry.peers.items()
                 } # In a real scenario we'd remove them from a dropped list
             elif hasattr(self.flight_controller, 'set_test_injection'):
                 self.flight_controller.set_test_injection(injection_type, active)
@@ -249,7 +253,7 @@ class DroneOSApp:
                 peer_id = injection_type.replace("_LOST", "")
                 if peer_id.lower() != self.node_id.lower():
                     # manually remove them from tracking to test swarm resilience
-                    self.swarm_manager.heartbeat_mgr.active_peers.pop(peer_id, None)
+                    self.swarm_manager.heartbeat_mgr.registry.peers.pop(peer_id, None)
 
         elif msg.msg_type == MessageType.PARAM_REQUEST:
             target = getattr(msg, 'target_id', None)

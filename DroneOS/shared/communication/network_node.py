@@ -115,7 +115,8 @@ class UdpNetworkAdapter(INetworkAdapter):
                 self.transport.sendto(data, addr)
                 logger.debug(f"Packet sent (Configured Unicast) to {addr[0]}:{addr[1]}")
             else:
-                addr = (self.broadcast_address, self.port)
+                bcast_port = self.configured_peer_port if self.configured_peer_port else self.port
+                addr = (self.broadcast_address, bcast_port)
                 self.transport.sendto(data, addr)
                 logger.debug(f"Packet sent (Discovery Broadcast) to {addr[0]}:{addr[1]}")
                 
@@ -126,6 +127,16 @@ class UdpNetworkAdapter(INetworkAdapter):
         self.callbacks.append(callback)
 
     async def _handle_incoming(self, data: bytes, addr: tuple) -> None:
+        if not data: return
+        # MAVLink 1 is 0xFE, MAVLink 2 is 0xFD
+        if data[0] in (0xFE, 0xFD):
+            # Silently ignore binary MAVLink packets
+            return
+        # Basic check for JSON
+        if data[0] not in (ord('{'), ord('[')):
+            logger.warning(f"Packet rejected: Not a valid JSON payload from {addr}")
+            return
+            
         try:
             message = self.serializer.deserialize(data)
         except ValidationError as e:

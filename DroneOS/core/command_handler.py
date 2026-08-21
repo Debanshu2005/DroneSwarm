@@ -20,12 +20,15 @@ class CommandHandler:
         self.health_monitor = health_monitor
         self.battery_monitor = battery_monitor
         self.error_learning = error_learning
+        self._processed_cmds = []
 
     def _send_lifecycle(self, target_id: str, action: CommandAction, stage: str, reason: str = None, cmd_id: str = None):
+        import time
         if self.network:
             msg = CommandLifecycleMessage(
                 sender_id=self.node_id,
                 target_id=target_id,
+                timestamp=time.time(),
                 action=action,
                 stage=stage,
                 reason=reason,
@@ -53,8 +56,6 @@ class CommandHandler:
         if self.health_monitor.last_heartbeat_time is not None:
             if (time.time() - self.health_monitor.last_heartbeat_time) > self.health_monitor.timeout_seconds:
                 is_heartbeat_stale = True
-        else:
-            is_heartbeat_stale = True
 
         is_emergency = self.safety_module.is_failsafe_active
         is_battery_critical = False # Assumed from the failsafe state or we can read telemetry voltage. Actually failsafe covers it.
@@ -63,6 +64,7 @@ class CommandHandler:
             if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
             if is_telemetry_stale: return "Command rejected: Telemetry stale"
             if is_emergency: return "Command rejected: Emergency stop active"
+            if getattr(telemetry, 'is_armable', None) is False: return "Command rejected: PX4 Health Not Ready (is_armable=False)"
             
         elif action == CommandAction.TAKEOFF:
             if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
@@ -77,7 +79,9 @@ class CommandHandler:
         elif action == CommandAction.RTL:
             if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
             if is_emergency: return "Command rejected: Emergency stop active"
-            if not getattr(telemetry, 'gps_valid', False): return "Command rejected: GPS unavailable (RTL requires global position)"
+            if not getattr(telemetry, 'home_valid', False): return "Command rejected: Home position unavailable (RTL requires home)"
+            if getattr(telemetry, 'flight_mode', '').upper() == 'MANUAL' and not getattr(telemetry, 'gps_valid', False):
+                return "Command rejected: GPS unavailable (RTL requires global position)"
 
         elif action == CommandAction.GOTO:
             if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
@@ -98,6 +102,14 @@ class CommandHandler:
         self._handlers[action] = handler
 
     async def handle_command(self, message: ControlMessage) -> bool:
+        if message.cmd_id:
+            if message.cmd_id in self._processed_cmds:
+                logger.debug(f"Ignoring duplicate command {message.cmd_id}")
+                return True
+            self._processed_cmds.append(message.cmd_id)
+            if len(self._processed_cmds) > 100:
+                self._processed_cmds.pop(0)
+
         if message.action in self._handlers:
             logger.info(f"COMMAND_RX sender={message.sender_id} target={message.target_id} action={message.action.value}")
             self._send_lifecycle(message.sender_id, message.action, "BACKEND_RECEIVED")
@@ -105,7 +117,7 @@ class CommandHandler:
             rejection_reason = await self._validate_safety_gate(message.action)
             if rejection_reason:
                 logger.warning(rejection_reason)
-                self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=rejection_reason)
+                self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=rejection_reason, cmd_id=message.cmd_id)
                 return False
 
             params = message.params or {}
@@ -117,16 +129,20 @@ class CommandHandler:
                     error_text = f"{message.action.name} rejected by FlightManager."
                     if message.action == CommandAction.ARM:
                         error_text = "ARM rejected by Pixhawk; check Pixhawk pre-arm checks."
-                    self._send_lifecycle(message.sender_id, message.action, "FAILED", reason=error_text)
+                    self._send_lifecycle(message.sender_id, message.action, "FAILED", reason=error_text, cmd_id=message.cmd_id)
                     return False
                 
-                self._send_lifecycle(message.sender_id, message.action, "SUCCESS")
+                self._send_lifecycle(message.sender_id, message.action, "SUCCESS", cmd_id=message.cmd_id)
                 return True
             except Exception as e:
-                logger.exception(f"Exception while executing {message.action.value}: {e}")
-                self._send_lifecycle(message.sender_id, message.action, "FAILED", reason=str(e))
+                error_msg = str(e)
+                # Extract MAVSDK ActionError reason if present
+                if "ActionError" in str(type(e)):
+                    error_msg = str(e).split(':', 1)[-1].strip()
+                logger.exception(f"Exception while executing {message.action.value}: {error_msg}")
+                self._send_lifecycle(message.sender_id, message.action, "FAILED", reason=error_msg, cmd_id=message.cmd_id)
                 if hasattr(self, 'error_learning') and self.error_learning:
-                    self.error_learning.report_error(self.node_id, "COMMAND_HANDLER", str(e))
+                    self.error_learning.report_error(self.node_id, "COMMAND_HANDLER", error_msg)
                 return False
         else:
             logger.warning(f"No handler registered for command: {message.action.value}")

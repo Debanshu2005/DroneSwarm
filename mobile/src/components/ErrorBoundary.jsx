@@ -17,6 +17,7 @@ export class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      if (this.props.fallback) return this.props.fallback;
       return (
         <div className="view-container fade-in" style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
            <AlertTriangle size={64} style={{color: 'var(--danger)', marginBottom: '20px'}}/>

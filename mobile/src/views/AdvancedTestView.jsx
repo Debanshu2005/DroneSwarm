@@ -31,7 +31,7 @@ export default function AdvancedTestView() {
 
   const handleCommand = (action) => {
     if (!selectedDroneId) return;
-    sendCommand(action, null, selectedDroneId);
+    sendCommand(action, null, [selectedDroneId]);
   };
   
   const handleParamAction = (action) => {

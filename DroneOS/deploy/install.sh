@@ -7,7 +7,7 @@ echo "==============================================="
 
 # 1. Update and install base dependencies
 echo "Updating APT packages..."
-sudo apt-update
+sudo apt-get update
 sudo apt-get install -y python3-pip python3-venv git htop
 
 # 2. Prepare Directory structure

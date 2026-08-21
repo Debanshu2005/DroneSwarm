@@ -44,6 +44,8 @@ export const CommandAction = {
     FORMATION_UPDATE: "formation_update",
     SET_MODE: "set_mode",
     GOTO: "goto",
+    STOP: "stop",
+    EMERGENCY: "emergency",
 };
 
 export class CommandLifecycleMessage {

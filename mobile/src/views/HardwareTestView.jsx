@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useDroneContext } from '../context/DroneContext';
+import { CommandAction } from '../protocol/messages';
 import { Play, CheckCircle2, XCircle, AlertCircle, RefreshCw, ChevronRight } from 'lucide-react';
 import { getParamMetadata, validateParameter } from '../utils/Px4Parameters';
 
@@ -86,7 +87,7 @@ export default function HardwareTestView({ setView }) {
         }, 500);
         break;
       case 9:
-        sendCommand('MODE', { mode: 'HOLD' });
+        sendCommand(CommandAction.SET_MODE, { mode: 'HOLD' });
         setTimeout(() => {
            const currentTel = dronesRef.current[targetId]?.telemetry;
            updateResult(9, currentTel?.flight_mode === 'HOLD' ? 'PASS' : 'FAIL', `Requested HOLD, got ${currentTel?.flight_mode}`);
