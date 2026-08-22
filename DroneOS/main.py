@@ -136,6 +136,7 @@ class DroneOSApp:
             self.flight_controller, 
             self.flight_manager, 
             self.mission_manager,
+            health_monitor=self.health_monitor,
             telemetry_interval=self.network_cfg.telemetry_interval,
             heartbeat_interval=self.network_cfg.heartbeat_interval
         )

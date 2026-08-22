@@ -24,9 +24,11 @@ def setup_logger(name: str, log_file: str = None, level: int = logging.INFO) -> 
 
     # File handler
     if log_file:
+        from logging.handlers import RotatingFileHandler
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        fh = logging.FileHandler(log_path)
+        # Max size 5MB, keep 3 backups
+        fh = RotatingFileHandler(log_path, maxBytes=5*1024*1024, backupCount=3)
         fh.setFormatter(formatter)
         logger.addHandler(fh)
 

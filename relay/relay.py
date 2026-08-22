@@ -77,6 +77,18 @@ class UdpWebsocketRelay:
 
     async def ws_handler(self, websocket):
         logger.info(f"New WebSocket client connected from {websocket.remote_address}")
+        
+        # Prevent duplicate WS connections from the same IP
+        ip = websocket.remote_address[0]
+        to_remove = [ws for ws in self.active_websockets if ws.remote_address[0] == ip]
+        for ws in to_remove:
+            logger.info(f"Closing duplicate WebSocket from {ip}")
+            try:
+                await ws.close()
+            except:
+                pass
+            self.active_websockets.discard(ws)
+            
         self.active_websockets.add(websocket)
         try:
             async for message in websocket:

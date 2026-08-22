@@ -30,15 +30,29 @@ class SafetyModule:
         if self.mission_manager:
             self.mission_manager.abort_mission()
 
+
+    def reset_failsafe(self) -> None:
+        self.is_failsafe_active = False
+        logger.info("Failsafe/Emergency stop reset manually.")
+
     async def trigger_connection_lost_failsafe(self) -> None:
         self.is_failsafe_active = True
+        telemetry = await self.fc.get_telemetry()
+        
+        if telemetry.armed_state != "ARMED":
+            logger.info("Connection lost, but drone is not armed. Waiting for reconnection.")
+            return
+
         is_indoor = self.config and getattr(self.config, "profile", "") == "indoor"
         if is_indoor:
-            logger.warning("Connection lost failsafe triggered! Indoor mode active -> Landing.")
+            logger.warning("Connection lost failsafe! Indoor mode active -> Landing.")
             await self.fc.land()
-        else:
-            logger.warning("Connection lost failsafe triggered! Returning to launch...")
+        elif telemetry.home_valid:
+            logger.warning("Connection lost failsafe! Returning to launch...")
             await self.fc.rtl()
+        else:
+            logger.warning("Connection lost failsafe! Home invalid -> Landing.")
+            await self.fc.land()
 
     async def trigger_low_battery_failsafe(self) -> None:
         self.is_failsafe_active = True

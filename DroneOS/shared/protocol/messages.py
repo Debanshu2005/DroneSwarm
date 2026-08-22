@@ -67,8 +67,15 @@ class TelemetryData(BaseModel):
     roll: Optional[float] = None
     yaw: Optional[float] = None
     health_all_ok: Optional[bool] = None
+    gyro_calibrated: Optional[bool] = None
+    accel_calibrated: Optional[bool] = None
+    mag_calibrated: Optional[bool] = None
+    local_pos_valid: Optional[bool] = None
+    global_pos_valid: Optional[bool] = None
     is_armable: Optional[bool] = None
     home_valid: Optional[bool] = None
+    status_text: Optional[str] = None
+    heartbeat_age: Optional[float] = None
     flight_mode: str
     armed_state: Optional[str] = None
     mission_state: str = "IDLE"      # Added for decentralized mission awareness

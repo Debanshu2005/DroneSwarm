@@ -43,7 +43,8 @@ class PX4FlightController(IFlightController):
 
         while not self._connected:
             kill_orphaned_mavsdk()
-            self.client = System()
+            if self.client is None:
+                self.client = System()
             conn_str = self.config.px4_connection_string
 
             if conn_str.startswith("serial://auto:"):
@@ -84,7 +85,6 @@ class PX4FlightController(IFlightController):
                     break
             except (asyncio.TimeoutError, Exception) as e:
                 logger.warning(f"Connection attempt failed ({type(e).__name__}). Retrying in 5s...")
-                self.client = None
                 await asyncio.sleep(5.0)
                 
         self._connected = True
@@ -112,10 +112,10 @@ class PX4FlightController(IFlightController):
         t4 = asyncio.create_task(self._subscribe_flight_mode())
         t5 = asyncio.create_task(self._subscribe_gps_info())
         t6 = asyncio.create_task(self._subscribe_armed())
-        t7 = asyncio.create_task(self._subscribe_attitude())
         t8 = asyncio.create_task(self._subscribe_health())
+        t9 = asyncio.create_task(self._subscribe_status_text())
 
-        self._active_tasks.update([t1, t2, t3, t4, t5, t6, t7, t8])
+        self._active_tasks.update([t1, t2, t3, t4, t5, t6, t7, t8, t9])
         
         return True
 
@@ -440,12 +440,29 @@ class PX4FlightController(IFlightController):
                     health.is_local_position_ok and
                     health.is_global_position_ok
                 )
+                self._telemetry.gyro_calibrated = health.is_gyrometer_calibration_ok
+                self._telemetry.accel_calibrated = health.is_accelerometer_calibration_ok
+                self._telemetry.mag_calibrated = health.is_magnetometer_calibration_ok
+                self._telemetry.local_pos_valid = health.is_local_position_ok
+                self._telemetry.global_pos_valid = health.is_global_position_ok
                 self._telemetry.is_armable = health.is_armable
                 self._telemetry.home_valid = health.is_home_position_ok
         except asyncio.CancelledError:
             raise
         except Exception as e:
             logger.error(f"PX4 health subscription failed: {e}")
+            self._connected = False
+
+    async def _subscribe_status_text(self):
+        try:
+            async for status in self.client.telemetry.status_text():
+                self._mark_telemetry_fresh()
+                if status.type.name in ["WARNING", "ERROR", "CRITICAL", "EMERGENCY", "INFO"]:
+                    self._telemetry.status_text = status.text
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"PX4 status_text subscription failed: {e}")
             self._connected = False
 
     def _empty_telemetry(self) -> TelemetryData:

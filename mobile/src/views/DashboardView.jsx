@@ -37,20 +37,20 @@ export default function DashboardView() {
      const isHeartbeatHealthy = drone && (nowMs - drone.lastSeen) < 2000;
      const isTelemetryHealthy = isHeartbeatHealthy && isConnected === "CONNECTED";
      const isPx4Connected = tel.flight_mode && tel.flight_mode !== "disconnected" && tel.flight_mode !== "UNKNOWN";
-     const isBatteryAcceptable = (tel.battery_level || 0) >= 20;
-     const isGpsValid = tel.gps_valid === true;
      const isFailsafe = drone?.status === 'failsafe';
-     const isHealthy = tel.system_health === "OK" || tel.system_health == null;
+     const isTelemetryStale = tel.heartbeat_age != null && tel.heartbeat_age > 2.0;
      
      let reason = "OK";
      let armPass = true;
      
      if (!isTelemetryHealthy) { armPass = false; reason = "LINK DOWN"; }
      else if (!isPx4Connected) { armPass = false; reason = "PX4 DISCONNECTED"; }
+     else if (isTelemetryStale) { armPass = false; reason = "TELEMETRY STALE"; }
      else if (isFailsafe) { armPass = false; reason = "FAILSAFE ACTIVE"; }
-     else if (!isHealthy) { armPass = false; reason = "PX4 HEALTH NOT READY"; }
-     else if (!isBatteryAcceptable) { armPass = false; reason = "BATTERY LOW"; }
-     else if (!indoorMode && !isGpsValid) { armPass = false; reason = "NO GPS FIX (OUTDOOR MODE)"; }
+     else if (tel.is_armable === false || tel.is_armable == null) {
+        armPass = false;
+        reason = tel.status_text || "PX4 HEALTH NOT READY";
+     }
      
      const takeoffPass = armPass && tel.armed_state === "ARMED";
      const takeoffReason = !armPass ? reason : (tel.armed_state !== "ARMED" ? "NOT ARMED" : "OK");

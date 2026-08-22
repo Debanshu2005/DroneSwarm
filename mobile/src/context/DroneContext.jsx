@@ -83,8 +83,8 @@ export const DroneProvider = ({ children }) => {
     return () => clearInterval(timer);
   }, []);
 
-  const addLog = (msg) => {
-    setEventLog(prev => [{ time: Date.now(), msg }, ...prev].slice(0, 100));
+  const addLog = (msg, severity = 'INFO', source = 'PHONEOS', droneId = null, event = null) => {
+    setEventLog(prev => [{ time: Date.now(), msg, severity, source, droneId, event }, ...prev].slice(0, 100));
   };
 
   useEffect(() => {
@@ -135,12 +135,12 @@ export const DroneProvider = ({ children }) => {
           let newStatus = drone.status;
           if (freshness === 'OFFLINE') newStatus = 'OFFLINE';
           else if (freshness === 'STALE') newStatus = 'DEGRADED';
-          else if (newStatus === 'OFFLINE' || newStatus === 'DEGRADED') newStatus = 'CONNECTED';
+          else if (drone.status === 'active' || drone.status === 'standby' || drone.status === 'OFFLINE' || drone.status === 'DEGRADED') newStatus = 'CONNECTED';
           
           if (newStatus !== drone.status || health !== drone.healthScore || freshness !== drone.freshness) {
             newDrones[id] = { ...drone, status: newStatus, healthScore: health, freshness };
             changed = true;
-            if (newStatus === 'OFFLINE' && drone.status !== 'OFFLINE') addLog(`${id} went OFFLINE (timeout)`);
+            if (newStatus === 'OFFLINE' && drone.status !== 'OFFLINE') addLog(`${id} went OFFLINE (timeout)`, 'WARNING', 'PHONEOS', id, 'CONNECTION_LOST');
           }
         }
         return changed ? newDrones : prev;
@@ -173,7 +173,7 @@ export const DroneProvider = ({ children }) => {
       if (msg.sender_id && msg.sender_id.startsWith("drone")) {
         setDrones(prev => {
           const isNew = !prev[msg.sender_id];
-          if (isNew) addLog(`${msg.sender_id} CONNECTED`);
+          if (isNew) addLog(`${msg.sender_id} CONNECTED`, 'INFO', 'PHONEOS', msg.sender_id, 'DRONE_CONNECTED');
           const now = Date.now();
           return {
             ...prev,
@@ -228,7 +228,7 @@ export const DroneProvider = ({ children }) => {
     });
 
     manager.subscribe(MessageType.STATUS, (msg) => {
-       addLog(`ACK from ${msg.sender_id}: ${msg.status_text}`);
+       addLog(`ACK from ${msg.sender_id}: ${msg.status_text}`, 'INFO', 'PX4', msg.sender_id, 'STATUS_TEXT');
        setDrones(prev => {
           const drone = prev[msg.sender_id];
           if (!drone) return prev;
@@ -260,11 +260,14 @@ export const DroneProvider = ({ children }) => {
              }
           };
        });
-       addLog(`[${msg.sender_id}] COMMAND ${msg.action.toUpperCase()}: ${msg.stage}${msg.reason ? ` (${msg.reason})` : ''}`);
+        
+        let severity = 'INFO';
+        if (msg.stage === 'REJECTED' || msg.stage === 'FAILED' || msg.stage === 'TIMEOUT') severity = 'ERROR';
+        addLog(`COMMAND ${msg.action.toUpperCase()}: ${msg.stage}${msg.reason ? ` (${msg.reason})` : ''}`, severity, 'DRONEOS', msg.sender_id, `COMMAND_${msg.stage}`);
     });
 
     manager.subscribe(MessageType.ERROR, (msg) => {
-       addLog(`COMMAND FAILED\nSource: MAVSDK\nOperation: ${msg.error_msg}\nTrace: PHONEOS -> WEBSOCKET -> RELAY -> UDP -> DRONEOS -> MAVSDK -> PX4`);
+       addLog(`COMMAND FAILED: ${msg.error_msg}`, 'ERROR', 'MAVSDK', msg.sender_id, 'ERROR');
        setDrones(prev => {
           const drone = prev[msg.sender_id];
           if (!drone) return prev;
@@ -370,6 +373,21 @@ export const DroneProvider = ({ children }) => {
        const currentState = drones[id]?.commandState;
        if (currentState && currentState.state === 'SENDING' && currentState.action === action && action !== CommandAction.MOVE) {
            console.warn(`Command ${action} is already pending for ${id}. Deduplicating.`);
+           return;
+       }
+
+       // Strict Command Gating
+       const tel = drones[id]?.telemetry || {};
+       if (action === CommandAction.ARM && tel.is_armable === false) {
+           addLog(`ARM rejected by UI: is_armable is false`, 'WARNING', 'PHONEOS', id, 'ARM_BLOCKED');
+           return;
+       }
+       if (action === CommandAction.TAKEOFF && tel.armed_state !== 'ARMED') {
+           addLog(`TAKEOFF rejected by UI: not armed`, 'WARNING', 'PHONEOS', id, 'TAKEOFF_BLOCKED');
+           return;
+       }
+       if (action === CommandAction.RTL && tel.home_valid === false) {
+           addLog(`RTL rejected by UI: home invalid`, 'WARNING', 'PHONEOS', id, 'RTL_BLOCKED');
            return;
        }
 

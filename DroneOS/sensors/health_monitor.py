@@ -15,7 +15,9 @@ class HealthMonitor:
         self.last_heartbeat_time: float | None = None
         
         self.on_connection_lost: Callable[[], Coroutine[Any, Any, None]] = None
+        self.on_connection_restored: Callable[[], Coroutine[Any, Any, None]] = None
         self._running = False
+        self._connection_lost = False
         
     def record_heartbeat(self) -> None:
         self.last_heartbeat_time = time.time()
@@ -23,6 +25,7 @@ class HealthMonitor:
     async def start(self) -> None:
         self._running = True
         self.last_heartbeat_time = None
+        self._connection_lost = False
         logger.info("Health Monitor started.")
         
         while self._running:
@@ -30,11 +33,17 @@ class HealthMonitor:
                 if self.last_heartbeat_time is not None:
                     time_since_last = time.time() - self.last_heartbeat_time
                     if time_since_last > self.timeout_seconds:
-                        logger.warning(f"CONNECTION LOST! No heartbeat for {time_since_last:.1f}s")
-                        if self.on_connection_lost:
-                            await self.on_connection_lost()
-                            # Prevent triggering repeatedly immediately
-                            self.last_heartbeat_time = None
+                        if not self._connection_lost:
+                            self._connection_lost = True
+                            logger.warning(f"CONNECTION LOST! No heartbeat for {time_since_last:.1f}s")
+                            if self.on_connection_lost:
+                                await self.on_connection_lost()
+                    else:
+                        if self._connection_lost:
+                            self._connection_lost = False
+                            logger.info("Connection restored!")
+                            if self.on_connection_restored:
+                                await self.on_connection_restored()
             except asyncio.CancelledError:
                 logger.info("Health Monitor loop cancelled.")
                 break

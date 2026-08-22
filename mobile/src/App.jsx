@@ -134,23 +134,13 @@ function App() {
       ]
     },
     {
-      title: "CONFIGURATION",
-      items: [
-        { id: 'PARAMETERS', label: 'Parameters', icon: <Settings size={20}/> },
-        { id: 'OUTDOOR_PROFILE', label: 'Profiles', icon: <Network size={20}/> },
-        { id: 'INDOOR_PROFILE', label: 'Indoor', icon: <Network size={20}/> },
-        { id: 'SWARM', label: 'Swarm', icon: <Network size={20}/> }
-      ]
-    },
-    {
       title: "SYSTEM",
       items: [
         { id: 'DIAGNOSTICS', label: 'Diagnostics', icon: <Activity size={20}/> },
         { id: 'HARDWARE_TEST', label: 'Hardware Test', icon: <Activity size={20}/> },
         { id: 'SYSTEM_HEALTH', label: 'System Health', icon: <Activity size={20}/> },
         { id: 'LOGS', label: 'Logs', icon: <Activity size={20}/> },
-        { id: 'SETTINGS', label: 'Settings', icon: <Settings size={20}/> },
-        { id: 'ADVANCED_TEST', label: 'Advanced Test', icon: <TestTube size={20}/> }
+        { id: 'SETTINGS', label: 'Settings', icon: <Settings size={20}/> }
       ]
     }
   ];
@@ -165,9 +155,9 @@ function App() {
 
   return (
       <div className="app-layout">
-        {/* Sidebar - hidden ONLY when in Flight Control */}
+        {/* Sidebar - hidden in Flight Control to give full screen to HUD */}
         {currentView !== 'FLIGHT' && (
-        <aside className={`sidebar ${isDrawerOpen ? 'open' : ''}`} style={{ zIndex: 1000, position: 'fixed' }}>
+        <aside className={`sidebar ${isDrawerOpen ? 'open' : ''}`} style={{ zIndex: 1000 }}>
           <div className="sidebar-header">
              <h2>PhoneOS GCS</h2>
              <button className="close-drawer-btn" onClick={() => setIsDrawerOpen(false)}>
@@ -212,7 +202,7 @@ function App() {
         {indoorMode && !testMode && <div className="test-mode-banner" style={{position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100}}>INDOOR / BENCH TEST (NO GPS REQ)</div>}
 
         {currentView === 'FLIGHT' ? (
-           <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 10 }}>
+           <div style={{ flex: 1, position: 'relative', overflow: 'hidden', zIndex: 10 }}>
               <ErrorBoundary>
                   <DroneControlView setView={setCurrentView} />
               </ErrorBoundary>

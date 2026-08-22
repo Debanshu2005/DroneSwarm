@@ -1,6 +1,8 @@
 from typing import Dict, Any, Callable, Coroutine
+from pydantic import ValidationError
 from DroneOS.shared.protocol.messages import ControlMessage, CommandAction, CommandLifecycleMessage
 from DroneOS.shared.utils.logger import setup_logger
+from DroneOS.shared.utils.event_logger import event_logger
 
 logger = setup_logger("CommandHandler")
 
@@ -22,19 +24,35 @@ class CommandHandler:
         self.error_learning = error_learning
         self._processed_cmds = []
 
-    def _send_lifecycle(self, target_id: str, action: CommandAction, stage: str, reason: str = None, cmd_id: str = None):
-        import time
+    def _send_lifecycle(self, sender_id: str, action: CommandAction, stage: str, reason: str = None, cmd_id: str = None) -> None:
         if self.network:
+            import asyncio
+            import time
             msg = CommandLifecycleMessage(
                 sender_id=self.node_id,
-                target_id=target_id,
+                target_id=sender_id,
                 timestamp=time.time(),
                 action=action,
                 stage=stage,
                 reason=reason,
                 cmd_id=cmd_id
             )
-            self._dispatch_task(self.network.broadcast_message(msg))
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.network.broadcast_message(msg))
+            except RuntimeError:
+                pass
+
+            # Structured Logging
+            severity = "ERROR" if stage in ["REJECTED", "FAILED", "TIMEOUT"] else "INFO"
+            event_type = f"COMMAND_{stage}"
+            event_logger.log_event(
+                source="DRONEOS",
+                severity=severity,
+                drone_id=self.node_id,
+                event_type=event_type,
+                message=f"{action.name} {stage}{f': {reason}' if reason else ''}"
+            )
 
     async def _validate_safety_gate(self, action: CommandAction) -> str:
         if not self.flight_controller or not self.safety_module or not self.health_monitor:
@@ -72,6 +90,11 @@ class CommandHandler:
             if is_emergency: return "Command rejected: Emergency stop active"
             if not getattr(telemetry, 'gps_valid', False): return "Command rejected: GPS unavailable"
             
+
+        elif action == CommandAction.EMERGENCY_RESET:
+            self.safety_module.reset_failsafe()
+            return "" # Approved
+
         elif action == CommandAction.MOVE:
             if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
             if is_emergency: return "Command rejected: Emergency stop active"
@@ -112,37 +135,66 @@ class CommandHandler:
 
         if message.action in self._handlers:
             logger.info(f"COMMAND_RX sender={message.sender_id} target={message.target_id} action={message.action.value}")
-            self._send_lifecycle(message.sender_id, message.action, "BACKEND_RECEIVED")
+            self._send_lifecycle(message.sender_id, message.action, "BACKEND_RECEIVED", cmd_id=message.cmd_id)
             
+            critical_actions = [CommandAction.ARM, CommandAction.TAKEOFF, CommandAction.LAND, CommandAction.RTL]
+            is_critical = message.action in critical_actions
+            
+            if is_critical:
+                if getattr(self, '_active_critical_command', None) is not None:
+                    rejection = f"Command rejected: Another critical command ({self._active_critical_command.value}) is already active."
+                    logger.warning(rejection)
+                    self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=rejection, cmd_id=message.cmd_id)
+                    return False
+                self._active_critical_command = message.action
+
             rejection_reason = await self._validate_safety_gate(message.action)
             if rejection_reason:
                 logger.warning(rejection_reason)
                 self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=rejection_reason, cmd_id=message.cmd_id)
+                if is_critical:
+                    self._active_critical_command = None
                 return False
 
             params = message.params or {}
             try:
-                self._send_lifecycle(message.sender_id, message.action, "MAVSDK_REQUESTED")
-                success = await self._handlers[message.action](params)
+                self._send_lifecycle(message.sender_id, message.action, "SENDING", cmd_id=message.cmd_id)
+                
+                # Use asyncio.wait_for to handle TIMEOUT
+                import asyncio
+                try:
+                    success = await asyncio.wait_for(self._handlers[message.action](params), timeout=15.0)
+                except asyncio.TimeoutError:
+                    error_text = f"{message.action.name} timed out."
+                    self._send_lifecycle(message.sender_id, message.action, "TIMEOUT", reason=error_text, cmd_id=message.cmd_id)
+                    if is_critical:
+                        self._active_critical_command = None
+                    return False
+
                 if not success:
                     logger.warning(f"Command {message.action.value} failed to execute properly.")
                     error_text = f"{message.action.name} rejected by FlightManager."
                     if message.action == CommandAction.ARM:
                         error_text = "ARM rejected by Pixhawk; check Pixhawk pre-arm checks."
-                    self._send_lifecycle(message.sender_id, message.action, "FAILED", reason=error_text, cmd_id=message.cmd_id)
+                    self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=error_text, cmd_id=message.cmd_id)
+                    if is_critical:
+                        self._active_critical_command = None
                     return False
                 
-                self._send_lifecycle(message.sender_id, message.action, "SUCCESS", cmd_id=message.cmd_id)
+                self._send_lifecycle(message.sender_id, message.action, "ACCEPTED", cmd_id=message.cmd_id)
+                if is_critical:
+                    self._active_critical_command = None
                 return True
             except Exception as e:
                 error_msg = str(e)
-                # Extract MAVSDK ActionError reason if present
                 if "ActionError" in str(type(e)):
                     error_msg = str(e).split(':', 1)[-1].strip()
                 logger.exception(f"Exception while executing {message.action.value}: {error_msg}")
                 self._send_lifecycle(message.sender_id, message.action, "FAILED", reason=error_msg, cmd_id=message.cmd_id)
                 if hasattr(self, 'error_learning') and self.error_learning:
                     self.error_learning.report_error(self.node_id, "COMMAND_HANDLER", error_msg)
+                if is_critical:
+                    self._active_critical_command = None
                 return False
         else:
             logger.warning(f"No handler registered for command: {message.action.value}")

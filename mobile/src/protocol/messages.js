@@ -8,6 +8,7 @@ export const MessageType = {
     ERROR: "error",
     COMMAND_LIFECYCLE: "command_lifecycle",
     EMERGENCY: "emergency",
+    EMERGENCY_RESET: "emergency_reset",
     MISSION: "mission",
     MISSION_PROGRESS: "mission_progress",
     MISSION_STATUS: "mission_status",
@@ -46,6 +47,7 @@ export const CommandAction = {
     GOTO: "goto",
     STOP: "stop",
     EMERGENCY: "emergency",
+    EMERGENCY_RESET: "emergency_reset",
 };
 
 export class CommandLifecycleMessage {
