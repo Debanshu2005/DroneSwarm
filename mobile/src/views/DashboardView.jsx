@@ -34,7 +34,7 @@ export default function DashboardView() {
 
   const validateDroneSafety = (drone) => {
      const tel = drone?.telemetry || {};
-     const isHeartbeatHealthy = drone && (nowMs - drone.lastSeen) < 2000;
+     const isHeartbeatHealthy = drone && (nowMs - drone.lastSeen) < 4000;
      const isTelemetryHealthy = isHeartbeatHealthy && isConnected === "CONNECTED";
      const isPx4Connected = tel.flight_mode && tel.flight_mode !== "disconnected" && tel.flight_mode !== "UNKNOWN";
      const isFailsafe = drone?.status === 'failsafe';
@@ -47,10 +47,7 @@ export default function DashboardView() {
      else if (!isPx4Connected) { armPass = false; reason = "PX4 DISCONNECTED"; }
      else if (isTelemetryStale) { armPass = false; reason = "TELEMETRY STALE"; }
      else if (isFailsafe) { armPass = false; reason = "FAILSAFE ACTIVE"; }
-     else if (tel.is_armable === false || tel.is_armable == null) {
-        armPass = false;
-        reason = tel.status_text || "PX4 HEALTH NOT READY";
-     }
+
      
      const takeoffPass = armPass && tel.armed_state === "ARMED";
      const takeoffReason = !armPass ? reason : (tel.armed_state !== "ARMED" ? "NOT ARMED" : "OK");

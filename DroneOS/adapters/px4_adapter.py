@@ -37,36 +37,55 @@ class PX4FlightController(IFlightController):
         import glob
         import os
         import signal
+        import psutil
+        import re
         
-        def kill_orphaned_mavsdk():
-            pass # Removed aggressive pkill to support multi-drone SITL
+        def kill_orphaned_mavsdk(target_conn: str):
+            try:
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    if proc.info['name'] and 'mavsdk_server' in proc.info['name']:
+                        cmdline = proc.info.get('cmdline', [])
+                        if cmdline and any(target_conn in arg for arg in cmdline):
+                            logger.info(f"Killing orphaned mavsdk_server (PID {proc.info['pid']}) for {target_conn}")
+                            proc.kill()
+            except Exception as e:
+                logger.warning(f"Failed to kill orphaned MAVSDK server: {e}")
 
         while not self._connected:
-            kill_orphaned_mavsdk()
-            if self.client is None:
-                self.client = System()
             conn_str = self.config.px4_connection_string
 
             if conn_str.startswith("serial://auto:"):
                 baud = conn_str.split(":")[-1]
                 device = None
                 while not device:
-                    by_id_paths = glob.glob("/dev/serial/by-id/*")
-                    if by_id_paths:
-                        device = by_id_paths[0]
-                    elif glob.glob("/dev/ttyACM*"):
-                        device = glob.glob("/dev/ttyACM*")[0]
-                    elif glob.glob("/dev/ttyUSB*"):
-                        device = glob.glob("/dev/ttyUSB*")[0]
+                    by_id_paths = sorted(glob.glob("/dev/serial/by-id/*"))
+                    acm_paths = sorted(glob.glob("/dev/ttyACM*"))
+                    usb_paths = sorted(glob.glob("/dev/ttyUSB*"))
                     
+                    match = re.search(r'\d+', self.vehicle_name)
+                    idx = (int(match.group()) - 1) if match else 0
+                    
+                    if by_id_paths and len(by_id_paths) > idx:
+                        device = by_id_paths[idx]
+                    elif acm_paths and len(acm_paths) > idx:
+                        device = acm_paths[idx]
+                    elif usb_paths and len(usb_paths) > idx:
+                        device = usb_paths[idx]
+                    elif by_id_paths:
+                        device = by_id_paths[-1] # Fallback
+                        
                     if device:
                         conn_str = f"serial://{device}:{baud}"
                         break
                     else:
                         logger.info("PX4 DEVICE WAITING")
                         await asyncio.sleep(2.0)
+            
+            kill_orphaned_mavsdk(conn_str)
+            # Recreate System to ensure it spawns a fresh mavsdk_server if it previously failed
+            self.client = System()
 
-            logger.info("PX4 CONNECTING")
+            logger.info(f"PX4 CONNECTING to {conn_str}")
             try:
                 # Wrap connect in a timeout to prevent hanging forever
                 await asyncio.wait_for(self.client.connect(system_address=conn_str), timeout=10.0)
@@ -112,6 +131,7 @@ class PX4FlightController(IFlightController):
         t4 = asyncio.create_task(self._subscribe_flight_mode())
         t5 = asyncio.create_task(self._subscribe_gps_info())
         t6 = asyncio.create_task(self._subscribe_armed())
+        t7 = asyncio.create_task(self._subscribe_attitude())
         t8 = asyncio.create_task(self._subscribe_health())
         t9 = asyncio.create_task(self._subscribe_status_text())
 
@@ -328,142 +348,170 @@ class PX4FlightController(IFlightController):
         self._telemetry.timestamp = time.time()
 
     async def _subscribe_position(self):
-        try:
-            import math
-            async for pos in self.client.telemetry.position():
-                self._mark_telemetry_fresh()
-                self._telemetry.latitude = pos.latitude_deg if not math.isnan(pos.latitude_deg) else None
-                self._telemetry.longitude = pos.longitude_deg if not math.isnan(pos.longitude_deg) else None
-                self._telemetry.altitude = pos.relative_altitude_m if not math.isnan(pos.relative_altitude_m) else None
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.error(f"PX4 position subscription failed: {e}")
-            self._connected = False
+        while self._connected:
+            try:
+                import math
+                async for pos in self.client.telemetry.position():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.latitude = pos.latitude_deg if not math.isnan(pos.latitude_deg) else None
+                    self._telemetry.longitude = pos.longitude_deg if not math.isnan(pos.longitude_deg) else None
+                    self._telemetry.altitude = pos.relative_altitude_m if not math.isnan(pos.relative_altitude_m) else None
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 position subscription failed: {e}")
+                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
+                    pass # Stream dropped, let loop retry
+                await asyncio.sleep(2.0)
 
     async def _subscribe_velocity(self):
-        try:
-            import math
-            async for vel in self.client.telemetry.velocity_ned():
-                self._mark_telemetry_fresh()
-                self._telemetry.velocity_x = vel.north_m_s if not math.isnan(vel.north_m_s) else None
-                self._telemetry.velocity_y = vel.east_m_s if not math.isnan(vel.east_m_s) else None
-                self._telemetry.velocity_z = vel.down_m_s if not math.isnan(vel.down_m_s) else None
-                # calculate ground speed
-                if self._telemetry.velocity_x is not None and self._telemetry.velocity_y is not None:
-                    self._telemetry.ground_speed = math.sqrt(vel.north_m_s**2 + vel.east_m_s**2)
-                else:
-                    self._telemetry.ground_speed = None
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.error(f"PX4 velocity_ned subscription failed: {e}")
-            self._connected = False
+        while self._connected:
+            try:
+                import math
+                async for vel in self.client.telemetry.velocity_ned():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.velocity_x = vel.north_m_s if not math.isnan(vel.north_m_s) else None
+                    self._telemetry.velocity_y = vel.east_m_s if not math.isnan(vel.east_m_s) else None
+                    self._telemetry.velocity_z = vel.down_m_s if not math.isnan(vel.down_m_s) else None
+                    # calculate ground speed
+                    if self._telemetry.velocity_x is not None and self._telemetry.velocity_y is not None:
+                        self._telemetry.ground_speed = math.sqrt(vel.north_m_s**2 + vel.east_m_s**2)
+                    else:
+                        self._telemetry.ground_speed = None
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 velocity_ned subscription failed: {e}")
+                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
+                    pass # Stream dropped, let loop retry
+                await asyncio.sleep(2.0)
 
     async def _subscribe_attitude(self):
-        try:
-            async for attitude in self.client.telemetry.attitude_euler():
-                self._mark_telemetry_fresh()
-                self._telemetry.roll = attitude.roll_deg
-                self._telemetry.pitch = attitude.pitch_deg
-                self._telemetry.yaw = attitude.yaw_deg
-                # normalize yaw to heading (0-360)
-                heading = attitude.yaw_deg
-                if heading < 0:
-                    heading += 360.0
-                self._telemetry.heading = heading
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.error(f"PX4 attitude_euler subscription failed: {e}")
-            self._connected = False
+        while self._connected:
+            try:
+                async for attitude in self.client.telemetry.attitude_euler():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.roll = attitude.roll_deg
+                    self._telemetry.pitch = attitude.pitch_deg
+                    self._telemetry.yaw = attitude.yaw_deg
+                    # normalize yaw to heading (0-360)
+                    heading = attitude.yaw_deg
+                    if heading < 0:
+                        heading += 360.0
+                    self._telemetry.heading = heading
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 attitude_euler subscription failed: {e}")
+                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
+                    pass # Stream dropped, let loop retry
+                await asyncio.sleep(2.0)
 
     async def _subscribe_battery(self):
-        try:
-            async for battery in self.client.telemetry.battery():
-                self._mark_telemetry_fresh()
-                val = battery.remaining_percent
-                if val < 0 or math.isnan(val):
-                    self._telemetry.battery_level = None
-                else:
-                    # Some MAVSDK versions report 0-1, others 0-100.
-                    pct = val if val > 1.0 else val * 100.0
-                    self._telemetry.battery_level = max(0.0, min(100.0, pct))
-                self._telemetry.voltage = battery.voltage_v
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.error(f"PX4 battery subscription failed: {e}")
-            self._connected = False
+        while self._connected:
+            try:
+                import math
+                async for battery in self.client.telemetry.battery():
+                    self._mark_telemetry_fresh()
+                    val = battery.remaining_percent
+                    if val < 0 or math.isnan(val):
+                        self._telemetry.battery_level = None
+                    else:
+                        # Some MAVSDK versions report 0-1, others 0-100.
+                        pct = val if val > 1.0 else val * 100.0
+                        self._telemetry.battery_level = max(0.0, min(100.0, pct))
+                    self._telemetry.voltage = battery.voltage_v
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 battery subscription failed: {e}")
+                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
+                    pass # Stream dropped, let loop retry
+                await asyncio.sleep(2.0)
 
     async def _subscribe_flight_mode(self):
-        try:
-            async for mode in self.client.telemetry.flight_mode():
-                self._mark_telemetry_fresh()
-                self._telemetry.flight_mode = str(mode)
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.error(f"PX4 flight_mode subscription failed: {e}")
-            self._connected = False
+        while self._connected:
+            try:
+                async for mode in self.client.telemetry.flight_mode():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.flight_mode = str(mode)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 flight_mode subscription failed: {e}")
+                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
+                    pass # Stream dropped, let loop retry
+                await asyncio.sleep(2.0)
 
     async def _subscribe_gps_info(self):
-        try:
-            async for gps_info in self.client.telemetry.gps_info():
-                self._mark_telemetry_fresh()
-                self._telemetry.gps_valid = gps_info.fix_type.name in ["FIX_2D", "FIX_3D", "FIX_DGPS", "RTK_FLOAT", "RTK_FIXED"]
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.error(f"PX4 gps_info subscription failed: {e}")
-            self._connected = False
+        while self._connected:
+            try:
+                async for gps_info in self.client.telemetry.gps_info():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.gps_valid = gps_info.fix_type.name in ["FIX_2D", "FIX_3D", "FIX_DGPS", "RTK_FLOAT", "RTK_FIXED"]
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 gps_info subscription failed: {e}")
+                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
+                    pass # Stream dropped, let loop retry
+                await asyncio.sleep(2.0)
 
     async def _subscribe_armed(self):
-        try:
-            async for is_armed in self.client.telemetry.armed():
-                self._mark_telemetry_fresh()
-                self._telemetry.armed_state = "ARMED" if is_armed else "DISARMED"
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.error(f"PX4 armed subscription failed: {e}")
-            self._connected = False
+        while self._connected:
+            try:
+                async for is_armed in self.client.telemetry.armed():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.armed_state = "ARMED" if is_armed else "DISARMED"
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 armed subscription failed: {e}")
+                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
+                    pass # Stream dropped, let loop retry
+                await asyncio.sleep(2.0)
 
     async def _subscribe_health(self):
-        try:
-            async for health in self.client.telemetry.health():
-                self._mark_telemetry_fresh()
-                self._telemetry.health_all_ok = (
-                    health.is_gyrometer_calibration_ok and
-                    health.is_accelerometer_calibration_ok and
-                    health.is_magnetometer_calibration_ok and
-                    health.is_local_position_ok and
-                    health.is_global_position_ok
-                )
-                self._telemetry.gyro_calibrated = health.is_gyrometer_calibration_ok
-                self._telemetry.accel_calibrated = health.is_accelerometer_calibration_ok
-                self._telemetry.mag_calibrated = health.is_magnetometer_calibration_ok
-                self._telemetry.local_pos_valid = health.is_local_position_ok
-                self._telemetry.global_pos_valid = health.is_global_position_ok
-                self._telemetry.is_armable = health.is_armable
-                self._telemetry.home_valid = health.is_home_position_ok
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.error(f"PX4 health subscription failed: {e}")
-            self._connected = False
+        while self._connected:
+            try:
+                async for health in self.client.telemetry.health():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.health_all_ok = (
+                        health.is_gyrometer_calibration_ok and
+                        health.is_accelerometer_calibration_ok and
+                        health.is_magnetometer_calibration_ok and
+                        health.is_local_position_ok and
+                        health.is_global_position_ok
+                    )
+                    self._telemetry.gyro_calibrated = health.is_gyrometer_calibration_ok
+                    self._telemetry.accel_calibrated = health.is_accelerometer_calibration_ok
+                    self._telemetry.mag_calibrated = health.is_magnetometer_calibration_ok
+                    self._telemetry.local_pos_valid = health.is_local_position_ok
+                    self._telemetry.global_pos_valid = health.is_global_position_ok
+                    self._telemetry.is_armable = health.is_armable
+                    self._telemetry.home_valid = health.is_home_position_ok
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 health subscription failed: {e}")
+                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
+                    pass # Stream dropped, let loop retry
+                await asyncio.sleep(2.0)
 
     async def _subscribe_status_text(self):
-        try:
-            async for status in self.client.telemetry.status_text():
-                self._mark_telemetry_fresh()
-                if status.type.name in ["WARNING", "ERROR", "CRITICAL", "EMERGENCY", "INFO"]:
-                    self._telemetry.status_text = status.text
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            logger.error(f"PX4 status_text subscription failed: {e}")
-            self._connected = False
+        while self._connected:
+            try:
+                async for status in self.client.telemetry.status_text():
+                    self._mark_telemetry_fresh()
+                    if status.type.name in ["WARNING", "ERROR", "CRITICAL", "EMERGENCY", "INFO"]:
+                        self._telemetry.status_text = status.text
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 status_text subscription failed: {e}")
+                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
+                    pass # Stream dropped, let loop retry
+                await asyncio.sleep(2.0)
 
     def _empty_telemetry(self) -> TelemetryData:
         return TelemetryData(

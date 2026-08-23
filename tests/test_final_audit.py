@@ -86,3 +86,45 @@ async def test_heartbeat():
     from DroneOS.shared.protocol.messages import HeartbeatMessage
     msg = HeartbeatMessage(sender_id="drone1", timestamp=0.0, status="CONNECTED")
     assert msg.status == "CONNECTED"
+
+@pytest.mark.asyncio
+async def test_arm_rejection_propagation():
+    from DroneOS.core.command_handler import CommandHandler
+    from DroneOS.shared.protocol.messages import ControlMessage, CommandAction
+    
+    class FakeNetwork:
+        def __init__(self):
+            self.sent = []
+        async def broadcast_message(self, msg):
+            self.sent.append(msg)
+            
+    class FakeFlightController:
+        async def get_telemetry(self):
+            class T:
+                timestamp = 9999999999.9
+                home_valid = True
+            return T()
+        
+    class FakeHealthMonitor:
+        last_heartbeat_time = 9999999999.9
+        timeout_seconds = 5.0
+        
+    class FakeSafetyModule:
+        is_failsafe_active = False
+
+    ch = CommandHandler("drone1", FakeSafetyModule(), FakeFlightController(), FakeHealthMonitor())
+    ch.network = FakeNetwork()
+    
+    async def fake_arm(params):
+        raise RuntimeError("ActionError: Pre-arm checks failed")
+        
+    ch.register_handler(CommandAction.ARM, fake_arm)
+    
+    msg = ControlMessage(sender_id="gs1", target_id="drone1", timestamp=0.0, action=CommandAction.ARM)
+    await ch.handle_command(msg)
+    await asyncio.sleep(0.1)
+    
+    # Check if REJECTED state was sent
+    rejections = [m for m in ch.network.sent if getattr(m, 'stage', None) == 'REJECTED']
+    assert len(rejections) > 0, "Expected a REJECTED message"
+    assert "Pre-arm checks failed" in rejections[0].reason

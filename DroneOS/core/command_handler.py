@@ -82,16 +82,13 @@ class CommandHandler:
             if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
             if is_telemetry_stale: return "Command rejected: Telemetry stale"
             if is_emergency: return "Command rejected: Emergency stop active"
-            if getattr(telemetry, 'is_armable', None) is False: return "Command rejected: PX4 Health Not Ready (is_armable=False)"
             
         elif action == CommandAction.TAKEOFF:
             if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
             if is_telemetry_stale: return "Command rejected: Telemetry stale"
             if is_emergency: return "Command rejected: Emergency stop active"
-            if not getattr(telemetry, 'gps_valid', False): return "Command rejected: GPS unavailable"
             
-
-        elif action == CommandAction.EMERGENCY_RESET:
+        elif action == CommandAction.STOP:
             self.safety_module.reset_failsafe()
             return "" # Approved
 
@@ -190,7 +187,7 @@ class CommandHandler:
                 if "ActionError" in str(type(e)):
                     error_msg = str(e).split(':', 1)[-1].strip()
                 logger.exception(f"Exception while executing {message.action.value}: {error_msg}")
-                self._send_lifecycle(message.sender_id, message.action, "FAILED", reason=error_msg, cmd_id=message.cmd_id)
+                self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=error_msg, cmd_id=message.cmd_id)
                 if hasattr(self, 'error_learning') and self.error_learning:
                     self.error_learning.report_error(self.node_id, "COMMAND_HANDLER", error_msg)
                 if is_critical:

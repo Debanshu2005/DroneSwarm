@@ -153,7 +153,7 @@ export default function DroneControlView({ setView }) {
   }, []);
 
   // Aggregate States
-  const isHeartbeatHealthy = activeDrone ? (nowMs - activeDrone.lastSeen) < 2000 : false;
+  const isHeartbeatHealthy = activeDrone ? (nowMs - activeDrone.lastSeen) < 4000 : false;
   const isTelemetryHealthy = isHeartbeatHealthy && isConnected === "CONNECTED";
   const isPx4Connected = tel.flight_mode && tel.flight_mode !== "disconnected" && tel.flight_mode !== "UNKNOWN";
   const isBatteryAcceptable = (tel.battery_level || 0) >= 15;
@@ -162,7 +162,7 @@ export default function DroneControlView({ setView }) {
   const isArmable = tel.is_armable === true;
   const isHealthy = tel.health_all_ok === true;
 
-  const connectedDronesCount = droneIds.filter(id => (nowMs - drones[id].lastSeen) < 2000).length;
+  const connectedDronesCount = droneIds.filter(id => (nowMs - drones[id].lastSeen) < 4000).length;
 
   
   let mapCenter = [22.315, 87.310]; // Fallback
@@ -466,11 +466,16 @@ export default function DroneControlView({ setView }) {
          {/* BOTTOM COMMAND BAR - Hidden in INDOOR mode */}
          {!indoorMode && (
              <div className="hud-bottom-bar">
-                <button className={`command-btn btn-arm ${!isArmable ? 'disabled' : ''}`} disabled={!isArmable} onClick={() => requestCommand(CommandAction.ARM, null, true)}>
-                   <div className="cmd-main"><Lock size={14}/> {isArmable ? 'ARM' : 'ARM NOT READY'}</div>
-                   {!isArmable && <div className="cmd-sub">{tel.status_text || 'CHECK PREFLIGHT'}</div>}
-                </button>
-                
+                 <button className={`command-btn btn-arm ${!isPx4Connected ? 'disabled' : ''}`} disabled={!isPx4Connected} onClick={() => requestCommand(CommandAction.ARM, null, true)}>
+                    <div className="cmd-main"><Lock size={14}/> {
+                      (activeDrone?.commandState?.action === 'arm' && (activeDrone?.commandState?.state === 'SENDING' || activeDrone?.commandState?.state === 'ACCEPTED') && tel.armed_state !== 'ARMED') ? 'ARMING...' : 
+                      (tel.armed_state === 'ARMED' ? 'ARMED' : 'ARM')
+                    }</div>
+                    {(activeDrone?.commandState?.action === 'arm' && activeDrone?.commandState?.state === 'REJECTED') && 
+                      <div className="cmd-sub" style={{color: 'var(--danger)'}}>{activeDrone.commandState.reason || 'FC REJECTED ARM'}</div>
+                    }
+                 </button>
+                 
                 <button className="command-btn btn-disarm" onClick={() => requestCommand(CommandAction.DISARM, null, true)}>
                    <div className="cmd-main"><Unlock size={14}/> DISARM</div>
                 </button>
@@ -494,7 +499,7 @@ export default function DroneControlView({ setView }) {
                 <button className="command-btn btn-emergency" onClick={() => requestCommand(CommandAction.EMERGENCY, null, true)}>
                    <div className="cmd-main"><AlertTriangle size={14}/> E-STOP</div>
                 </button>
-                <button className="command-btn btn-emergency" style={{background: '#D97706'}} onClick={() => requestCommand(CommandAction.EMERGENCY_RESET, null, true)}>
+                <button className="command-btn btn-emergency" style={{background: '#D97706'}} onClick={() => requestCommand(CommandAction.STOP, null, true)}>
                    <div className="cmd-main"><ShieldCheck size={14}/> E-RESET</div>
                 </button>
              </div>

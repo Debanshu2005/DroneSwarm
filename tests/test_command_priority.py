@@ -40,7 +40,7 @@ async def test_command_handler_extracts_action_error():
     
     from DroneOS.shared.protocol.messages import MessageType
     lifecycle_msgs = [call[0][0] for call in broadcasts if call[0][0].msg_type == MessageType.COMMAND_LIFECYCLE]
-    failed_msg = next((m for m in lifecycle_msgs if m.stage == "FAILED"), None)
+    failed_msg = next((m for m in lifecycle_msgs if m.stage == "REJECTED"), None)
     
     assert failed_msg is not None
     assert "GPS 1: Bad fix" in failed_msg.reason

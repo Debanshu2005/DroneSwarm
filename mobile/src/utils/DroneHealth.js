@@ -4,8 +4,8 @@ export function evaluateDroneHealth(drone) {
     // Evaluate if we are LIVE, STALE or OFFLINE
     const now = Date.now();
     const lastSeen = drone.lastSeen || 0;
-    const isStale = (now - lastSeen) > 2000;
-    const isOffline = drone.status === 'OFFLINE' || (now - lastSeen) > 5000;
+    const isStale = (now - lastSeen) > 4000;
+    const isOffline = drone.status === 'OFFLINE' || (now - lastSeen) > 8000;
     
     if (isOffline) return 'UNKNOWN';
 
@@ -33,14 +33,14 @@ export function evaluatePreflightChecklist(drone) {
     
     const now = Date.now();
     const lastSeen = drone.lastSeen || 0;
-    const isOffline = drone.status === 'OFFLINE' || (now - lastSeen) > 5000;
+    const isOffline = drone.status === 'OFFLINE' || (now - lastSeen) > 8000;
     
     const t = drone.telemetry || {};
     
     return {
         CONNECTION: !isOffline ? 'PASS' : 'FAIL',
         HEARTBEAT: !isOffline ? 'PASS' : 'FAIL',
-        TELEMETRY: (now - lastSeen <= 2000) ? 'PASS' : (isOffline ? 'FAIL' : 'WARNING'),
+        TELEMETRY: (now - lastSeen <= 4000) ? 'PASS' : (isOffline ? 'FAIL' : 'WARNING'),
         BATTERY: (t.battery_level >= 20) ? 'PASS' : (t.battery_level ? 'FAIL' : 'UNKNOWN'),
         PX4_HEALTH: (t.system_health === 'OK') ? 'PASS' : (t.system_health ? 'FAIL' : 'UNKNOWN'),
         ESTIMATOR: (t.gps_valid || t.optical_flow_valid || t.rangefinder_valid) ? 'PASS' : 'FAIL',
@@ -56,7 +56,7 @@ export function evaluateTelemetryFreshness(drone) {
     const now = Date.now();
     const lastSeen = drone.lastSeen || 0;
     
-    if (drone.status === 'OFFLINE' || (now - lastSeen) > 5000) return 'OFFLINE';
-    if ((now - lastSeen) > 2000) return 'STALE';
+    if (drone.status === 'OFFLINE' || (now - lastSeen) > 8000) return 'OFFLINE';
+    if ((now - lastSeen) > 4000) return 'STALE';
     return 'LIVE';
 }

@@ -201,7 +201,12 @@ export const DroneProvider = ({ children }) => {
             path = [...path, [msg.telemetry.latitude, msg.telemetry.longitude]].slice(-100);
           }
           
-          let sanitizedTelemetry = { ...msg.telemetry };
+          let sanitizedTelemetry = { ...(existing.telemetry || {}) };
+          for (const [k, v] of Object.entries(msg.telemetry || {})) {
+              if (v !== null && v !== undefined) {
+                  sanitizedTelemetry[k] = v;
+              }
+          }
           if (sanitizedTelemetry.battery_level !== undefined && sanitizedTelemetry.battery_level !== null) {
               if (isNaN(sanitizedTelemetry.battery_level) || !isFinite(sanitizedTelemetry.battery_level)) {
                   sanitizedTelemetry.battery_level = null;
@@ -378,10 +383,7 @@ export const DroneProvider = ({ children }) => {
 
        // Strict Command Gating
        const tel = drones[id]?.telemetry || {};
-       if (action === CommandAction.ARM && tel.is_armable === false) {
-           addLog(`ARM rejected by UI: is_armable is false`, 'WARNING', 'PHONEOS', id, 'ARM_BLOCKED');
-           return;
-       }
+
        if (action === CommandAction.TAKEOFF && tel.armed_state !== 'ARMED') {
            addLog(`TAKEOFF rejected by UI: not armed`, 'WARNING', 'PHONEOS', id, 'TAKEOFF_BLOCKED');
            return;

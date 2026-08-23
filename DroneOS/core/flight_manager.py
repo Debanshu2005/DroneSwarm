@@ -37,7 +37,7 @@ class FlightManager:
             logger.error("Cannot takeoff: Drone telemetry indicates it is not ARMED.")
             return False
             
-        altitude = 5.0
+        altitude = getattr(self.fc.config, "takeoff_altitude", 5.0) if hasattr(self.fc, "config") else 5.0
         if params and 'altitude_m' in params:
             try:
                 parsed = float(params['altitude_m'])
