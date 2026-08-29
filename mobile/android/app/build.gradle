@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.swarmos.phoneos"
+    namespace "com.swarmos.phoneos_swarm"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.swarmos.phoneos"
+        applicationId "com.swarmos.phoneos_swarm"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

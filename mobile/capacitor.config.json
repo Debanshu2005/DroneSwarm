@@ -1,6 +1,6 @@
 {
-  "appId": "com.swarmos.phoneos",
-  "appName": "PhoneOS",
+  "appId": "com.swarmos.phoneos_swarm",
+  "appName": "PhoneOS Swarm",
   "webDir": "dist",
   "server": {
     "androidScheme": "http",

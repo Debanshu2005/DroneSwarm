@@ -31,6 +31,7 @@ export const MessageType = {
     PARAM_RESPONSE: "param_response",
     DIAGNOSTICS: "diagnostics",
     TEST_INJECT: "test_inject",
+    TERMINAL_COMMAND: "terminal_command",
 };
 
 export const CommandAction = {
@@ -109,4 +110,11 @@ export class TestInjectMessage extends BaseMessage {
         this.injection_type = injection_type;
         this.active = active;
     }
+}
+
+export class TerminalCommandMessage extends BaseMessage {
+  constructor(sender_id, text, target_id = null) {
+    super(MessageType.TERMINAL_COMMAND, sender_id, target_id);
+    this.text = text;
+  }
 }

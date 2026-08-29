@@ -1,0 +1,237 @@
+import asyncio
+import logging
+import sys
+import math
+import time
+
+from DroneOS.core.interfaces import IFlightController
+from DroneOS.core.command_handler import CommandHandler
+from DroneOS.shared.protocol.messages import ControlMessage, CommandAction, StatusMessage
+from DroneOS.shared.nlp.trajectory_engine import (
+    parse_task_sequence, 
+    TaskAction, 
+    ParsedTask, 
+    build_trajectory, 
+    GlobalTarget,
+    global_distance_m
+)
+from DroneOS.shared.nlp.telemetry_bridge import build_nav_context
+
+logger = logging.getLogger(__name__)
+
+class TerminalController:
+    def __init__(self, command_handler: CommandHandler, flight_controller: IFlightController, node_id: str):
+        self.command_handler = command_handler
+        self.flight_controller = flight_controller
+        self.node_id = node_id
+        self.network = None
+
+    async def run_repl(self) -> None:
+        logger.info("Starting Terminal Controller REPL...")
+        loop = asyncio.get_running_loop()
+        while True:
+            try:
+                line = await loop.run_in_executor(None, sys.stdin.readline)
+                if not line:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+
+                await self.process_text(line, sender_id=self.node_id)
+            except asyncio.CancelledError:
+                logger.info("Terminal Controller REPL cancelled.")
+                break
+            except Exception as e:
+                logger.error(f"Error in REPL loop: {e}")
+
+    async def process_text(self, text: str, sender_id: str) -> None:
+        try:
+            sequence = parse_task_sequence(text)
+        except ValueError as e:
+            logger.error(f"Failed to parse command: {e}")
+            return
+
+        if self.network is not None:
+            # sequence.action_names works because it was added in parse_mission logic
+            summary = f"Parsed: {', '.join(t.action for t in sequence.tasks)}"
+            echo_msg = StatusMessage(
+                sender_id=self.node_id, 
+                target_id=sender_id, 
+                status_text=summary, 
+                severity="info", 
+                timestamp=time.time()
+            )
+            asyncio.create_task(self.network.broadcast_message(echo_msg))
+
+        for task in sequence.tasks:
+            success = await self._execute_task(task, sender_id)
+            if not success:
+                logger.warning(f"Task {task.action} failed, aborting sequence.")
+                break
+
+    async def _execute_task(self, task: ParsedTask, sender_id: str) -> bool:
+        if task.action == TaskAction.TAKEOFF:
+            msg = ControlMessage(
+                action=CommandAction.TAKEOFF,
+                params={"altitude_m": task.params.get("h", 5.0)},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(msg)
+        
+        elif task.action == TaskAction.LAND:
+            msg = ControlMessage(
+                action=CommandAction.LAND,
+                params={},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(msg)
+            
+        elif task.action == TaskAction.RTL:
+            msg = ControlMessage(
+                action=CommandAction.RTL,
+                params={},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(msg)
+            
+        elif task.action == TaskAction.HOVER:
+            msg = ControlMessage(
+                action=CommandAction.HOVER,
+                params={},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(msg)
+            
+        elif task.action == TaskAction.SET_MODE:
+            mode_str = "UNKNOWN"
+            if task.notes and task.notes[0].startswith("mode="):
+                mode_str = task.notes[0].replace("mode=", "")
+            msg = ControlMessage(
+                action=CommandAction.SET_MODE,
+                params={"mode": mode_str},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(msg)
+            
+        elif task.action == TaskAction.ARM:
+            msg = ControlMessage(
+                action=CommandAction.ARM,
+                params={},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(msg)
+            
+        elif task.action == TaskAction.DISARM:
+            msg = ControlMessage(
+                action=CommandAction.DISARM,
+                params={},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(msg)
+            
+        elif task.action == TaskAction.HOLD:
+            msg = ControlMessage(
+                action=CommandAction.STOP,
+                params={},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(msg)
+            
+        elif task.action == TaskAction.TAKEOFF_LAND:
+            target_alt = task.params.get("h", 5.0)
+            msg1 = ControlMessage(
+                action=CommandAction.TAKEOFF,
+                params={"altitude_m": target_alt},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            success = await self.command_handler.handle_command(msg1)
+            if not success:
+                return False
+                
+            start_time = time.monotonic()
+            while True:
+                if time.monotonic() - start_time > 30.0:
+                    logger.warning("Takeoff timeout during TAKEOFF_LAND sequence")
+                    break
+                telemetry = await self.flight_controller.get_telemetry()
+                current_alt = getattr(telemetry, 'altitude', 0.0) or 0.0
+                if current_alt >= target_alt * 0.9:
+                    break
+                await asyncio.sleep(0.5)
+                
+            await asyncio.sleep(2.0)
+            
+            msg2 = ControlMessage(
+                action=CommandAction.LAND,
+                params={},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(msg2)
+            
+        else:
+            telemetry = await self.flight_controller.get_telemetry()
+            report, origin = build_nav_context(telemetry)
+            
+            try:
+                plan = build_trajectory(task, report, origin)
+            except ValueError as e:
+                logger.error(f"Trajectory rejected: {e}")
+                return False
+                
+            return await self._run_waypoints(plan.global_targets, sender_id)
+
+    async def _run_waypoints(self, targets: list[GlobalTarget], sender_id: str,
+                             acceptance_radius_m: float = 1.0,
+                             timeout_s: float = 60.0) -> bool:
+        for target in targets:
+            msg = ControlMessage(
+                action=CommandAction.GOTO,
+                params={
+                    "lat": target.lat_deg,
+                    "lon": target.lon_deg,
+                    "alt": target.relative_alt_m
+                },
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            
+            accepted = await self.command_handler.handle_command(msg)
+            if not accepted:
+                logger.error(f"GOTO command rejected for waypoint {target.name}")
+                return False
+                
+            start_time = time.monotonic()
+            reached = False
+            
+            while True:
+                if time.monotonic() - start_time > timeout_s:
+                    logger.error(f"Timeout reaching waypoint {target.name}")
+                    return False
+                    
+                telemetry = await self.flight_controller.get_telemetry()
+                if telemetry.latitude is not None and telemetry.longitude is not None:
+                    dist = global_distance_m(
+                        telemetry.latitude, telemetry.longitude,
+                        target.lat_deg, target.lon_deg
+                    )
+                    if dist <= acceptance_radius_m:
+                        reached = True
+                        break
+                        
+                await asyncio.sleep(0.5)
+                
+            if target.hold_s > 0:
+                await asyncio.sleep(target.hold_s)
+                
+        return True

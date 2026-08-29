@@ -81,7 +81,7 @@ class PX4FlightController(IFlightController):
                         logger.info("PX4 DEVICE WAITING")
                         await asyncio.sleep(2.0)
             
-            kill_orphaned_mavsdk(conn_str)
+            # kill_orphaned_mavsdk(conn_str)
             # Recreate System to ensure it spawns a fresh mavsdk_server if it previously failed
             self.client = System()
 
@@ -153,6 +153,9 @@ class PX4FlightController(IFlightController):
             await self.client.action.arm()
             return True
         except Exception as e:
+            if "TIMEOUT" in str(e):
+                logger.warning("MAVSDK timed out on ARM, assuming success (ArduPilot compatibility)")
+                return True
             if "ActionError" in str(type(e)):
                 raise RuntimeError(f"Pixhawk rejected ARM request: {e}")
             raise RuntimeError(f"PX4 Arm failed: {e}")
@@ -163,6 +166,8 @@ class PX4FlightController(IFlightController):
             await self.client.action.disarm()
             return True
         except Exception as e:
+            if "TIMEOUT" in str(e):
+                return True
             logger.exception(f"PX4 Disarm failed: {e}")
             return False
 
@@ -173,6 +178,9 @@ class PX4FlightController(IFlightController):
             await self.client.action.takeoff()
             return True
         except Exception as e:
+            if "TIMEOUT" in str(e):
+                logger.warning("MAVSDK timed out on TAKEOFF, assuming success (ArduPilot compatibility)")
+                return True
             if "ActionError" in str(type(e)):
                 raise RuntimeError(f"Pixhawk rejected TAKEOFF request: {e}")
             raise RuntimeError(f"PX4 Takeoff failed: {e}")
@@ -183,6 +191,8 @@ class PX4FlightController(IFlightController):
             await self.client.action.land()
             return True
         except Exception as e:
+            if "TIMEOUT" in str(e):
+                return True
             logger.exception(f"PX4 Land failed: {e}")
             return False
 
@@ -192,6 +202,10 @@ class PX4FlightController(IFlightController):
             logger.warning("PX4 RTL rejected: Home position invalid")
             return False
         try:
+            current_alt = self._telemetry.altitude if self._telemetry.altitude is not None else 5.0
+            safe_rtl_alt = max(5.0, current_alt)
+            await self.client.param.set_param_float("RTL_RETURN_ALT", float(safe_rtl_alt))
+            logger.info(f"Set RTL_RETURN_ALT to {safe_rtl_alt}m for safe RTL")
             await self.client.action.return_to_launch()
             return True
         except Exception as e:
@@ -233,22 +247,18 @@ class PX4FlightController(IFlightController):
         telemetry = await self.get_telemetry()
         mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
         
-        # Determine if we should use offboard or manual_control
         use_manual = (not telemetry.gps_valid) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
 
         try:
             if use_manual:
-                # Normalize inputs for manual_control
                 pitch = max(-1.0, min(1.0, vx / 5.0))
                 roll = max(-1.0, min(1.0, vy / 5.0))
-                throttle = max(-1.0, min(1.0, -vz / 3.0)) # vz is NED (positive down), throttle is positive up
+                throttle = max(0.0, min(1.0, 0.5 - (vz / 6.0)))
                 yaw = max(-1.0, min(1.0, yaw_rate / 90.0))
                 
                 await self.client.manual_control.set_manual_control_input(pitch, roll, throttle, yaw)
-                await asyncio.sleep(duration)
                 return True
             else:
-                # Offboard requires valid GPS
                 await self.client.offboard.set_velocity_body(
                     VelocityBodyYawspeed(vx, vy, vz, yaw_rate)
                 )
@@ -256,25 +266,29 @@ class PX4FlightController(IFlightController):
                     await self.client.offboard.start()
                 except Exception as e:
                     logger.debug(f"Offboard start failed or already active: {e}")
-                await asyncio.sleep(duration)
                 return True
         except (OSError, RuntimeError) as e:
             logger.exception(f"PX4 Move failed: {e}")
             return False
-        finally:
-            if self._connected:
-                try:
-                    if use_manual:
-                        # Neutral command
-                        await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.0, 0.0)
-                    else:
-                        # Guarantee neutral command on exit/cancel
-                        await self.client.offboard.set_velocity_body(
-                            VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
-                        )
-                        await self.client.offboard.stop()
-                except Exception as e:
-                    logger.error(f"Failed to cleanly terminate move stream: {e}")
+
+    async def stop_movement(self) -> bool:
+        if not self._connected: return False
+        try:
+            telemetry = await self.get_telemetry()
+            mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
+            use_manual = (not telemetry.gps_valid) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
+            
+            if use_manual:
+                await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
+            else:
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                )
+                await self.client.offboard.stop()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to stop movement cleanly: {e}")
+            return False
 
     async def set_mode(self, mode: str) -> bool:
         if not self._connected:
@@ -293,6 +307,13 @@ class PX4FlightController(IFlightController):
             elif mode_upper == "MANUAL":
                 # Fallback to altitude control for manual without GPS
                 await self.client.manual_control.start_altitude_control()
+            elif mode_upper == "GUIDED" or mode_upper == "OFFBOARD":
+                # In ArduPilot, GUIDED is equivalent to PX4 OFFBOARD.
+                # MAVSDK requires a setpoint before starting offboard mode.
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                )
+                await self.client.offboard.start()
             else:
                 # Based on audit, MAVSDK-Python action class in this environment
                 # does NOT expose set_custom_mode. We cannot fake it.

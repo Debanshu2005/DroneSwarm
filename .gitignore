@@ -11,3 +11,10 @@ mobile/android/build/
 mobile/android/app/build/
 mobile/dist/
 mobile/www/
+
+# Ignore large archives and logs
+*.tar.gz
+*.txt
+*.json
+.pytest_cache/
+graphify-out/

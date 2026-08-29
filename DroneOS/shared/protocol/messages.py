@@ -34,6 +34,7 @@ class MessageType(str, Enum):
     PARAM_RESPONSE = "param_response"
     DIAGNOSTICS = "diagnostics"
     TEST_INJECT = "test_inject"
+    TERMINAL_COMMAND = "terminal_command"
 
 class BaseMessage(BaseModel):
     msg_type: MessageType
@@ -45,6 +46,10 @@ class TestInjectMessage(BaseMessage):
     msg_type: MessageType = MessageType.TEST_INJECT
     injection_type: str
     active: bool = True
+
+class TerminalCommandMessage(BaseMessage):
+    msg_type: MessageType = MessageType.TERMINAL_COMMAND
+    text: str
 
 class HeartbeatMessage(BaseMessage):
     msg_type: MessageType = MessageType.HEARTBEAT

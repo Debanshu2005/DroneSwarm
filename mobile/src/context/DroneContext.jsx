@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { MultiWebSocketManager } from '../networking/MultiWebSocketManager';
-import { MessageType, CommandAction, ControlMessage, EmergencyMessage, HeartbeatMessage, TestInjectMessage, ParamRequestMessage } from '../protocol/messages';
+import { MessageType, CommandAction, ControlMessage, EmergencyMessage, HeartbeatMessage, TestInjectMessage, ParamRequestMessage, TerminalCommandMessage } from '../protocol/messages';
 import { evaluateDroneHealth, evaluateTelemetryFreshness } from '../utils/DroneHealth';
 
 const DroneContext = createContext();
@@ -411,6 +411,17 @@ export const DroneProvider = ({ children }) => {
     });
   };
 
+  const sendTerminalCommand = (text, targetIds = null) => {
+    if (!wsManager || isConnected !== "CONNECTED") return;
+    
+    const targets = targetIds || Array.from(selectedDrones);
+    if (targets.length === 0) return;
+    
+    targets.forEach(id => {
+       wsManager.send(new TerminalCommandMessage(GS_ID, text, id));
+    });
+  };
+
   const sendParamRequest = (action, param_name = null, param_value = null, param_type = null, targetId = null) => {
     if (!wsManager || isConnected !== "CONNECTED") return;
     
@@ -468,7 +479,7 @@ export const DroneProvider = ({ children }) => {
   const value = {
     wsManager, isConnected, drones, selectedDrones,
     wsUrl, setWsUrl, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs,
-    sendCommand, sendParamRequest, toggleSelect, selectAll, selectNone, addLog,
+    sendCommand, sendTerminalCommand, sendParamRequest, toggleSelect, selectAll, selectNone, addLog,
     testOverrides, setTestOverride, clearTestOverrides, injectFailure, testSessionLog, clearTestSessionLog
   };
 

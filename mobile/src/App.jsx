@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useDroneContext } from './context/DroneContext';
-import { LayoutDashboard, Map as MapIcon, Route, Network, ShieldAlert, Activity, Settings, Menu, X, Navigation, TestTube } from 'lucide-react';
+import { LayoutDashboard, Map as MapIcon, Route, Network, ShieldAlert, Activity, Settings, Menu, X, Navigation, TestTube, Terminal } from 'lucide-react';
 import { ScreenOrientation } from '@capacitor/screen-orientation';
 import './App.css';
 
@@ -21,6 +21,7 @@ import SystemHealthView from './views/SystemHealthView';
 import LogsView from './views/LogsView';
 import AdvancedTestView from './views/AdvancedTestView';
 import MapView from './views/MapView';
+import TerminalView from './views/TerminalView';
 
 function App() {
   const { isConnected, testMode, indoorMode, nowMs, wsManager, drones } = useDroneContext();
@@ -65,6 +66,7 @@ function App() {
       case 'ADVANCED_TEST': return <AdvancedTestView />;
       case 'FLIGHT': return <DroneControlView setView={setCurrentView} />;
       case 'MAP': return <MapView />;
+      case 'TERMINAL': return <TerminalView setView={setCurrentView} />;
       default: return <DashboardView />;
     }
   };
@@ -130,7 +132,8 @@ function App() {
       items: [
         { id: 'FLIGHT', label: 'Flight Control', icon: <Navigation size={20}/> },
         { id: 'MAP', label: 'Map', icon: <MapIcon size={20}/> },
-        { id: 'MISSION', label: 'Mission', icon: <Route size={20}/> }
+        { id: 'MISSION', label: 'Mission', icon: <Route size={20}/> },
+        { id: 'TERMINAL', label: 'Terminal', icon: <Terminal size={20}/> }
       ]
     },
     {

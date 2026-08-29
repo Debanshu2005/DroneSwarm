@@ -101,6 +101,11 @@ class DroneOSApp:
             error_learning=self.error_learning
         )
         self.command_handler.network = self.network
+        from DroneOS.core.terminal_controller import TerminalController
+        self.terminal_controller = TerminalController(
+            self.command_handler, self.flight_controller, self.node_id
+        )
+        self.terminal_controller.network = self.network
         self.swarm_manager = SwarmMembership(self.node_id)
         # Update heartbeat timeout safely
         self.swarm_manager.heartbeat_mgr.timeout_sec = self.network_cfg.connection_timeout
@@ -163,8 +168,11 @@ class DroneOSApp:
         self.command_handler.register_handler(CommandAction.GOTO, self.flight_manager.goto)
         self.command_handler.register_handler(CommandAction.FORMATION_UPDATE, self.flight_manager.formation_update)
         
-        # Register safety callbacks
+        async def handle_connection_restored():
+            self.safety_module.reset_failsafe()
+            
         self.health_monitor.on_connection_lost = self.safety_module.trigger_connection_lost_failsafe
+        self.health_monitor.on_connection_restored = handle_connection_restored
         self.battery_monitor.on_low_battery = self.safety_module.trigger_low_battery_failsafe
         self.battery_monitor.on_critical_battery = self.safety_module.trigger_critical_battery_failsafe
 
@@ -264,6 +272,13 @@ class DroneOSApp:
             # Fire and forget task to avoid blocking main receive loop
             import asyncio
             self._dispatch_task(self._handle_param_request(msg))
+
+        elif msg.msg_type == MessageType.TERMINAL_COMMAND:
+            target = getattr(msg, 'target_id', None)
+            if target and target.lower() not in [self.node_id.lower(), "all"]:
+                logger.debug(f"Ignoring terminal command meant for {target}")
+                return
+            self._dispatch_task(self.terminal_controller.process_text(msg.text, msg.sender_id))
 
     async def _handle_param_request(self, msg: BaseMessage) -> None:
         from DroneOS.shared.protocol.messages import ParamResponseMessage
@@ -376,6 +391,7 @@ class DroneOSApp:
             get_battery_level=lambda: self.flight_controller._telemetry.battery_level if self.flight_controller else None
         ))
         self._dispatch_task(self._autonomous_evaluation_loop())
+        self._dispatch_task(self.terminal_controller.run_repl())
         
         # Start publisher loops
         self.telemetry_publisher.start()
