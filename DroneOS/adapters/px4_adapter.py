@@ -204,8 +204,11 @@ class PX4FlightController(IFlightController):
         try:
             current_alt = self._telemetry.altitude if self._telemetry.altitude is not None else 5.0
             safe_rtl_alt = max(5.0, current_alt)
-            await self.client.param.set_param_float("RTL_RETURN_ALT", float(safe_rtl_alt))
-            logger.info(f"Set RTL_RETURN_ALT to {safe_rtl_alt}m for safe RTL")
+            try:
+                await self.client.param.set_param_float("RTL_RETURN_ALT", float(safe_rtl_alt))
+                logger.info(f"Set RTL_RETURN_ALT to {safe_rtl_alt}m for safe RTL")
+            except Exception as param_err:
+                logger.warning(f"Could not set RTL_RETURN_ALT (might not exist in this firmware): {param_err}")
             await self.client.action.return_to_launch()
             return True
         except Exception as e:
