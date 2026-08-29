@@ -101,6 +101,11 @@ class DroneOSApp:
             error_learning=self.error_learning
         )
         self.command_handler.network = self.network
+        from DroneOS1.core.terminal_controller import TerminalController
+        self.terminal_controller = TerminalController(
+            self.command_handler, self.flight_controller, self.node_id
+        )
+        self.terminal_controller.network = self.network
         self.swarm_manager = SwarmMembership(self.node_id)
         # Update heartbeat timeout safely
         self.swarm_manager.heartbeat_mgr.timeout_sec = self.network_cfg.connection_timeout
@@ -265,6 +270,13 @@ class DroneOSApp:
             # Fire and forget task to avoid blocking main receive loop
             import asyncio
             self._dispatch_task(self._handle_param_request(msg))
+
+        elif msg.msg_type == MessageType.TERMINAL_COMMAND:
+            target = getattr(msg, 'target_id', None)
+            if target and target.lower() not in [self.node_id.lower(), "all"]:
+                logger.debug(f"Ignoring terminal command meant for {target}")
+                return
+            self._dispatch_task(self.terminal_controller.process_text(msg.text, msg.sender_id))
 
     async def _handle_param_request(self, msg: BaseMessage) -> None:
         from DroneOS.shared.protocol.messages import ParamResponseMessage

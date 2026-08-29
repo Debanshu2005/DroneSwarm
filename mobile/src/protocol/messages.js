@@ -79,11 +79,11 @@ export class HeartbeatMessage extends BaseMessage {
 }
 
 export class ControlMessage extends BaseMessage {
-    constructor(sender_id, action, params = null, target_id = null, command_id = null) {
+    constructor(sender_id, action, params = null, target_id = null, cmd_id = null) {
         super(MessageType.CONTROL, sender_id, target_id);
         this.action = action;
-        this.params = params;
-        this.command_id = command_id || `cmd_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        this.params = params || {};
+        this.cmd_id = cmd_id || `cmd_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
     }
 }
 
