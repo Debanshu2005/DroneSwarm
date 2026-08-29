@@ -161,6 +161,7 @@ class DroneOSApp:
         self.command_handler.register_handler(CommandAction.MOVE, self.flight_manager.move)
         self.command_handler.register_handler(CommandAction.SET_MODE, self.flight_manager.set_mode)
         self.command_handler.register_handler(CommandAction.GOTO, self.flight_manager.goto)
+        self.command_handler.register_handler(CommandAction.GOTO_LOCAL, self.flight_manager.goto_local)
         self.command_handler.register_handler(CommandAction.FORMATION_UPDATE, self.flight_manager.formation_update)
         
         # Register safety callbacks

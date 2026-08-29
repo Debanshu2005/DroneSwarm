@@ -109,6 +109,7 @@ class CommandAction(str, Enum):
     FORMATION_UPDATE = "formation_update"
     SET_MODE = "set_mode"
     GOTO = "goto"
+    GOTO_LOCAL = "goto_local"
 
 class ControlMessage(BaseMessage):
     msg_type: MessageType = MessageType.CONTROL

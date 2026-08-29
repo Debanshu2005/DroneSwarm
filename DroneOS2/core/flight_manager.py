@@ -150,6 +150,34 @@ class FlightManager:
         # Call FC adapter goto (which should compile a temporary mission)
         return await self.fc.goto_location(lat, lon, alt)
 
+    async def goto_local(self, params: Dict[str, Any]) -> bool:
+        telemetry = await self.fc.get_telemetry()
+        if getattr(telemetry, 'armed_state', None) != "ARMED":
+            logger.error("Cannot goto_local: Drone is not ARMED.")
+            return False
+            
+        north = params.get('north')
+        east = params.get('east')
+        down = params.get('down')
+        if north is None or east is None or down is None:
+            logger.error("Goto local requires north, east, and down parameters.")
+            return False
+            
+        # Basic Validation
+        if not telemetry.local_pos_valid:
+            logger.error("Goto local failed: Local position (Optical Flow) is invalid.")
+            return False
+        if telemetry.battery_level is not None and telemetry.battery_level < 10.0:
+            logger.error("Goto local failed: Battery too low for mission.")
+            return False
+            
+        # Call FC adapter goto_local_ned
+        if hasattr(self.fc, 'goto_local_ned'):
+            return await self.fc.goto_local_ned(north, east, down)
+        else:
+            logger.error("Flight Controller does not support goto_local_ned")
+            return False
+
     async def set_mode(self, params: Dict[str, Any]) -> bool:
         mode = params.get('mode')
         if not mode:

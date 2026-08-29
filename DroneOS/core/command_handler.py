@@ -108,6 +108,11 @@ class CommandHandler:
             if is_emergency: return "Command rejected: Emergency stop active"
             if not getattr(telemetry, 'gps_valid', False): return "Command rejected: GPS unavailable (GOTO requires global position)"
             
+        elif action == CommandAction.GOTO_LOCAL:
+            if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
+            if is_emergency: return "Command rejected: Emergency stop active"
+            if not getattr(telemetry, 'local_pos_valid', False): return "Command rejected: Local position unavailable (Optical flow/VIO needed)"
+            
         return ""
 
     def _dispatch_task(self, coro):

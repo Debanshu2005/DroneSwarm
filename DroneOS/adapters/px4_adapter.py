@@ -294,6 +294,20 @@ class PX4FlightController(IFlightController):
             logger.exception(f"PX4 Goto Location failed: {e}")
             return False
 
+    async def goto_local_ned(self, north: float, east: float, down: float, yaw: float = 0.0) -> bool:
+        if not self._connected: return False
+        try:
+            from mavsdk.offboard import PositionNedYaw
+            await self.client.offboard.set_position_ned(PositionNedYaw(north, east, down, yaw))
+            try:
+                await self.client.offboard.start()
+            except Exception as e:
+                logger.debug(f"Offboard start failed or already active: {e}")
+            return True
+        except Exception as e:
+            logger.exception(f"PX4 Goto Local NED failed: {e}")
+            return False
+
     async def move_velocity(self, vx: float, vy: float, vz: float, duration: float, yaw_rate: float = 0.0) -> bool:
         if not self._connected: return False
         

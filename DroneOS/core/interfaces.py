@@ -97,6 +97,20 @@ class IFlightController(ABC):
         pass
 
     @abstractmethod
+    async def goto_location(self, lat: float, lon: float, alt: float, yaw: float = 0.0) -> bool:
+        """
+        Commands the drone to a global coordinate.
+        """
+        pass
+
+    @abstractmethod
+    async def goto_local_ned(self, north: float, east: float, down: float, yaw: float = 0.0) -> bool:
+        """
+        Commands the drone to a local coordinate (NED frame).
+        """
+        pass
+
+    @abstractmethod
     async def stop_movement(self) -> bool:
         """
         Stops the drone movement safely by commanding neutral inputs.

@@ -13,7 +13,10 @@ from DroneOS.shared.nlp.trajectory_engine import (
     ParsedTask, 
     build_trajectory, 
     GlobalTarget,
-    global_distance_m
+    global_distance_m,
+    TargetFrame,
+    LocalTarget,
+    local_distance_m
 )
 from DroneOS.shared.nlp.telemetry_bridge import build_nav_context
 
@@ -269,7 +272,10 @@ class TerminalController:
                 logger.error(f"Trajectory rejected: {e}")
                 return False
                 
-            return await self._run_waypoints(plan.global_targets, sender_id)
+            if plan.frame == TargetFrame.LOCAL_NED:
+                return await self._run_local_waypoints(plan.local_targets, sender_id)
+            else:
+                return await self._run_waypoints(plan.global_targets, sender_id)
 
     async def _run_waypoints(self, targets: list[GlobalTarget], sender_id: str,
                              acceptance_radius_m: float = 2.5,
@@ -311,6 +317,49 @@ class TerminalController:
                         
                 await asyncio.sleep(0.5)
                 
+            if target.hold_s > 0:
+                await asyncio.sleep(target.hold_s)
+                
+        return True
+
+    async def _run_local_waypoints(self, targets: list[LocalTarget], sender_id: str,
+                                   timeout_s: float = 60.0) -> bool:
+        telemetry = await self.flight_controller.get_telemetry()
+        _, origin = build_nav_context(telemetry)
+        
+        last_north = origin.local_north_m or 0.0
+        last_east = origin.local_east_m or 0.0
+        last_down = origin.local_down_m or 0.0
+        
+        for target in targets:
+            msg = ControlMessage(
+                action=CommandAction.GOTO_LOCAL,
+                params={
+                    "north": target.north_m,
+                    "east": target.east_m,
+                    "down": target.down_m
+                },
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            
+            accepted = await self.command_handler.handle_command(msg)
+            if not accepted:
+                logger.error(f"GOTO_LOCAL command rejected for waypoint {target.name}")
+                return False
+                
+            dist = math.sqrt((target.north_m - last_north)**2 + 
+                             (target.east_m - last_east)**2 + 
+                             (target.down_m - last_down)**2)
+            
+            # Assume ~1.0 m/s travel speed
+            travel_time = max(1.0, dist / 1.0)
+            await asyncio.sleep(travel_time)
+            
+            last_north = target.north_m
+            last_east = target.east_m
+            last_down = target.down_m
+            
             if target.hold_s > 0:
                 await asyncio.sleep(target.hold_s)
                 
