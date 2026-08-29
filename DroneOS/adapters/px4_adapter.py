@@ -173,17 +173,59 @@ class PX4FlightController(IFlightController):
 
     async def takeoff(self, altitude: float = 10.0) -> bool:
         if not self._connected: return False
-        try:
-            await self.client.action.set_takeoff_altitude(altitude)
-            await self.client.action.takeoff()
-            return True
-        except Exception as e:
-            if "TIMEOUT" in str(e):
-                logger.warning("MAVSDK timed out on TAKEOFF, assuming success (ArduPilot compatibility)")
+        
+        telemetry = await self.get_telemetry()
+        
+        if telemetry.gps_valid:
+            try:
+                await self.client.action.set_takeoff_altitude(altitude)
+                await self.client.action.takeoff()
                 return True
-            if "ActionError" in str(type(e)):
-                raise RuntimeError(f"Pixhawk rejected TAKEOFF request: {e}")
-            raise RuntimeError(f"PX4 Takeoff failed: {e}")
+            except Exception as e:
+                if "ActionError" in str(type(e)):
+                    raise RuntimeError(f"Pixhawk rejected TAKEOFF request: {e}")
+                raise RuntimeError(f"PX4 Takeoff failed: {e}")
+        elif telemetry.local_pos_valid:
+            logger.info("No GPS lock. Using Offboard mode for Optical Flow takeoff.")
+            try:
+                # Need to use offboard mode to take off without GPS
+                # Start offboard with 0 velocity
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                )
+                await self.client.offboard.start()
+                
+                # Command upward velocity (-Z in NED frame)
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0.0, 0.0, -1.0, 0.0)
+                )
+                
+                # Wait until we reach the approximate altitude
+                import asyncio
+                start_alt = telemetry.altitude if telemetry.altitude is not None else 0.0
+                target_alt = start_alt + altitude
+                
+                for _ in range(150): # timeout after 15s
+                    await asyncio.sleep(0.1)
+                    current_telemetry = await self.get_telemetry()
+                    current_alt = current_telemetry.altitude if current_telemetry.altitude is not None else 0.0
+                    if current_alt >= target_alt - 0.2:
+                        break
+                        
+                # Hover in place
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                )
+                return True
+            except Exception as e:
+                logger.error(f"Offboard takeoff failed: {e}")
+                try:
+                    await self.client.offboard.stop()
+                except:
+                    pass
+                raise RuntimeError(f"Offboard Optical Flow Takeoff failed: {e}")
+        else:
+            raise RuntimeError("Cannot takeoff: Neither GPS nor Local Position (Optical Flow) is valid.")
 
     async def land(self) -> bool:
         if not self._connected: return False
