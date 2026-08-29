@@ -272,7 +272,7 @@ class TerminalController:
             return await self._run_waypoints(plan.global_targets, sender_id)
 
     async def _run_waypoints(self, targets: list[GlobalTarget], sender_id: str,
-                             acceptance_radius_m: float = 1.0,
+                             acceptance_radius_m: float = 2.5,
                              timeout_s: float = 60.0) -> bool:
         for target in targets:
             msg = ControlMessage(

@@ -238,7 +238,15 @@ class PX4FlightController(IFlightController):
     async def goto_location(self, lat: float, lon: float, alt: float, yaw: float = 0.0) -> bool:
         if not self._connected: return False
         try:
-            await self.client.action.goto_location(lat, lon, alt, yaw)
+            # alt is passed as relative altitude. MAVSDK expects absolute altitude (AMSL).
+            home_abs_alt = 0.0
+            async for terrain_info in self.client.telemetry.home():
+                home_abs_alt = terrain_info.absolute_altitude_m
+                break
+            
+            target_abs_alt = home_abs_alt + alt
+            logger.info(f"PX4 Goto: lat={lat}, lon={lon}, rel_alt={alt}, abs_alt={target_abs_alt}")
+            await self.client.action.goto_location(lat, lon, target_abs_alt, yaw)
             return True
         except Exception as e:
             logger.exception(f"PX4 Goto Location failed: {e}")
