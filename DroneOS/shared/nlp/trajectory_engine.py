@@ -185,22 +185,27 @@ def parse_mission(
     if has_disarm: tasks.append({'task': 'DISARM'})
 
     # Handle standalone directional commands for continuous movement
-    if normalized in ["forward", "move forward", "go forward"]:
+    import difflib
+    def _is_match(text: str, candidates: list[str]) -> bool:
+        if text in candidates: return True
+        return len(difflib.get_close_matches(text, candidates, n=1, cutoff=0.75)) > 0
+
+    if _is_match(normalized, ["forward", "move forward", "go forward"]):
         tasks.append({'task': 'FORWARD'})
         has_goto = False
-    elif normalized in ["backward", "back", "move backward", "move back", "go backward", "go back"]:
+    elif _is_match(normalized, ["backward", "back", "move backward", "move back", "go backward", "go back"]):
         tasks.append({'task': 'BACKWARD'})
         has_goto = False
-    elif normalized in ["left", "move left", "go left"]:
+    elif _is_match(normalized, ["left", "move left", "go left"]):
         tasks.append({'task': 'LEFT'})
         has_goto = False
-    elif normalized in ["right", "move right", "go right"]:
+    elif _is_match(normalized, ["right", "move right", "go right"]):
         tasks.append({'task': 'RIGHT'})
         has_goto = False
-    elif normalized in ["up", "move up", "go up"]:
+    elif _is_match(normalized, ["up", "move up", "go up"]):
         tasks.append({'task': 'UP'})
         has_goto = False
-    elif normalized in ["down", "move down", "go down"]:
+    elif _is_match(normalized, ["down", "move down", "go down"]):
         tasks.append({'task': 'DOWN'})
         has_goto = False
 
