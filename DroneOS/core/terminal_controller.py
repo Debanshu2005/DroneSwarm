@@ -192,6 +192,40 @@ class TerminalController:
             )
             return await self.command_handler.handle_command(msg)
             
+        elif task.action in [TaskAction.FORWARD, TaskAction.BACKWARD, TaskAction.LEFT, TaskAction.RIGHT, TaskAction.UP, TaskAction.DOWN]:
+            vx, vy, vz = 0.0, 0.0, 0.0
+            speed = 1.0 # m/s
+            
+            if task.action == TaskAction.FORWARD: vx = speed
+            elif task.action == TaskAction.BACKWARD: vx = -speed
+            elif task.action == TaskAction.RIGHT: vy = speed
+            elif task.action == TaskAction.LEFT: vy = -speed
+            elif task.action == TaskAction.DOWN: vz = speed
+            elif task.action == TaskAction.UP: vz = -speed
+                
+            # Send continuous velocity setpoints for 2 seconds (like holding down the D-Pad)
+            end_time = time.time() + 2.0
+            while time.time() < end_time:
+                msg = ControlMessage(
+                    action=CommandAction.MOVE,
+                    params={"vx": vx, "vy": vy, "vz": vz, "yaw_rate": 0.0},
+                    sender_id=sender_id,
+                    timestamp=time.time()
+                )
+                success = await self.command_handler.handle_command(msg)
+                if not success:
+                    return False
+                await asyncio.sleep(0.1)
+                
+            # Finish by hovering to stop movement
+            hover_msg = ControlMessage(
+                action=CommandAction.HOVER,
+                params={},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(hover_msg)
+            
         elif task.action == TaskAction.TAKEOFF_LAND:
             target_alt = task.params.get("h", 5.0)
             msg1 = ControlMessage(

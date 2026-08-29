@@ -64,6 +64,12 @@ class TaskAction(str, Enum):
     MOVE_RELATIVE = "move_relative"
     ARM = "arm"
     DISARM = "disarm"
+    FORWARD = "forward"
+    BACKWARD = "backward"
+    LEFT = "left"
+    RIGHT = "right"
+    UP = "up"
+    DOWN = "down"
 
 
 class TargetFrame(str, Enum):
@@ -177,6 +183,26 @@ def parse_mission(
 
     if has_arm and not has_disarm: tasks.append({'task': 'ARM'})
     if has_disarm: tasks.append({'task': 'DISARM'})
+
+    # Handle standalone directional commands for continuous movement
+    if normalized in ["forward", "move forward", "go forward"]:
+        tasks.append({'task': 'FORWARD'})
+        has_goto = False
+    elif normalized in ["backward", "back", "move backward", "move back", "go backward", "go back"]:
+        tasks.append({'task': 'BACKWARD'})
+        has_goto = False
+    elif normalized in ["left", "move left", "go left"]:
+        tasks.append({'task': 'LEFT'})
+        has_goto = False
+    elif normalized in ["right", "move right", "go right"]:
+        tasks.append({'task': 'RIGHT'})
+        has_goto = False
+    elif normalized in ["up", "move up", "go up"]:
+        tasks.append({'task': 'UP'})
+        has_goto = False
+    elif normalized in ["down", "move down", "go down"]:
+        tasks.append({'task': 'DOWN'})
+        has_goto = False
 
     if has_takeoff:
         alt = kv_matches.get('h', kv_matches.get('altitude', kv_matches.get('height')))
