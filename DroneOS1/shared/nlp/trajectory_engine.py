@@ -54,6 +54,7 @@ class TaskAction(str, Enum):
     SPIRAL = "spiral"
     FIGURE_8 = "figure-8"
     GRID = "grid"
+    FORMATION = "formation"
     HOVER = "hover"
     SET_MODE = "set_mode"
     HOLD = "hold"
@@ -179,7 +180,10 @@ def parse_mission(
     has_arm = bool(re.search(r'\barm\b', action_text))
     has_disarm = bool(re.search(r'\bdisarm\b', action_text))
     has_goto = bool(re.search(r'\bgoto\b|\bgo\b|\bmove\b|\bfly\b|\bclimb\b|\bascend\b|\bdescend\b|\blower\b', action_text))
-    shape_match = re.search(r'\b(circle|square|triangle|spiral|figure-8|grid)\b', normalized)
+    form_match = re.search(r'\b(?:form|formation)\s+(circle|square|v|line|column|wedge|echelon_left|echelon_right|diamond|grid)\b', normalized)
+    shape_match = None
+    if not form_match:
+        shape_match = re.search(r'\b(circle|square|triangle|spiral|figure-8|grid)\b', normalized)
 
     if has_arm and not has_disarm: tasks.append({'task': 'ARM'})
     if has_disarm: tasks.append({'task': 'DISARM'})
@@ -309,6 +313,26 @@ def parse_mission(
             
         tasks.append(task_dict)
         
+    if form_match:
+        shape_name = form_match.group(1)
+        scale = kv_matches.get('spacing', kv_matches.get('r', kv_matches.get('radius', kv_matches.get('size', kv_matches.get('side')))))
+        if scale is None:
+            scale = _named_distance_m(normalized, ("spacing", "radius", "size", "side"))
+        if scale is None:
+            scale_match = re.search(
+                r'(\d+(?:\.\d+)?)\s*(cm|m|km|meter|meters|kilometer|kilometers|centimeter|centimeters)\b',
+                normalized,
+            )
+            if scale_match:
+                scale = _normalize_distance_m(float(scale_match.group(1)), scale_match.group(2))
+        
+        task_dict = {
+            'task': 'SWARM_FORMATION', 
+            'shape': shape_name, 
+            'spacing': scale if scale is not None else 5.0, 
+        }
+        tasks.append(task_dict)
+
     if has_hold: tasks.append({'task': 'HOLD'})
     if has_land: tasks.append({'task': 'LAND'})
     if has_rtl: tasks.append({'task': 'RTL'})
@@ -396,6 +420,10 @@ def parse_task_sequence(
                 params['turns'] = d['turns']
             if 'alt' in d:
                 params['h'] = d['alt']
+        elif action_str == 'SWARM_FORMATION':
+            action = TaskAction.FORMATION
+            params['type'] = d['shape'].upper()
+            params['spacing'] = d.get('spacing', 5.0)
         elif action_str == 'SET_MODE':
             action = TaskAction.SET_MODE
             tasks.append(ParsedTask(action, {}, text, notes=(f"mode={d['mode']}",)))

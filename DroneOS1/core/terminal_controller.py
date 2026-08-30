@@ -147,6 +147,15 @@ class TerminalController:
             )
             return await self.command_handler.handle_command(msg)
             
+        elif task.action == TaskAction.FORMATION:
+            msg = ControlMessage(
+                action=CommandAction.FORMATION_UPDATE,
+                params={"type": task.params.get("type", "CIRCLE"), "spacing": task.params.get("spacing", 5.0)},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(msg)
+            
         elif task.action == TaskAction.HOVER:
             msg = ControlMessage(
                 action=CommandAction.HOVER,

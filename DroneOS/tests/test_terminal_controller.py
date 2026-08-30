@@ -243,3 +243,18 @@ async def test_takeoff_arm_timeout(terminal_controller, mocks):
     assert command_handler.handle_command.call_count == 1
     calls = command_handler.handle_command.call_args_list
     assert calls[0].args[0].action == CommandAction.ARM
+
+@pytest.mark.asyncio
+async def test_formation_update(terminal_controller, mocks):
+    command_handler, flight_controller = mocks
+    
+    # "form circle spacing 5"
+    await terminal_controller.process_text("form circle spacing 5m", sender_id="test-1")
+    
+    assert command_handler.handle_command.call_count == 1
+    call_args = command_handler.handle_command.call_args[0][0]
+    
+    assert call_args.action == CommandAction.FORMATION_UPDATE
+    assert call_args.params["type"] == "CIRCLE"
+    assert call_args.params["spacing"] == 5.0
+

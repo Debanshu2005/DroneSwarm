@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useDroneContext } from '../context/DroneContext';
 import { Network, ArrowRight } from 'lucide-react';
 
@@ -9,6 +9,30 @@ export default function SwarmView() {
   const warningDrones = Object.values(drones).filter(d => d.status === 'failsafe');
   const offlineDrones = Object.values(drones).filter(d => d.status === 'OFFLINE');
   const armedDrones = Object.values(drones).filter(d => d?.telemetry?.armed_state === 'ARMED');
+
+  const [selectedShape, setSelectedShape] = useState('Diamond');
+  const [spacingValue, setSpacingValue] = useState('5');
+  const { sendCommand } = useDroneContext();
+
+  const handleApply = () => {
+    if (onlineDrones.length === 0) {
+      alert("No online drones available for formation.");
+      return;
+    }
+    
+    const isAnyArmed = onlineDrones.some(d => d?.telemetry?.armed_state === 'ARMED');
+    if (!isAnyArmed) {
+      alert("No targeted drones are armed. Please arm at least one drone first.");
+      return;
+    }
+    
+    const targetIds = onlineDrones.map(d => d.id);
+    sendCommand(
+      'formation_update', // Assuming CommandAction.FORMATION_UPDATE resolves to 'formation_update'
+      { type: selectedShape.toUpperCase(), spacing: Number(spacingValue) || 5 },
+      targetIds
+    );
+  };
 
   return (
     <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
@@ -63,17 +87,55 @@ export default function SwarmView() {
          <div style={{marginTop: '20px', padding: '15px', background: 'var(--bg-color)', border: '1px solid var(--border)', borderRadius: '8px', width: '100%', maxWidth: '500px'}}>
             <h4 style={{marginBottom: '10px', fontSize: '14px'}}>Swarm Formation Control</h4>
             <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
-               <select disabled style={{flex: 1, padding: '10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', opacity: 0.5}}>
+               <select 
+                  value={selectedShape}
+                  onChange={(e) => setSelectedShape(e.target.value)}
+                  style={{flex: 1, padding: '10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px'}}
+               >
                   <option>Diamond</option>
                   <option>V</option>
                   <option>Line</option>
+                  <option>Column</option>
                   <option>Square</option>
                   <option>Circle</option>
+                  <option>Grid</option>
+                  <option>Wedge</option>
+                  <option>Echelon_Left</option>
+                  <option>Echelon_Right</option>
                </select>
-               <button className="primary-btn" disabled style={{opacity: 0.5}}>Apply</button>
+               <input
+                  type="number"
+                  value={spacingValue}
+                  onChange={(e) => setSpacingValue(e.target.value)}
+                  placeholder="Spacing (m)"
+                  style={{width: '100px', padding: '10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)'}}
+               />
+               <button className="primary-btn" onClick={handleApply}>Apply</button>
             </div>
-            <div style={{color: 'var(--danger)', fontSize: '12px', marginTop: '10px', textAlign: 'center', fontWeight: 600}}>
-               FORMATION CONTROL UNSUPPORTED BY BACKEND
+            
+            <div style={{marginTop: '15px'}}>
+               <h5 style={{fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px'}}>Formation Command Status</h5>
+               {onlineDrones.length > 0 ? (
+                  <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px'}}>
+                     {onlineDrones.map(d => {
+                        const isFormCmd = d.commandState?.action === 'formation_update';
+                        const stateColor = isFormCmd && d.commandState?.state === 'ACCEPTED' ? 'var(--success)' :
+                                           isFormCmd && d.commandState?.state === 'REJECTED' ? 'var(--danger)' :
+                                           isFormCmd && d.commandState?.state === 'SENDING' ? 'var(--warning)' : 'var(--text-muted)';
+                        
+                        return (
+                           <div key={d.id} style={{fontSize: '11px', display: 'flex', justifyContent: 'space-between', padding: '4px 8px', background: 'var(--surface)', borderRadius: '4px'}}>
+                              <span>{d.id}</span>
+                              <span style={{color: stateColor, fontWeight: 600}}>
+                                 {isFormCmd ? d.commandState.state : 'IDLE'}
+                              </span>
+                           </div>
+                        );
+                     })}
+                  </div>
+               ) : (
+                  <div style={{fontSize: '12px', color: 'var(--text-muted)'}}>No online drones.</div>
+               )}
             </div>
          </div>
       </div>
