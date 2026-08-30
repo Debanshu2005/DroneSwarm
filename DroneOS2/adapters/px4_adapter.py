@@ -51,62 +51,59 @@ class PX4FlightController(IFlightController):
             except Exception as e:
                 logger.warning(f"Failed to kill orphaned MAVSDK server: {e}")
 
-        while not self._connected:
-            conn_str = self.config.px4_connection_string
+        conn_str = self.config.px4_connection_string
 
-            if conn_str.startswith("serial://auto:"):
-                baud = conn_str.split(":")[-1]
-                device = None
-                while not device:
-                    by_id_paths = sorted(glob.glob("/dev/serial/by-id/*"))
-                    acm_paths = sorted(glob.glob("/dev/ttyACM*"))
-                    usb_paths = sorted(glob.glob("/dev/ttyUSB*"))
-                    
-                    match = re.search(r'\d+', self.vehicle_name)
-                    idx = (int(match.group()) - 1) if match else 0
-                    
-                    if by_id_paths and len(by_id_paths) > idx:
-                        device = by_id_paths[idx]
-                    elif acm_paths and len(acm_paths) > idx:
-                        device = acm_paths[idx]
-                    elif usb_paths and len(usb_paths) > idx:
-                        device = usb_paths[idx]
-                    elif by_id_paths:
-                        device = by_id_paths[-1] # Fallback
-                        
-                    if device:
-                        conn_str = f"serial://{device}:{baud}"
-                        break
-                    else:
-                        logger.info("PX4 DEVICE WAITING")
-                        await asyncio.sleep(2.0)
+        if conn_str.startswith("serial://auto:"):
+            baud = conn_str.split(":")[-1]
+            device = None
             
-            kill_orphaned_mavsdk(conn_str)
-            # Recreate System to ensure it spawns a fresh mavsdk_server if it previously failed
-            self.client = System()
+            by_id_paths = sorted(glob.glob("/dev/serial/by-id/*"))
+            acm_paths = sorted(glob.glob("/dev/ttyACM*"))
+            usb_paths = sorted(glob.glob("/dev/ttyUSB*"))
+            
+            match = re.search(r'\d+', self.vehicle_name)
+            idx = (int(match.group()) - 1) if match else 0
+            
+            if by_id_paths and len(by_id_paths) > idx:
+                device = by_id_paths[idx]
+            elif acm_paths and len(acm_paths) > idx:
+                device = acm_paths[idx]
+            elif usb_paths and len(usb_paths) > idx:
+                device = usb_paths[idx]
+            elif by_id_paths:
+                device = by_id_paths[-1] # Fallback
+                
+            if device:
+                conn_str = f"serial://{device}:{baud}"
+            else:
+                logger.info("PX4 DEVICE NOT FOUND")
+                return False
+        
+        kill_orphaned_mavsdk(conn_str)
+        # Recreate System to ensure it spawns a fresh mavsdk_server if it previously failed
+        self.client = System()
 
-            logger.info(f"PX4 CONNECTING to {conn_str}")
-            try:
-                # Wrap connect in a timeout to prevent hanging forever
-                await asyncio.wait_for(self.client.connect(system_address=conn_str), timeout=10.0)
-                
-                async def wait_for_connection():
-                    async for state in self.client.core.connection_state():
-                        if state.is_connected:
-                            return True
-                    return False
-                
-                # Wrap connection state in a timeout as well
-                is_connected = await asyncio.wait_for(wait_for_connection(), timeout=15.0)
-                if is_connected:
-                    logger.info("PX4 CONNECTED")
-                    self._connected = True
-                    break
-            except (asyncio.TimeoutError, Exception) as e:
-                logger.warning(f"Connection attempt failed ({type(e).__name__}). Retrying in 5s...")
-                await asyncio.sleep(5.0)
-                
-        self._connected = True
+        logger.info(f"PX4 CONNECTING to {conn_str}")
+        try:
+            # Wrap connect in a timeout to prevent hanging forever
+            await asyncio.wait_for(self.client.connect(system_address=conn_str), timeout=10.0)
+            
+            async def wait_for_connection():
+                async for state in self.client.core.connection_state():
+                    if state.is_connected:
+                        return True
+                return False
+            
+            # Wrap connection state in a timeout as well
+            is_connected = await asyncio.wait_for(wait_for_connection(), timeout=15.0)
+            if is_connected:
+                logger.info("PX4 CONNECTED")
+                self._connected = True
+            else:
+                return False
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.warning(f"Connection attempt failed ({type(e).__name__}).")
+            return False
         
         # Request required MAVLink telemetry streams safely
         async def safe_set_rate(method_name, rate):
