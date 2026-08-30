@@ -50,11 +50,6 @@ def wait_for_port(port: int, timeout: float = 10.0) -> bool:
         time.sleep(0.1)
     return False
 
-def get_mavsdk_server_path():
-    import mavsdk
-    import os
-    return os.path.join(os.path.dirname(mavsdk.__file__), "bin", "mavsdk_server")
-
 def main():
     config_dir = Path(__file__).resolve().parent / "DroneOS" / "configs"
     drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
@@ -82,22 +77,7 @@ def main():
             
     time.sleep(1.0)
     
-    # 2. Spawn MAVSDK Server manually
-    mavsdk_bin = get_mavsdk_server_path()
-    print(f"[{drone_cfg.drone_id}] Starting {mavsdk_bin} on port {server_port}")
-    
-    mavsdk_proc = subprocess.Popen(
-        [mavsdk_bin, "-p", str(server_port), resolved_conn],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    
-    if not wait_for_port(server_port):
-        print(f"[{drone_cfg.drone_id}] ERROR: MAVSDK server failed to listen on port {server_port}.")
-        mavsdk_proc.kill()
-        sys.exit(1)
-        
-    print(f"[{drone_cfg.drone_id}] MAVSDK server ready. Starting Relay...")
+    print(f"[{drone_cfg.drone_id}] Starting Relay...")
     
     # 3. Spawn Relay manually
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
@@ -107,14 +87,7 @@ def main():
         stderr=subprocess.DEVNULL
     )
     
-    # 4. Monkey-patch mavsdk.System so DroneOS connects cleanly
-    import mavsdk
-    old_init = mavsdk.System.__init__
-    def patched_init(self, *args, **kwargs):
-        kwargs['mavsdk_server_address'] = '127.0.0.1'
-        kwargs['port'] = server_port
-        old_init(self, *args, **kwargs)
-    mavsdk.System.__init__ = patched_init
+
     
     # 5. Run the DroneOS application
     from DroneOS.main import DroneOSApp
@@ -134,13 +107,6 @@ def main():
             relay_proc.wait(timeout=5.0)
         except subprocess.TimeoutExpired:
             relay_proc.kill()
-            
-        print(f"[{drone_cfg.drone_id}] Terminating managed MAVSDK server (PID {mavsdk_proc.pid})...")
-        mavsdk_proc.terminate()
-        try:
-            mavsdk_proc.wait(timeout=5.0)
-        except subprocess.TimeoutExpired:
-            mavsdk_proc.kill()
             
         print(f"[{drone_cfg.drone_id}] Lifecycle Manager exit.")
 
