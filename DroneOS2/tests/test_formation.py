@@ -115,6 +115,7 @@ async def test_formation_flight_loop_staleness():
         "drone0": peer_anchor,
         "drone1": peer_self
     }
+    fm.swarm_manager.registry.get_peer.side_effect = lambda x: fm.swarm_manager.registry.peers.get(x)
     
     # Intercept hover to stop the loop
     hover_called = asyncio.Event()
