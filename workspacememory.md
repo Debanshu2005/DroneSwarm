@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-08-30T04:27:28.501Z
+Generated: 2026-08-30T18:02:33.629Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -18,14 +18,14 @@ Structured manifest: workspace.json
 - Graphify graph: not available yet
 - Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: DroneOS2/shared/protocol/messages.py
+- Active file in focus: No active file detected
 - Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
-- Suggested starting points: DroneOS2/shared/protocol/messages.py, DroneOS/tests/test_terminal_controller.py, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md
+- Suggested starting points: DroneOS/tests/test_terminal_controller.py, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md, mobile/.gitignore
 ## Current Workspace
-- Active file: DroneOS2/shared/protocol/messages.py
-- Tracked files in snapshot: 2115
-- Top-level areas: venv (1780), mobile (128), DroneOS (54), DroneOS1 (54), DroneOS2 (54), [root] (28), deploy (6), .pytest_cache (4)
-- Primary file types: .py (1614), [no extension] (198), .txt (53), .typed (29), .png (26), .jsx (21), .js (15), .yaml (15)
+- Active file: No active file detected
+- Tracked files in snapshot: 2118
+- Top-level areas: venv (1780), mobile (128), DroneOS (55), DroneOS1 (55), DroneOS2 (55), [root] (28), deploy (6), .pytest_cache (4)
+- Primary file types: .py (1617), [no extension] (198), .txt (53), .typed (29), .png (26), .jsx (21), .js (15), .yaml (15)
 - Key files: .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md, mobile/.gitignore, mobile/README.md, mobile/android/.gitignore, mobile/android/app/.gitignore
 ## Package Snapshot
 - Package metadata unavailable: package.json was not found.
@@ -51,7 +51,7 @@ Structured manifest: workspace.json
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-08-29 74ad173 feat: add PX4FlightController adapter using MAVSDK for drone operations
+- HEAD: 2026-08-30 d1984d2 feat: implement terminal controller, trajectory engine, and swarm visualization view for drone fleet orchestration
 - Working tree summary: clean
 - Working tree: clean
 
@@ -61,8 +61,8 @@ Visibility: public | Default branch: main
 Stars: 0 | Forks: 0 | Open issues: 0
 
 Latest commit on main:
-- 74ad173 by Debanshu2005 on 2026-08-29
-  feat: add PX4FlightController adapter using MAVSDK for drone operations
+- d1984d2 by Debanshu2005 on 2026-08-30
+  feat: implement terminal controller, trajectory engine, and swarm visualization view for drone fleet orchestration
 
 URL: https://github.com/Debanshu2005/DroneSwarm
 

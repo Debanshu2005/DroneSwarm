@@ -1,5 +1,5 @@
 [Unit]
-Description=PhoneOS DroneOS Service
+Description=PhoneOS Drone1 Unified Service
 After=network-online.target
 Wants=network-online.target
 
@@ -8,7 +8,7 @@ Type=simple
 User=pi
 WorkingDirectory=/home/pi/Projects/PhoneOS
 Environment="PYTHONPATH=/home/pi/Projects/PhoneOS"
-ExecStart=/bin/bash -c "source venv/bin/activate && python -m DroneOS.main"
+ExecStart=/home/pi/Projects/PhoneOS/venv/bin/python start_drone1.py
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal

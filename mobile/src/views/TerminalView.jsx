@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useDroneContext } from '../context/DroneContext';
-import { Terminal, Send } from 'lucide-react';
+import { Terminal, Send, ArrowLeft } from 'lucide-react';
 import { MessageType } from '../protocol/messages';
 
 export default function TerminalView({ setView }) {
@@ -98,6 +98,9 @@ export default function TerminalView({ setView }) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'monospace', background: '#1e1e1e', color: '#00ff00', borderRadius: '8px', overflow: 'hidden' }}>
        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: '#2d2d2d', borderBottom: '1px solid #444' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fff', fontWeight: 'bold', fontFamily: "'Outfit', sans-serif" }}>
+             <button className="hud-btn" onClick={() => setView('DASHBOARD')} style={{ marginRight: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ArrowLeft size={16} /> BACK
+             </button>
              <Terminal size={18} /> NLP TERMINAL
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

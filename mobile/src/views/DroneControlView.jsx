@@ -4,7 +4,7 @@ import {
   ShieldAlert, ShieldCheck, Navigation, ArrowUp, ArrowDown, Activity,
   ArrowLeft, Square, RotateCcw, RotateCw, ArrowRight, Map, Video, Menu,
   Battery, Signal, Wifi, Compass, Gauge, AlertTriangle, Lock, Unlock,
-  Plus, Minus, Settings
+  Plus, Minus, Settings, X
 } from 'lucide-react';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
@@ -54,6 +54,7 @@ export default function DroneControlView({ setView }) {
 
 
   const [showConfirmModal, setShowConfirmModal] = useState(null); // { action, params, message }
+  const [dismissedCmds, setDismissedCmds] = useState(new Set());
 
   const [newIp, setNewIp] = useState("192.168.1.100");
   const [newPort, setNewPort] = useState("8080");
@@ -511,17 +512,24 @@ export default function DroneControlView({ setView }) {
          {droneIds.map(id => {
             const cs = drones[id]?.commandState;
             if (!cs || !cs.action) return null;
-            if (cs.state === 'SUCCESS' && (nowMs - (cs.timestamp || nowMs)) > 5000) return null; // hide success after 5s
+            if (dismissedCmds.has(cs.cmd_id)) return null;
+            if (cs.state === 'ACCEPTED' && (nowMs - (cs.timestamp || nowMs)) > 5000) return null; // hide success after 5s
             
             let color = 'var(--text-muted)';
             let bg = 'rgba(255,255,255,0.85)';
-            if (cs.state === 'SUCCESS') { color = 'var(--success)'; bg = 'rgba(16, 185, 129, 0.1)'; }
+            if (cs.state === 'ACCEPTED') { color = 'var(--success)'; bg = 'rgba(16, 185, 129, 0.1)'; }
             if (cs.state === 'FAILED' || cs.state === 'REJECTED' || cs.state === 'TIMEOUT') { color = 'var(--danger)'; bg = 'rgba(239, 68, 68, 0.1)'; }
             if (cs.state === 'MAVSDK_REQUESTED' || cs.state === 'BACKEND_RECEIVED') { color = 'var(--warning)'; }
 
             return (
-               <div key={id} className="lifecycle-card" style={{ background: bg, borderColor: color }}>
-                  <div className="lc-header" style={{color: 'var(--text-main)'}}>{id}: <span style={{color}}>{cs.action.toUpperCase()}</span></div>
+               <div key={id} className="lifecycle-card" style={{ background: bg, borderColor: color, position: 'relative' }}>
+                  <button 
+                     onClick={() => setDismissedCmds(prev => new Set(prev).add(cs.cmd_id))}
+                     style={{ position: 'absolute', top: '4px', right: '4px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+                  >
+                     <X size={14} />
+                  </button>
+                  <div className="lc-header" style={{color: 'var(--text-main)', paddingRight: '16px'}}>{id}: <span style={{color}}>{cs.action.toUpperCase()}</span></div>
                   <div className="lc-state" style={{color}}>{cs.state}</div>
                   {cs.reason && <div className="lc-reason">{cs.reason}</div>}
                </div>

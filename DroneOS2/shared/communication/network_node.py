@@ -109,16 +109,22 @@ class UdpNetworkAdapter(INetworkAdapter):
         try:
             data = self.serializer.serialize(message)
             
-            # If we have a statically configured peer, prefer Unicast over Broadcast
             if self.configured_peer_host and self.configured_peer_port:
                 addr = (self.configured_peer_host, self.configured_peer_port)
                 self.transport.sendto(data, addr)
                 logger.debug(f"Packet sent (Configured Unicast) to {addr[0]}:{addr[1]}")
-            else:
-                bcast_port = self.configured_peer_port if self.configured_peer_port else self.port
-                addr = (self.broadcast_address, bcast_port)
-                self.transport.sendto(data, addr)
-                logger.debug(f"Packet sent (Discovery Broadcast) to {addr[0]}:{addr[1]}")
+                return
+
+            # 1. Discovery broadcast on this adapter's own port
+            discovery_addr = (self.broadcast_address, self.port)
+            self.transport.sendto(data, discovery_addr)
+            logger.debug(f"Packet sent (Discovery Broadcast) to {discovery_addr[0]}:{discovery_addr[1]}")
+
+            # 2. Existing relay-forwarding broadcast
+            if self.configured_peer_port:
+                relay_addr = (self.broadcast_address, self.configured_peer_port)
+                self.transport.sendto(data, relay_addr)
+                logger.debug(f"Packet sent (Relay Forward) to {relay_addr[0]}:{relay_addr[1]}")
                 
         except OSError as e:
             logger.exception(f"Failed to transmit message: {e}")
