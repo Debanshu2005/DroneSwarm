@@ -52,10 +52,20 @@ class TelemetryPublisher:
             try:
                 telemetry = await self.fc.get_telemetry()
                 is_armed = getattr(telemetry, 'armed_state', None) == "ARMED"
+                
+                lat, lon, alt = None, None, None
+                if telemetry.gps_valid:
+                    lat = telemetry.latitude
+                    lon = telemetry.longitude
+                    alt = telemetry.altitude
+                    
                 msg = HeartbeatMessage(
                     sender_id=self.node_id,
                     timestamp=time.time(),
-                    status="active" if is_armed else "standby"
+                    status="active" if is_armed else "standby",
+                    lat=lat,
+                    lon=lon,
+                    alt=alt
                 )
                 await self.network.broadcast_message(msg)
             except asyncio.CancelledError:

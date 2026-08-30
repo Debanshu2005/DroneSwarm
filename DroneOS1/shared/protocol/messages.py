@@ -54,6 +54,9 @@ class TerminalCommandMessage(BaseMessage):
 class HeartbeatMessage(BaseMessage):
     msg_type: MessageType = MessageType.HEARTBEAT
     status: str = "active"
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    alt: Optional[float] = None
 
 class TelemetryData(BaseModel):
     timestamp: Optional[float] = None

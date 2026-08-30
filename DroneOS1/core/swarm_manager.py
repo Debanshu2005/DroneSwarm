@@ -2,7 +2,7 @@ import time
 from typing import Dict, Optional, List, Any
 from DroneOS.shared.utils.logger import setup_logger
 from DroneOS.shared.protocol.messages import (
-    SwarmHeartbeatMessage, DroneJoinMessage, DroneLeaveMessage,
+    SwarmHeartbeatMessage, HeartbeatMessage, DroneJoinMessage, DroneLeaveMessage,
     SwarmStateMessage, PeerStateMessage, DroneIdentityMessage, TelemetryMessage, TelemetryData
 )
 
@@ -27,6 +27,10 @@ class PeerStateManager:
         self.is_active: bool = True
         self.current_task: Optional[str] = None
         self.telemetry: Optional[TelemetryData] = None
+        self.lat: Optional[float] = None
+        self.lon: Optional[float] = None
+        self.alt: Optional[float] = None
+        self.last_position_time: Optional[float] = None
 
 class SwarmRegistry:
     def __init__(self):
@@ -69,7 +73,7 @@ class SwarmHeartbeatManager:
         self.registry = registry
         self.timeout_sec = timeout_sec
 
-    def handle_heartbeat(self, msg: SwarmHeartbeatMessage):
+    def handle_heartbeat(self, msg: HeartbeatMessage):
         peer = self.registry.get_peer(msg.sender_id)
         if not peer:
             self.registry.add_peer(msg.sender_id)
@@ -77,6 +81,11 @@ class SwarmHeartbeatManager:
         if peer:
             peer.last_seen = time.time()
             peer.is_active = (msg.status == "active")
+            if getattr(msg, 'lat', None) is not None:
+                peer.lat = msg.lat
+                peer.lon = msg.lon
+                peer.alt = msg.alt
+                peer.last_position_time = time.time()
 
     def purge_stale_peers(self):
         current = time.time()

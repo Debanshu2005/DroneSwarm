@@ -190,8 +190,8 @@ class FlightManager:
         return success
 
     async def _formation_flight_loop(self, params: Dict[str, Any]):
-        import asyncio, time
-        from DroneOS.core.formation_manager import FormationManager, FormationType
+        import asyncio, time, math
+        from DroneOS.core.formation_manager import FormationManager, FormationType, convert_local_offset_to_global
         
         form_mgr = FormationManager()
         f_type_str = params.get('type', 'V').upper()
@@ -208,6 +208,9 @@ class FlightManager:
         my_node_id = self.swarm_manager.identity.drone_id
         
         logger.info(f"Starting formation loop: {f_type_str}, spacing: {spacing}m, speed: {speed}m/s")
+        
+        last_total_drones = 0
+        
         try:
             while True:
                 # 1. Get active peers (healthy in last 3 seconds)
@@ -220,29 +223,51 @@ class FlightManager:
                 my_index = active_peers.index(my_node_id)
                 total_drones = len(active_peers)
                 
-                # 2. Get local offset
-                dx, dy, dz = form_mgr.get_offset(my_index, total_drones)
+                # Separation safety check
+                if total_drones != last_total_drones:
+                    last_total_drones = total_drones
+                    points = [form_mgr.get_offset(i, total_drones) for i in range(total_drones)]
+                    min_dist = float('inf')
+                    for i in range(total_drones):
+                        for j in range(i+1, total_drones):
+                            dist = math.sqrt((points[i][0]-points[j][0])**2 + (points[i][1]-points[j][1])**2)
+                            if dist < min_dist:
+                                min_dist = dist
+                    if min_dist < spacing / 2.0 and total_drones > 1:
+                        logger.warning(f"Formation safety check: minimum separation {min_dist:.1f}m is less than half spacing {spacing/2.0:.1f}m")
                 
-                # 3. Calculate target velocity towards that offset
-                # For a true formation, this requires the leader's position.
-                # In this simplified local decentralized version, if everyone is maintaining offset 
-                # relative to a static virtual center, they move towards it.
-                # To make it dynamic, we use local NED goto offsets relative to the swarm centroid.
-                # Since MAVSDK move_velocity is easier to control safely in the absence of a global mission:
-                # We will command move_velocity based on P-controller to offset.
-                # Since we don't have peer positions reliably yet, we just hover or move blindly if we are leader,
-                # but to satisfy "each drone gets its own target based on geometry", we just issue move_velocity towards it.
-                # For safety, if we aren't leader, we try to move towards our designated offset relative to drone 0.
-                
-                # We'll just issue a dummy safe move_velocity or hover for the sake of the architecture.
-                # In a real swarm, we'd use 'goto_location' with computed global coordinates.
+                anchor_id = active_peers[0]
                 telemetry = await self.fc.get_telemetry()
+                
                 if not telemetry.gps_valid:
-                    logger.warning("Formation loop aborted: GPS invalid.")
-                    break
+                    logger.warning("Formation loop waiting: GPS invalid.")
+                    await self.fc.hover()
+                    await asyncio.sleep(0.5)
+                    continue
+
+                if my_node_id == anchor_id:
+                    # Anchor node holds position (could be extended to track a commanded destination)
+                    await self.fc.hover()
+                else:
+                    # Non-anchor looks up anchor position
+                    anchor_peer = self.swarm_manager.registry.get_peer(anchor_id)
+                    anchor_pos_valid = (
+                        anchor_peer and 
+                        anchor_peer.last_position_time is not None and 
+                        (now - anchor_peer.last_position_time) < 3.0 and
+                        anchor_peer.lat is not None and anchor_peer.lon is not None and anchor_peer.alt is not None
+                    )
                     
-                # Safe stub for formation movement
-                await self.fc.move_velocity(0.0, 0.0, 0.0, 0.5, 0.0)
+                    if not anchor_pos_valid:
+                        logger.warning(f"Anchor {anchor_id} position stale or missing. Hovering.")
+                        await self.fc.hover()
+                    else:
+                        dx_north, dy_east, dz_down = form_mgr.get_offset(my_index, total_drones)
+                        target_lat, target_lon, target_alt = convert_local_offset_to_global(
+                            anchor_peer.lat, anchor_peer.lon, anchor_peer.alt, dx_north, dy_east
+                        )
+                        await self.fc.goto_location(target_lat, target_lon, target_alt, yaw=0.0)
+                
                 await asyncio.sleep(0.5)
                 
         except asyncio.CancelledError:
