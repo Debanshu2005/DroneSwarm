@@ -25,22 +25,14 @@ The system is designed for Raspberry Pi companion computers running alongside PX
 2. Ensure the code is placed in the expected directory on the Pi: `/home/pi/PhoneOS/`
 
 ### Installation & Autostart
-There are two ways to deploy DroneOS as a background service on the Pi:
+Deploy DroneOS as a background service on the Pi using the `deploy/install.sh` script to launch specifically numbered drones.
 
-**Option A: Standard Swarm Node (Recommended)**
-Use the `setup_pi.sh` script to configure a single `droneos.service`.
 ```bash
 cd /home/pi/PhoneOS
-sudo ./setup_pi.sh
-```
-This automatically registers and starts `droneos.service`, launching `DroneOS/main.py --config DroneOS/config.json`. Logs can be viewed with: `sudo journalctl -fu droneos.service`.
-
-**Option B: Multi-Instance Deployment (Simulation/Advanced)**
-For deploying multiple simulated drones on a single machine, use the `deploy/install.sh` script to launch specifically numbered drones.
-```bash
 ./deploy/install.sh 1  # Installs phoneos-drone1.service
-./deploy/install.sh 2  # Installs phoneos-drone2.service
+./deploy/install.sh 2  # Installs phoneos-drone2.service (if running multiple)
 ```
+Logs can be viewed with: `journalctl -u phoneos-drone1.service -f`.
 
 ### Configuration Files
 - **`DroneOS/configs/flight.yaml`**: Contains flight controller connection info. The default PX4 connection string is `serial:///dev/serial0:115200`. The default takeoff altitude is `10.0m` and max velocity is `5.0m/s`.

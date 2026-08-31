@@ -31,7 +31,7 @@ git clone https://github.com/Debanshu2005/DroneSwarm.git
 cd DroneSwarm
 
 # Run the setup script to install dependencies and systemd services
-sudo ./setup_pi.sh
+./deploy/install.sh 1
 ```
 
 ### 2. Running a Drone Node
