@@ -1,6 +1,7 @@
 export class WebSocketManager {
-    constructor(url = "ws://localhost:8080") {
+    constructor(url = "ws://localhost:8080", authToken = "") {
         this.url = url;
+        this.authToken = authToken || "";
         this.ws = null;
         this.reconnectAttempts = 0;
         this.listeners = {};
@@ -49,6 +50,9 @@ export class WebSocketManager {
             clearTimeout(this.connectionTimeout);
             this.isConnecting = false;
             console.log("WebSocket connected");
+            if (this.authToken) {
+                this.ws.send(JSON.stringify({ type: "AUTH", token: this.authToken }));
+            }
             this.connected = true;
             this.reconnectAttempts = 0;
             if (this.onConnectionChange) this.onConnectionChange("CONNECTED");

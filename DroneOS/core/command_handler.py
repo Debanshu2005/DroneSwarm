@@ -1,3 +1,5 @@
+import os
+import time
 from typing import Dict, Any, Callable, Coroutine
 from pydantic import ValidationError
 from DroneOS.shared.protocol.messages import ControlMessage, CommandAction, CommandLifecycleMessage
@@ -10,7 +12,7 @@ class CommandHandler:
     """
     Parses incoming ControlMessages and routes them to the appropriate subsystem (e.g. FlightManager).
     """
-    def __init__(self, node_id: str = "DroneOS", safety_module=None, flight_controller=None, health_monitor=None, battery_monitor=None, error_learning=None):
+    def __init__(self, node_id: str = "DroneOS", safety_module=None, flight_controller=None, health_monitor=None, battery_monitor=None, error_learning=None, swarm_manager=None):
         # Maps CommandAction to a coroutine handler
         self._handlers: Dict[CommandAction, Callable[[Dict[str, Any]], Coroutine[Any, Any, bool]]] = {}
         self.network = None
@@ -22,7 +24,43 @@ class CommandHandler:
         self.health_monitor = health_monitor
         self.battery_monitor = battery_monitor
         self.error_learning = error_learning
+        self.swarm_manager = swarm_manager
+        self.require_peers_before_arm = os.getenv("REQUIRE_PEERS_BEFORE_ARM", "").lower() in {"1", "true", "yes", "on"}
+        self.expected_peer_ids = [
+            peer.strip()
+            for peer in os.getenv("EXPECTED_PEER_IDS", "").split(",")
+            if peer.strip()
+        ]
+        expected_count = os.getenv("EXPECTED_PEER_COUNT", "")
+        self.expected_peer_count = int(expected_count) if expected_count.isdigit() else 0
         self._processed_cmds = []
+
+    def _validate_peer_arm_gate(self) -> str:
+        if not self.require_peers_before_arm:
+            return ""
+        if not self.swarm_manager or not getattr(self.swarm_manager, "registry", None):
+            return "Command rejected: Swarm peer registry unavailable"
+        if not self.expected_peer_ids and self.expected_peer_count <= 0:
+            return "Command rejected: Peer requirement enabled but no expected peers configured"
+
+        registry = self.swarm_manager.registry
+        timeout = getattr(getattr(self.swarm_manager, "heartbeat_mgr", None), "timeout_sec", 5.0)
+        now = time.time()
+
+        def is_recent(peer_id: str) -> bool:
+            peer = registry.get_peer(peer_id)
+            return bool(peer and getattr(peer, "is_active", True) and (now - getattr(peer, "last_seen", 0.0)) <= timeout)
+
+        missing = [peer_id for peer_id in self.expected_peer_ids if not is_recent(peer_id)]
+        if missing:
+            return f"Command rejected: Missing required swarm peers: {', '.join(missing)}"
+
+        if self.expected_peer_count > 0:
+            recent_count = sum(1 for peer_id in registry.get_all_peers() if is_recent(peer_id))
+            if recent_count < self.expected_peer_count:
+                return f"Command rejected: Required swarm peers not present ({recent_count}/{self.expected_peer_count})"
+
+        return ""
 
     def _send_lifecycle(self, sender_id: str, action: CommandAction, stage: str, reason: str = None, cmd_id: str = None) -> None:
         if self.network:
@@ -60,7 +98,6 @@ class CommandHandler:
 
         telemetry = await self.flight_controller.get_telemetry()
         
-        import time
         # Telemetry Freshness
         is_telemetry_stale = False
         if getattr(telemetry, 'timestamp', None) is not None:
@@ -82,6 +119,8 @@ class CommandHandler:
             if is_heartbeat_stale: return "Command rejected: Heartbeat stale"
             if is_telemetry_stale: return "Command rejected: Telemetry stale"
             if is_emergency: return "Command rejected: Emergency stop active"
+            peer_rejection = self._validate_peer_arm_gate()
+            if peer_rejection: return peer_rejection
             
         elif action == CommandAction.TAKEOFF:
             if is_heartbeat_stale: return "Command rejected: Heartbeat stale"

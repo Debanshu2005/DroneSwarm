@@ -36,6 +36,7 @@ export const DroneProvider = ({ children }) => {
   const [selectedDrones, setSelectedDrones] = useState(new Set());
   
   const [wsUrl, setWsUrl] = useState(() => safeStorageGet("PhoneOS_WsUrl", "ws://swarmos-pi.local:8080"));
+  const [relayAuthToken, setRelayAuthToken] = useState(() => safeStorageGet("PhoneOS_RelayAuthToken", ""));
   const [testMode, setTestMode] = useState(() => safeStorageGet("PhoneOS_TestMode", "false") === "true");
   const [indoorMode, setIndoorMode] = useState(() => safeStorageGet("PhoneOS_IndoorMode", "false") === "true");
   const [eventLog, setEventLog] = useState([]);
@@ -89,9 +90,10 @@ export const DroneProvider = ({ children }) => {
 
   useEffect(() => {
     safeStorageSet("PhoneOS_WsUrl", wsUrl);
+    safeStorageSet("PhoneOS_RelayAuthToken", relayAuthToken);
     safeStorageSet("PhoneOS_TestMode", testMode);
     safeStorageSet("PhoneOS_IndoorMode", indoorMode);
-  }, [wsUrl, testMode, indoorMode]);
+  }, [wsUrl, relayAuthToken, testMode, indoorMode]);
   
   // Drone cleanup task & demo mode
   useEffect(() => {
@@ -151,7 +153,7 @@ export const DroneProvider = ({ children }) => {
 
   // Network Initialization
   useEffect(() => {
-    const manager = new MultiWebSocketManager();
+    const manager = new MultiWebSocketManager(relayAuthToken);
 
     // Load any previously saved connections
     manager.loadSavedConnections();
@@ -365,7 +367,7 @@ export const DroneProvider = ({ children }) => {
       clearInterval(hbInterval);
       manager.disconnectAll();
     };
-  }, [wsUrl]);
+  }, [wsUrl, relayAuthToken]);
 
   const sendCommand = (action, params = null, targetIds = null, isEmergency = false) => {
     if (!wsManager || isConnected !== "CONNECTED") return;
@@ -478,7 +480,7 @@ export const DroneProvider = ({ children }) => {
 
   const value = {
     wsManager, isConnected, drones, selectedDrones,
-    wsUrl, setWsUrl, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs,
+    wsUrl, setWsUrl, relayAuthToken, setRelayAuthToken, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs,
     sendCommand, sendTerminalCommand, sendParamRequest, toggleSelect, selectAll, selectNone, addLog,
     testOverrides, setTestOverride, clearTestOverrides, injectFailure, testSessionLog, clearTestSessionLog
   };

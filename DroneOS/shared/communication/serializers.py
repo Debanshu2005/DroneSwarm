@@ -55,7 +55,8 @@ class JsonSerializer(IMessageSerializer):
         }
 
     def serialize(self, message: BaseMessage) -> bytes:
-        return message.model_dump_json().encode('utf-8')
+        exclude = {"hmac_sig"} if getattr(message, "hmac_sig", None) is None else None
+        return message.model_dump_json(exclude=exclude).encode('utf-8')
 
     def deserialize(self, data: bytes) -> BaseMessage:
         try:

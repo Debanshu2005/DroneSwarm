@@ -22,6 +22,25 @@ class HealthMonitor:
     def record_heartbeat(self) -> None:
         self.last_heartbeat_time = time.time()
 
+    async def evaluate_connection(self, now: float | None = None) -> None:
+        if self.last_heartbeat_time is None:
+            return
+
+        current_time = now if now is not None else time.time()
+        time_since_last = current_time - self.last_heartbeat_time
+        if time_since_last > self.timeout_seconds:
+            if not self._connection_lost:
+                self._connection_lost = True
+                logger.warning(f"CONNECTION LOST! No heartbeat for {time_since_last:.1f}s")
+                if self.on_connection_lost:
+                    await self.on_connection_lost()
+        else:
+            if self._connection_lost:
+                self._connection_lost = False
+                logger.info("Connection restored!")
+                if self.on_connection_restored:
+                    await self.on_connection_restored()
+
     async def start(self) -> None:
         self._running = True
         self.last_heartbeat_time = None
@@ -30,20 +49,7 @@ class HealthMonitor:
         
         while self._running:
             try:
-                if self.last_heartbeat_time is not None:
-                    time_since_last = time.time() - self.last_heartbeat_time
-                    if time_since_last > self.timeout_seconds:
-                        if not self._connection_lost:
-                            self._connection_lost = True
-                            logger.warning(f"CONNECTION LOST! No heartbeat for {time_since_last:.1f}s")
-                            if self.on_connection_lost:
-                                await self.on_connection_lost()
-                    else:
-                        if self._connection_lost:
-                            self._connection_lost = False
-                            logger.info("Connection restored!")
-                            if self.on_connection_restored:
-                                await self.on_connection_restored()
+                await self.evaluate_connection()
             except asyncio.CancelledError:
                 logger.info("Health Monitor loop cancelled.")
                 break

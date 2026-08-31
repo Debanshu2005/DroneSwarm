@@ -3,7 +3,7 @@ import { useDroneContext } from '../context/DroneContext';
 import { Settings, RefreshCw, Network, Trash, Play, Activity } from 'lucide-react';
 
 export default function SettingsView() {
-  const { testMode, setTestMode, indoorMode, setIndoorMode, isConnected, wsManager, drones } = useDroneContext();
+  const { testMode, setTestMode, indoorMode, setIndoorMode, relayAuthToken, setRelayAuthToken, isConnected, wsManager, drones } = useDroneContext();
   const [newId, setNewId] = useState("drone1");
   const [newIp, setNewIp] = useState("192.168.1.100");
   const [newPort, setNewPort] = useState("8080");
@@ -37,6 +37,13 @@ export default function SettingsView() {
             </div>
 
             <div style={{display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px'}}>
+               <input
+                  type="password"
+                  placeholder="OPTIONAL RELAY AUTH TOKEN"
+                  value={relayAuthToken}
+                  onChange={e => setRelayAuthToken(e.target.value)}
+                  style={{padding: '10px', borderRadius: '6px', border: '1px solid var(--border)'}}
+               />
                <div style={{display: 'flex', gap: '8px'}}>
                   <input type="text" placeholder="DRONE ID" value={newId} onChange={e => setNewId(e.target.value)} style={{flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid var(--border)'}} />
                   <input type="text" placeholder="IP ADDRESS" value={newIp} onChange={e => setNewIp(e.target.value)} style={{flex: 2, padding: '10px', borderRadius: '6px', border: '1px solid var(--border)'}} />

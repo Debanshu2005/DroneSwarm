@@ -68,3 +68,8 @@ class SafetyModule:
         self.is_failsafe_active = True
         logger.critical("Critical battery failsafe triggered! Landing immediately...")
         await self.fc.land()
+
+    async def trigger_gps_degraded_failsafe(self) -> None:
+        self.is_failsafe_active = True
+        logger.warning("GPS degraded failsafe triggered! Holding position.")
+        await self.fc.hover()

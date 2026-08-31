@@ -1,4 +1,8 @@
 import asyncio
+import hashlib
+import hmac
+import json
+import os
 import socket
 from pydantic import ValidationError
 from typing import Callable, Coroutine, Any, List, Optional
@@ -24,6 +28,7 @@ class UdpNetworkAdapter(INetworkAdapter):
         self.serializer = serializer
         self.configured_peer_host = peer_host
         self.configured_peer_port = peer_port
+        self.net_secret = os.getenv("DRONE_NET_SECRET")
         self.known_endpoints = {}
         self.callbacks: List[Callable[[BaseMessage], Coroutine[Any, Any, None]]] = []
         
@@ -32,6 +37,37 @@ class UdpNetworkAdapter(INetworkAdapter):
         self._running = False
         self._active_tasks = set()
         self.loop = None
+
+    def _signature_payload(self, message: BaseMessage) -> bytes:
+        payload = message.model_dump(mode="json", exclude={"hmac_sig"})
+        return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    def _sign_message(self, message: BaseMessage) -> BaseMessage:
+        if not self.net_secret:
+            return message
+        digest = hmac.new(
+            self.net_secret.encode("utf-8"),
+            self._signature_payload(message),
+            hashlib.sha256
+        ).hexdigest()
+        return message.model_copy(update={"hmac_sig": digest})
+
+    def _verify_message_signature(self, message: BaseMessage, addr: tuple) -> bool:
+        if not self.net_secret:
+            return True
+        received_sig = getattr(message, "hmac_sig", None)
+        if not received_sig:
+            logger.warning(f"Packet rejected: Missing HMAC signature from {addr}")
+            return False
+        expected_sig = hmac.new(
+            self.net_secret.encode("utf-8"),
+            self._signature_payload(message),
+            hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(received_sig, expected_sig):
+            logger.warning(f"Packet rejected: Invalid HMAC signature from {addr}")
+            return False
+        return True
         
     class _UdpProtocol(asyncio.DatagramProtocol):
         def __init__(self, adapter: 'UdpNetworkAdapter'):
@@ -95,7 +131,7 @@ class UdpNetworkAdapter(INetworkAdapter):
             
         if target_id in self.known_endpoints:
             addr = self.known_endpoints[target_id]
-            data = self.serializer.serialize(message)
+            data = self.serializer.serialize(self._sign_message(message))
             self.transport.sendto(data, addr)
             logger.debug(f"Packet sent (Learned Unicast) to {target_id} at {addr[0]}:{addr[1]}")
         else:
@@ -107,7 +143,7 @@ class UdpNetworkAdapter(INetworkAdapter):
             return
             
         try:
-            data = self.serializer.serialize(message)
+            data = self.serializer.serialize(self._sign_message(message))
             
             if self.configured_peer_host and self.configured_peer_port:
                 addr = (self.configured_peer_host, self.configured_peer_port)
@@ -153,6 +189,9 @@ class UdpNetworkAdapter(INetworkAdapter):
             return
 
         logger.debug(f"Packet validated: sender={message.sender_id}, type={message.msg_type.value}")
+
+        if not self._verify_message_signature(message, addr):
+            return
         
         # Ignore our own messages
         if message.sender_id == self.node_id:

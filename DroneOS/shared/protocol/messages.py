@@ -41,6 +41,7 @@ class BaseMessage(BaseModel):
     sender_id: str
     timestamp: float = Field(description="Unix timestamp")
     target_id: Optional[str] = None
+    hmac_sig: Optional[str] = None
 
 class TestInjectMessage(BaseMessage):
     msg_type: MessageType = MessageType.TEST_INJECT

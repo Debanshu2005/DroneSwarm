@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 from DroneOS1.shared.communication.network_node import UdpNetworkAdapter
+from DroneOS1.shared.communication.serializers import JsonSerializer
 from DroneOS1.shared.protocol.messages import HeartbeatMessage
 
 @pytest.mark.asyncio
@@ -38,3 +39,36 @@ async def test_broadcast_message_sends_to_both_ports():
     
     # Second call should be the relay forward broadcast (port 14551)
     assert calls[1].args[1] == ("255.255.255.255", 14551)
+
+@pytest.mark.asyncio
+async def test_udp_hmac_signs_and_accepts_when_secret_set(monkeypatch):
+    monkeypatch.setenv("DRONE_NET_SECRET", "shared-secret")
+    serializer = JsonSerializer()
+    sender = UdpNetworkAdapter("sender", "0.0.0.0", 14550, "255.255.255.255", serializer)
+    receiver = UdpNetworkAdapter("receiver", "0.0.0.0", 14550, "255.255.255.255", serializer)
+    callback = AsyncMock()
+    receiver.register_callback(callback)
+
+    msg = HeartbeatMessage(sender_id="sender", status="active", timestamp=12345.0)
+    signed = sender._sign_message(msg)
+
+    assert signed.hmac_sig
+    await receiver._handle_incoming(serializer.serialize(signed), ("127.0.0.1", 45000))
+
+    callback.assert_awaited_once()
+
+@pytest.mark.asyncio
+async def test_udp_hmac_drops_unsigned_or_wrong_signature_when_secret_set(monkeypatch):
+    monkeypatch.setenv("DRONE_NET_SECRET", "shared-secret")
+    serializer = JsonSerializer()
+    receiver = UdpNetworkAdapter("receiver", "0.0.0.0", 14550, "255.255.255.255", serializer)
+    callback = AsyncMock()
+    receiver.register_callback(callback)
+
+    unsigned = HeartbeatMessage(sender_id="sender", status="active", timestamp=12345.0)
+    bad_sig = unsigned.model_copy(update={"hmac_sig": "bad"})
+
+    await receiver._handle_incoming(serializer.serialize(unsigned), ("127.0.0.1", 45000))
+    await receiver._handle_incoming(serializer.serialize(bad_sig), ("127.0.0.1", 45000))
+
+    callback.assert_not_awaited()

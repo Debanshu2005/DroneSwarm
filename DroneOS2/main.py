@@ -1,4 +1,5 @@
 import asyncio
+import time
 import sys
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from DroneOS.core.safety import SafetyModule
 from DroneOS.core.swarm_manager import SwarmMembership
 from DroneOS.sensors.health_monitor import HealthMonitor
 from DroneOS.sensors.battery_monitor import BatteryMonitor
+from DroneOS.sensors.gps_monitor import GpsMonitor
 
 from DroneOS.core.mission_manager import MissionManager, MissionReceiver
 from DroneOS.core.collision_avoidance import StandardCollisionAvoidance
@@ -33,6 +35,8 @@ class DroneOSApp:
     def __init__(self):
         self._running = False
         self._active_tasks = set()
+        self._last_shutdown_signal = 0.0
+        self._hard_shutdown_requested = False
         
         # Load Configs Dynamically
         if len(sys.argv) > 1:
@@ -91,6 +95,7 @@ class DroneOSApp:
         self.safety_module = SafetyModule(self.flight_controller, config=self.flight_cfg)
         self.health_monitor = HealthMonitor(timeout_seconds=self.network_cfg.connection_timeout)
         self.battery_monitor = BatteryMonitor()
+        self.gps_monitor = GpsMonitor()
         
         self.command_handler = CommandHandler(
             node_id=self.node_id,
@@ -107,6 +112,7 @@ class DroneOSApp:
         )
         self.terminal_controller.network = self.network
         self.swarm_manager = SwarmMembership(self.node_id)
+        self.command_handler.swarm_manager = self.swarm_manager
         # Update heartbeat timeout safely
         self.swarm_manager.heartbeat_mgr.timeout_sec = self.network_cfg.connection_timeout
         
@@ -169,10 +175,15 @@ class DroneOSApp:
         self.command_handler.register_handler(CommandAction.GOTO_LOCAL, self.flight_manager.goto_local)
         self.command_handler.register_handler(CommandAction.FORMATION_UPDATE, self.flight_manager.formation_update)
         
-        # Register safety callbacks
+        async def handle_connection_restored():
+            self.safety_module.reset_failsafe()
+            
         self.health_monitor.on_connection_lost = self.safety_module.trigger_connection_lost_failsafe
+        self.health_monitor.on_connection_restored = handle_connection_restored
         self.battery_monitor.on_low_battery = self.safety_module.trigger_low_battery_failsafe
         self.battery_monitor.on_critical_battery = self.safety_module.trigger_critical_battery_failsafe
+        self.gps_monitor.on_gps_degraded = self._handle_gps_degraded
+        self.gps_monitor.on_gps_restored = self._handle_gps_restored
 
         # Register network callbacks
         self.network.register_callback(self._on_message_received)
@@ -185,6 +196,45 @@ class DroneOSApp:
             task.add_done_callback(self._active_tasks.discard)
         except Exception as e:
             logger.error(f"Failed to dispatch task in main: {e}")
+
+    async def _handle_gps_degraded(self) -> None:
+        telemetry = await self.flight_controller.get_telemetry()
+        armed = getattr(telemetry, "armed_state", None) == "ARMED"
+        gps_dependent = self.flight_manager.is_gps_dependent_navigation_active(telemetry)
+        if armed and gps_dependent:
+            await self.safety_module.trigger_gps_degraded_failsafe()
+        else:
+            logger.info("GPS degraded; no GPS-dependent armed navigation active.")
+
+    async def _handle_gps_restored(self) -> None:
+        logger.info("GPS restored; holding until the operator or command flow resumes navigation.")
+
+    async def handle_shutdown_request(self) -> str:
+        now = time.monotonic()
+        if now - self._last_shutdown_signal <= 3.0:
+            logger.critical("Second shutdown request received; hard abort requested.")
+            self._hard_shutdown_requested = True
+            self._running = False
+            return "hard"
+
+        self._last_shutdown_signal = now
+        telemetry = await self.flight_controller.get_telemetry()
+        if getattr(telemetry, "armed_state", None) == "ARMED":
+            logger.warning("Shutdown requested while armed; initiating configured failsafe before stopping.")
+            await self.safety_module.trigger_connection_lost_failsafe()
+        else:
+            logger.info("Shutdown requested while disarmed; exiting cleanly.")
+        self._running = False
+        return "graceful"
+
+    def _install_signal_handlers(self) -> None:
+        import signal
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, lambda: self._dispatch_task(self.handle_shutdown_request()))
+            except (NotImplementedError, RuntimeError, ValueError):
+                pass
 
     async def _on_message_received(self, msg: BaseMessage) -> None:
         if msg.msg_type == MessageType.HEARTBEAT:
@@ -373,6 +423,7 @@ class DroneOSApp:
     async def run(self) -> None:
         logger.info(f"Starting DroneOS Node: {self.node_id}")
         self._running = True
+        self._install_signal_handlers()
         
         try:
             connected = await self.flight_controller.connect()
@@ -388,7 +439,9 @@ class DroneOSApp:
         self._dispatch_task(self.battery_monitor.start(
             get_battery_level=lambda: self.flight_controller._telemetry.battery_level if self.flight_controller else None
         ))
+        self._dispatch_task(self.gps_monitor.start(self.flight_controller.get_telemetry))
         self._dispatch_task(self._autonomous_evaluation_loop())
+        self._dispatch_task(self.terminal_controller.run_repl())
         
         # Start publisher loops
         self.telemetry_publisher.start()
@@ -398,10 +451,11 @@ class DroneOSApp:
         try:
             while self._running:
                 await asyncio.sleep(1.0)
-        except asyncio.CancelledError:
-            pass
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            await self.handle_shutdown_request()
         finally:
-            await self.shutdown()
+            if not self._hard_shutdown_requested:
+                await self.shutdown()
 
     async def shutdown(self) -> None:
         logger.info("Shutting down DroneOS...")
@@ -414,6 +468,7 @@ class DroneOSApp:
         self.telemetry_publisher.stop()
         self.health_monitor.stop()
         self.battery_monitor.stop()
+        self.gps_monitor.stop()
         await self.network.stop()
         await self.flight_controller.disconnect()
         logger.info("Shutdown complete.")

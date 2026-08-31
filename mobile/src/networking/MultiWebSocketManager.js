@@ -1,17 +1,25 @@
 import { WebSocketManager } from './WebSocketManager';
 
 export class MultiWebSocketManager {
-    constructor() {
+    constructor(authToken = "") {
         this.connections = {}; // { [ip]: WebSocketManager }
         this.listeners = {};
         this.onConnectionChange = null; // Callback for tracking individual connection status
+        this.authToken = authToken || "";
+    }
+
+    setAuthToken(authToken = "") {
+        this.authToken = authToken || "";
+        Object.values(this.connections).forEach(ws => {
+            ws.authToken = this.authToken;
+        });
     }
 
     addConnection(ip, port = 8080) {
         const url = `ws://${ip}:${port}`;
         if (this.connections[url]) return; // Already exists
 
-        const wsManager = new WebSocketManager(url);
+        const wsManager = new WebSocketManager(url, this.authToken);
         
         wsManager.onConnectionChange = (state) => {
             if (this.onConnectionChange) {

@@ -15,6 +15,7 @@ class FlightManager:
         self._deadman_task = None
         self._active_flight_task = None
         self.swarm_manager = None
+        self._active_navigation_frame = None
 
     def set_swarm_manager(self, swarm_manager):
         self.swarm_manager = swarm_manager
@@ -101,6 +102,7 @@ class FlightManager:
 
     async def move(self, params: Dict[str, Any]) -> bool:
         self._cancel_active_task()
+        self._active_navigation_frame = "LOCAL_NED"
         telemetry = await self.fc.get_telemetry()
         if getattr(telemetry, 'armed_state', None) != "ARMED":
             logger.error("Cannot move: Drone is not ARMED.")
@@ -127,6 +129,7 @@ class FlightManager:
         return await self.fc.move_velocity(vx, vy, vz, 0.5, yaw_rate)
 
     async def goto(self, params: Dict[str, Any]) -> bool:
+        self._active_navigation_frame = "GLOBAL_RELATIVE_ALT"
         telemetry = await self.fc.get_telemetry()
         if getattr(telemetry, 'armed_state', None) != "ARMED":
             logger.error("Cannot goto: Drone is not ARMED.")
@@ -151,6 +154,7 @@ class FlightManager:
         return await self.fc.goto_location(lat, lon, alt)
 
     async def goto_local(self, params: Dict[str, Any]) -> bool:
+        self._active_navigation_frame = "LOCAL_NED"
         telemetry = await self.fc.get_telemetry()
         if getattr(telemetry, 'armed_state', None) != "ARMED":
             logger.error("Cannot goto_local: Drone is not ARMED.")
@@ -286,5 +290,16 @@ class FlightManager:
             
         self._cancel_active_task()
         import asyncio
+        self._active_navigation_frame = "GLOBAL_RELATIVE_ALT"
         self._active_flight_task = asyncio.create_task(self._formation_flight_loop(params))
         return True
+
+    def is_gps_dependent_navigation_active(self, telemetry=None) -> bool:
+        if self._active_navigation_frame == "GLOBAL_RELATIVE_ALT":
+            return True
+        if self._active_navigation_frame == "LOCAL_NED":
+            return False
+
+        mode = getattr(telemetry, "flight_mode", "") or ""
+        mode = mode.upper()
+        return mode in {"AUTO", "MISSION", "GUIDED", "LOITER", "RTL", "HOLD", "POSCTL", "POSITION", "OFFBOARD"}

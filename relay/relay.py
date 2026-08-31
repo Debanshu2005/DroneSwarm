@@ -4,6 +4,9 @@ import json
 import websockets
 import logging
 import argparse
+import hashlib
+import hmac
+import os
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("PhoneOS_Relay")
@@ -16,6 +19,8 @@ class UdpWebsocketRelay:
         self.udp_bind_port = udp_bind_port
         self.udp_target_port = udp_target_port
         self.udp_broadcast_addr = udp_broadcast_addr
+        self.auth_token = os.getenv("RELAY_AUTH_TOKEN")
+        self.net_secret = os.getenv("DRONE_NET_SECRET")
         
         self.active_websockets = set()
         self.known_endpoints = {} # Target ID to address tuple
@@ -24,6 +29,61 @@ class UdpWebsocketRelay:
         self.loop = None
         self.transport = None
         self.protocol = None
+
+    def _signature_payload(self, msg_dict: dict) -> bytes:
+        payload = dict(msg_dict)
+        payload.pop("hmac_sig", None)
+        return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    def _sign_message_dict(self, msg_dict: dict) -> dict:
+        if not self.net_secret:
+            return msg_dict
+        signed = dict(msg_dict)
+        signed["hmac_sig"] = hmac.new(
+            self.net_secret.encode("utf-8"),
+            self._signature_payload(signed),
+            hashlib.sha256
+        ).hexdigest()
+        return signed
+
+    def _verify_message_dict(self, msg_dict: dict, addr: tuple) -> bool:
+        if not self.net_secret:
+            return True
+        received_sig = msg_dict.get("hmac_sig")
+        if not received_sig:
+            logger.warning(f"UDP packet dropped: Missing HMAC signature from {addr}")
+            return False
+        expected_sig = hmac.new(
+            self.net_secret.encode("utf-8"),
+            self._signature_payload(msg_dict),
+            hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(received_sig, expected_sig):
+            logger.warning(f"UDP packet dropped: Invalid HMAC signature from {addr}")
+            return False
+        return True
+
+    async def _authenticate_websocket(self, websocket) -> bool:
+        if not self.auth_token:
+            return True
+        try:
+            raw = await asyncio.wait_for(websocket.recv(), timeout=5.0)
+            msg = json.loads(raw) if isinstance(raw, str) else {}
+        except asyncio.TimeoutError:
+            logger.warning(f"WebSocket auth timed out from {websocket.remote_address}")
+            await websocket.close()
+            return False
+        except Exception as e:
+            logger.warning(f"WebSocket auth failed from {websocket.remote_address}: {e}")
+            await websocket.close()
+            return False
+
+        if msg.get("type") != "AUTH" or msg.get("token") != self.auth_token:
+            logger.warning(f"WebSocket auth rejected from {websocket.remote_address}")
+            await websocket.close()
+            return False
+        logger.info(f"WebSocket client authenticated from {websocket.remote_address}")
+        return True
 
     class UdpProtocol(asyncio.DatagramProtocol):
         def __init__(self, relay):
@@ -52,6 +112,8 @@ class UdpWebsocketRelay:
         try:
             msg_str = data.decode('utf-8')
             msg_dict = json.loads(msg_str)
+            if not self._verify_message_dict(msg_dict, addr):
+                return
             sender_id = msg_dict.get('sender_id')
             
             # Prevent WS loopback of our own ground station commands
@@ -77,6 +139,9 @@ class UdpWebsocketRelay:
 
     async def ws_handler(self, websocket):
         logger.info(f"New WebSocket client connected from {websocket.remote_address}")
+
+        if not await self._authenticate_websocket(websocket):
+            return
         
         # Prevent duplicate WS connections from the same IP
         ip = websocket.remote_address[0]
@@ -99,7 +164,7 @@ class UdpWebsocketRelay:
         except Exception as e:
             logger.error(f"WebSocket error: {e}")
         finally:
-            self.active_websockets.remove(websocket)
+            self.active_websockets.discard(websocket)
 
     async def forward_ws_to_udp(self, message: str):
         if not self.transport:
@@ -108,7 +173,7 @@ class UdpWebsocketRelay:
         try:
             msg_dict = json.loads(message)
             target_id = msg_dict.get('target_id')
-            data = message.encode('utf-8')
+            data = json.dumps(self._sign_message_dict(msg_dict)).encode('utf-8')
             
             if target_id and target_id in self.known_endpoints:
                 # Unicast
@@ -152,12 +217,13 @@ class UdpWebsocketRelay:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PhoneOS WebSocket-to-UDP Relay")
+    parser.add_argument("--ws-host", type=str, default="0.0.0.0", help="WebSocket host/interface to listen on")
     parser.add_argument("--ws-port", type=int, default=8080, help="WebSocket port to listen on")
     parser.add_argument("--udp-bind-port", type=int, default=14551, help="UDP port to bind for listening")
     parser.add_argument("--udp-target-port", type=int, default=14550, help="UDP port of DroneOS to broadcast to")
     args = parser.parse_args()
 
-    relay = UdpWebsocketRelay(ws_port=args.ws_port, udp_bind_port=args.udp_bind_port, udp_target_port=args.udp_target_port)
+    relay = UdpWebsocketRelay(ws_host=args.ws_host, ws_port=args.ws_port, udp_bind_port=args.udp_bind_port, udp_target_port=args.udp_target_port)
     try:
         asyncio.run(relay.start())
     except KeyboardInterrupt:
