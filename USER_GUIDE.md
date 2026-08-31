@@ -105,24 +105,65 @@ For strict swarm choreography, set the environment variable `REQUIRE_PEERS_BEFOR
 
 ---
 
-## 6. Natural Language Terminal
+## 6. Command Library (full reference, both layers)
 
-The Ground Station includes an **NLP TERMINAL** view that parses natural language and compact text commands into complex flight trajectories.
+This is the canonical reference for operating the system. It has two distinct layers that are genuinely different things: NLP Terminal Commands (what you type) and Protocol-Level Commands (the underlying system messages).
 
-Commands are processed by the Trajectory Engine. Example syntax:
-- `take off to 3 meters, hover for two seconds, and land`
-- `takeoff h=3 hover_s=2`
-- `fly a figure eight size 5 at 3 meters`
-- `go 10 meters north and 5 meters east at 3 meters altitude`
-- `move 5 meters forward and 2 meters up`
-- `hold position`
-- `circle r=5 h=3 n=36`
-- `grid size=10 h=3 passes=4`
+### 9a — NLP Terminal Commands
 
-**New Feature: Smart Return to Launch (SRTL)**
-- You can command `srtl` or `smart rtl`.
-- **Behavior:** `SRTL` commands the drone to hold its current altitude, fly directly home laterally, and then land. It *bypasses* the standard PX4 RTL climb sequence to save battery/time.
-- **Safety Restriction:** `SRTL` will be rejected if the drone's current altitude is below `2.0m` (the minimum safe altitude). The operator is fully responsible for verifying the direct path home is clear of obstacles.
+These commands are typed in the `TerminalView` and parsed by the `trajectory_engine.py` into a `TaskAction`. 
+
+| Keyword(s) | Parameters (Syntax) | Example | Description |
+|---|---|---|---|
+| `arm`, `disarm` | None | `arm` | Locks/unlocks motors. |
+| `takeoff` | `h` (altitude), `hover_s` (duration) | `takeoff h=5 hover_s=2` | Arms (if needed), climbs to altitude, hovers. |
+| `land` | None | `land` | Descends immediately. Auto-disarms after landing. |
+| `rtl`, `return` | None | `rtl` | Standard return to launch. Climbs to safe altitude, flies home, lands. |
+| `srtl`, `smart rtl` | None | `srtl` | Same-Altitude Return-to-Launch. Holds current altitude, flies directly home, lands. **Safety Note:** This bypasses the standard RTL climb sequence and has no obstacle-clearance margin. The operator is responsible for confirming the direct path home is clear. |
+| `hold`, `loiter` | None | `hold position` | Halts movement and holds current position. |
+| `hover` | `hover_s` or `seconds` | `hover for 5s` | Halts movement and holds position for a duration. |
+| `mode`, `switch mode` | `[mode_name]` | `switch mode to guided` | Changes PX4 flight mode. |
+| `goto`, `move` | `x` (north), `y` (east), `h` (alt) | `goto north=10 east=5 h=3` | Navigates to a specific local or global offset. |
+| `forward`, `backward`, `left`, `right`, `up`, `down` | None | `move forward` | Continuous directional nudge for 2 seconds. |
+| `circle` | `r` (radius), `h` (alt), `n` (segments) | `circle r=5 h=3 n=36` | Flies a circular path around the current location. (Solo flight path) |
+| `square` | `size`, `h` (alt), `passes` | `square size=10 h=3` | Flies a square search pattern. (Solo flight path) |
+| `triangle` | `size`, `h` (alt) | `triangle size=6 h=3` | Flies a triangular path. (Solo flight path) |
+| `spiral` | `size`, `h` (alt), `turns` | `spiral size=10 h=3 turns=3` | Flies a spiral outward. (Solo flight path) |
+| `figure-8` | `size`, `h` (alt) | `figure-8 size=5 h=3` | Flies a figure-8 path. (Solo flight path) |
+| `grid` | `size`, `h` (alt), `passes` | `grid size=10 h=3 passes=4` | Flies a grid search pattern. (Solo flight path) |
+
+*Note: The solo flight-path shapes (`circle`, `square`, etc.) dictate a trajectory for individual drones. They are unrelated to Swarm Formations (which happen to share some shape names but dictate multi-drone topology).*
+
+**Targeting Behavior (ALL vs Single Drone):**
+In `TerminalView.jsx`, the TARGET dropdown determines if a command applies to a single drone or `ALL`. When `ALL` is selected, the Ground Station iterates through every connected drone and sends a discrete `TerminalCommandMessage` to each drone individually. Each drone then parses and executes the command independently through its own trajectory engine.
+
+### 9c — How the two layers relate
+
+The terminal parses natural-language text into a `TaskAction`, which `terminal_controller.py` then translates into one or more `ControlMessage`s carrying a `CommandAction`. Thus, every terminal command ultimately becomes a protocol-level command, but not every protocol-level command has a terminal keyword (for instance, `FORMATION_UPDATE` is only reachable via the UI in `SwarmView.jsx`). 
+
+*End-to-End Example:* Typing `srtl` in the terminal parses into `TaskAction.SRTL`. The `terminal_controller.py` receives this and dispatches a `ControlMessage(action=CommandAction.SRTL)`. The `command_handler.py` receives this protocol message, validates the safety gates, and finally invokes `flight_manager.smart_rtl()`.
+
+### 9b — Protocol-Level Command Library
+
+This is the underlying messaging layer (`CommandAction` enum in `messages.py`). Each action is handled by a registered method in `command_handler.py`.
+
+| CommandAction | Handler (`main.py`) | Params Shape | UI Surface | Description & Validation Gates |
+|---|---|---|---|---|
+| `ARM` | `flight_manager.arm` | `{}` | `DroneControlView` (HUD) | Unlocks motors. **Gates**: Heartbeat fresh, Telemetry fresh, No emergency. **Peer Gate**: Validates `REQUIRE_PEERS_BEFORE_ARM` peer count/presence. |
+| `DISARM` | `flight_manager.disarm` | `{}` | `DroneControlView` (HUD) | Locks motors. |
+| `TAKEOFF` | `flight_manager.takeoff` | `{altitude_m: float}` | `DroneControlView`, NLP Terminal | Climbs to altitude. **Gates**: Heartbeat fresh, Telemetry fresh, No emergency. |
+| `LAND` | `flight_manager.land` | `{}` | `DroneControlView`, NLP Terminal | Descends immediately. |
+| `RTL` | `flight_manager.rtl` | `{}` | `DroneControlView`, NLP Terminal | Returns to launch with standard climb. **Gates**: Heartbeat fresh, No emergency, `home_valid`. (If in manual mode, requires `gps_valid`). |
+| `SRTL` | `flight_manager.smart_rtl` | `{}` | NLP Terminal only | Returns to launch without climbing. **Gates**: Checks `min_srtl_altitude_m` directly in handler. |
+| `HOVER` | `flight_manager.hover` | `{}` | `DroneControlView` (HOLD), NLP | Halts movement and holds position. |
+| `STOP` | `flight_manager.stop` | `{}` | `DroneControlView` (E-RESET) | Halts movement. **Gates**: Special behavior—resets active failsafe/emergency status. |
+| `MOVE` | `flight_manager.move` | `{vx, vy, vz, yaw_rate}` | `DroneControlView` (D-Pad), NLP | Continuous velocity control. **Gates**: Heartbeat fresh, No emergency. |
+| `FORMATION_UPDATE` | `flight_manager.formation_update` | `{type: str, spacing: float}` | `SwarmView` | Assigns offset for swarm formation. |
+| `SET_MODE` | `flight_manager.set_mode` | `{mode: str}` | NLP Terminal only | Changes PX4 flight mode. |
+| `GOTO` | `flight_manager.goto` | `{lat, lon, alt}` | NLP Terminal only | Navigates to a global coordinate. **Gates**: Heartbeat fresh, No emergency, `gps_valid`. |
+| `GOTO_LOCAL` | `flight_manager.goto_local` | `{north, east, down}` | NLP Terminal only | Navigates to a local NED coordinate. **Gates**: Heartbeat fresh, No emergency, `local_pos_valid`. |
+
+*Note: The protocol contains additional messages like `EMERGENCY` (triggers E-STOP, zeroes velocity, and locks system) and `PARAM_REQUEST`, which are separate `MessageType`s, not `CommandAction`s.*
 
 ---
 
