@@ -10,6 +10,9 @@ export class WebSocketManager {
         this.intentionallyClosed = false;
         this.connectionTimeout = null;
         this.isConnecting = false;
+        this.lastCloseCode = null;
+        this.lastCloseReason = "";
+        this.lastError = "";
     }
 
     connect() {
@@ -21,6 +24,7 @@ export class WebSocketManager {
         console.log(`Connecting to WebSocket at ${this.url}`);
         this.intentionallyClosed = false;
         this.isConnecting = true;
+        this.lastError = "";
         
         // Android / Capacitor / Secure context check
         const isSecureContext = window.location.protocol === 'https:';
@@ -70,9 +74,13 @@ export class WebSocketManager {
             }
         };
 
-        this.ws.onclose = () => {
-            console.log("WebSocket disconnected");
-            this.handleDisconnect();
+        this.ws.onclose = (event) => {
+            const isAuthFailure = event.code === 4001 || (event.reason || "").toLowerCase().includes("auth");
+            console.log(`WebSocket disconnected${event.code ? ` (${event.code})` : ""}${event.reason ? `: ${event.reason}` : ""}`);
+            this.handleDisconnect(isAuthFailure ? "AUTH_FAILED" : "DISCONNECTED", {
+                code: event.code,
+                reason: event.reason
+            });
         };
 
         this.ws.onerror = (err) => {
@@ -81,15 +89,24 @@ export class WebSocketManager {
         };
     }
     
-    handleDisconnect() {
+    handleDisconnect(state = "DISCONNECTED", detail = {}) {
         clearTimeout(this.connectionTimeout);
         this.isConnecting = false;
         this.connected = false;
+        this.lastCloseCode = detail.code || null;
+        this.lastCloseReason = detail.reason || "";
+        if (state === "AUTH_FAILED") {
+            this.lastError = this.lastCloseReason || "Relay authentication failed";
+        }
         this.ws = null;
         
-        if (this.onConnectionChange) this.onConnectionChange("DISCONNECTED");
+        if (this.onConnectionChange) this.onConnectionChange(state, {
+            code: this.lastCloseCode,
+            reason: this.lastCloseReason,
+            error: this.lastError
+        });
         
-        if (this.intentionallyClosed) return;
+        if (this.intentionallyClosed || state === "AUTH_FAILED") return;
         
         // Reconnect logic with exponential backoff (max 10s)
         let timeout = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 10000);

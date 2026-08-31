@@ -24,7 +24,7 @@ import MapView from './views/MapView';
 import TerminalView from './views/TerminalView';
 
 function App() {
-  const { isConnected, testMode, indoorMode, nowMs, wsManager, drones } = useDroneContext();
+  const { isConnected, connectionError, testMode, indoorMode, nowMs, wsManager, drones } = useDroneContext();
   const [currentView, setCurrentView] = useState('DASHBOARD');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
@@ -152,6 +152,7 @@ function App() {
 
   const getConnectionText = () => {
      if (isConnected === "CONNECTED") return "APP CONNECTED";
+     if (isConnected === "AUTH_FAILED") return "AUTH FAILED";
      if (isConnected === "CONNECTING") return "CONNECTING";
      return "OFFLINE";
   };
@@ -192,6 +193,9 @@ function App() {
           </nav>
 
           <div style={{marginTop: 'auto', padding: '16px', borderTop: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-muted)'}}>
+             <div style={{color: isConnected === 'CONNECTED' ? 'var(--success)' : 'var(--danger)', fontWeight: 600, marginBottom: '6px'}}>
+                {getConnectionText()}
+             </div>
              <div style={{color: getHardwareIdentityStatus().color, fontWeight: 600}}>
                 {getHardwareIdentityStatus().text}
              </div>
@@ -201,8 +205,15 @@ function App() {
 
         {isDrawerOpen && currentView !== 'FLIGHT' && <div className="drawer-overlay" style={{zIndex: 999}} onClick={() => setIsDrawerOpen(false)} />}
 
-        {testMode && <div className="test-mode-banner" style={{position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100}}>DEMO / TEST MODE</div>}
-        {indoorMode && !testMode && <div className="test-mode-banner" style={{position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100}}>INDOOR / BENCH TEST (NO GPS REQ)</div>}
+        <div style={{position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100, display: 'flex', flexDirection: 'column'}}>
+          {isConnected === 'AUTH_FAILED' && (
+            <div className="test-mode-banner" style={{background: 'var(--danger)'}}>
+              RELAY AUTH FAILED{connectionError ? `: ${connectionError}` : ''}
+            </div>
+          )}
+          {testMode && <div className="test-mode-banner">DEMO / TEST MODE</div>}
+          {indoorMode && !testMode && <div className="test-mode-banner">INDOOR / BENCH TEST (NO GPS REQ)</div>}
+        </div>
 
         {currentView === 'FLIGHT' ? (
            <div style={{ flex: 1, position: 'relative', overflow: 'hidden', zIndex: 10 }}>

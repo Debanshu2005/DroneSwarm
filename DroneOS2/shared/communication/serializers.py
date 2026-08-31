@@ -12,7 +12,7 @@ from DroneOS.shared.protocol.messages import (
     ParamRequestMessage, ParamResponseMessage, DiagnosticsMessage,
     DroneJoinMessage, DroneLeaveMessage, SwarmStateMessage,
     PeerStateMessage, DroneIdentityMessage, SwarmHeartbeatMessage,
-    TaskBidMessage
+    TaskBidMessage, TerminalCommandMessage
 )
 from DroneOS.shared.communication.interfaces import IMessageSerializer
 
@@ -50,11 +50,13 @@ class JsonSerializer(IMessageSerializer):
             MessageType.PEER_STATE: PeerStateMessage,
             MessageType.DRONE_IDENTITY: DroneIdentityMessage,
             MessageType.SWARM_HEARTBEAT: SwarmHeartbeatMessage,
-            MessageType.TASK_BID: TaskBidMessage
+            MessageType.TASK_BID: TaskBidMessage,
+            MessageType.TERMINAL_COMMAND: TerminalCommandMessage
         }
 
     def serialize(self, message: BaseMessage) -> bytes:
-        return message.model_dump_json().encode('utf-8')
+        exclude = {"hmac_sig"} if getattr(message, "hmac_sig", None) is None else None
+        return message.model_dump_json(exclude=exclude).encode('utf-8')
 
     def deserialize(self, data: bytes) -> BaseMessage:
         try:

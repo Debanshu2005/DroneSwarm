@@ -3,7 +3,7 @@ import { useDroneContext } from '../context/DroneContext';
 import { Radio, Smartphone, Globe, Cpu, HardDrive } from 'lucide-react';
 
 export default function DiagnosticsView() {
-  const { eventLog, wsManager, isConnected, drones } = useDroneContext();
+  const { eventLog, wsManager, isConnected, connectionError, drones } = useDroneContext();
   const [filter, setFilter] = useState('');
   const [selectedDroneId, setSelectedDroneId] = useState(Object.keys(drones)[0] || null);
 
@@ -30,6 +30,7 @@ export default function DiagnosticsView() {
             <h3 style={{marginBottom: '16px', fontSize: '14px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px'}}><Smartphone size={16}/> PHONEOS (GCS)</h3>
             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px'}}>
                <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">WebSocket:</span> <span className={isConnected === 'CONNECTED' ? 'good' : 'danger'}>{isConnected}</span></div>
+               {isConnected === 'AUTH_FAILED' && <div style={{gridColumn: '1 / -1', color: 'var(--danger)', fontWeight: 600}}>Relay auth failed{connectionError ? `: ${connectionError}` : ''}</div>}
                <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Latency:</span> <span>{wsManager?.latency || 0}ms</span></div>
                <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">UI State:</span> <span>ACTIVE</span></div>
                <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Known Drones:</span> <span>{Object.keys(drones).length}</span></div>
@@ -40,7 +41,7 @@ export default function DiagnosticsView() {
             <h3 style={{marginBottom: '16px', fontSize: '14px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px'}}><Globe size={16}/> RELAY (NETWORK)</h3>
             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px'}}>
                <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Connection:</span> <span>UDP BIND</span></div>
-               <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">WS Link:</span> <span className={isConnected === 'CONNECTED' ? 'good' : 'danger'}>{isConnected === 'CONNECTED' ? 'OK' : 'DOWN'}</span></div>
+               <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">WS Link:</span> <span className={isConnected === 'CONNECTED' ? 'good' : 'danger'}>{isConnected === 'CONNECTED' ? 'OK' : isConnected === 'AUTH_FAILED' ? 'AUTH FAILED' : 'DOWN'}</span></div>
                <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Packets:</span> <span>--</span></div>
             </div>
          </div>

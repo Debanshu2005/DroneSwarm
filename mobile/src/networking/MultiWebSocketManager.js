@@ -6,6 +6,7 @@ export class MultiWebSocketManager {
         this.listeners = {};
         this.onConnectionChange = null; // Callback for tracking individual connection status
         this.authToken = authToken || "";
+        this.connectionStates = {};
     }
 
     setAuthToken(authToken = "") {
@@ -21,9 +22,10 @@ export class MultiWebSocketManager {
 
         const wsManager = new WebSocketManager(url, this.authToken);
         
-        wsManager.onConnectionChange = (state) => {
+        wsManager.onConnectionChange = (state, detail = {}) => {
+            this.connectionStates[url] = { state, detail };
             if (this.onConnectionChange) {
-                this.onConnectionChange(url, state);
+                this.onConnectionChange(url, state, detail);
             }
         };
 
@@ -41,6 +43,7 @@ export class MultiWebSocketManager {
         if (this.connections[url]) {
             this.connections[url].disconnect();
             delete this.connections[url];
+            delete this.connectionStates[url];
             if (this.onConnectionChange) {
                 this.onConnectionChange(url, 'DISCONNECTED');
             }
@@ -128,5 +131,8 @@ export class MultiWebSocketManager {
 
     disconnectAll() {
         Object.values(this.connections).forEach(ws => ws.disconnect());
+        Object.keys(this.connectionStates).forEach(url => {
+            this.connectionStates[url] = { state: 'OFFLINE', detail: {} };
+        });
     }
 }

@@ -71,16 +71,16 @@ class UdpWebsocketRelay:
             msg = json.loads(raw) if isinstance(raw, str) else {}
         except asyncio.TimeoutError:
             logger.warning(f"WebSocket auth timed out from {websocket.remote_address}")
-            await websocket.close()
+            await websocket.close(code=4001, reason="Relay authentication timed out")
             return False
         except Exception as e:
             logger.warning(f"WebSocket auth failed from {websocket.remote_address}: {e}")
-            await websocket.close()
+            await websocket.close(code=4001, reason="Relay authentication failed")
             return False
 
         if msg.get("type") != "AUTH" or msg.get("token") != self.auth_token:
             logger.warning(f"WebSocket auth rejected from {websocket.remote_address}")
-            await websocket.close()
+            await websocket.close(code=4001, reason="Relay authentication rejected")
             return False
         logger.info(f"WebSocket client authenticated from {websocket.remote_address}")
         return True

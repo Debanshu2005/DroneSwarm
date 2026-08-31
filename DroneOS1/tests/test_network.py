@@ -4,6 +4,12 @@ from DroneOS1.shared.communication.network_node import UdpNetworkAdapter
 from DroneOS1.shared.communication.serializers import JsonSerializer
 from DroneOS1.shared.protocol.messages import HeartbeatMessage
 
+def test_default_serialization_omits_empty_hmac_sig():
+    serializer = JsonSerializer()
+    msg = HeartbeatMessage(sender_id="test_node", status="active", timestamp=12345.0)
+
+    assert b"hmac_sig" not in serializer.serialize(msg)
+
 @pytest.mark.asyncio
 async def test_broadcast_message_sends_to_both_ports():
     # Setup mock serializer

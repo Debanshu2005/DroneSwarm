@@ -31,6 +31,7 @@ const safeStorageSet = (key, value) => {
 export const DroneProvider = ({ children }) => {
   const [wsManager, setWsManager] = useState(null);
   const [isConnected, setIsConnected] = useState("DISCONNECTED");
+  const [connectionError, setConnectionError] = useState("");
   
   const [drones, setDrones] = useState({});
   const [selectedDrones, setSelectedDrones] = useState(new Set());
@@ -164,11 +165,21 @@ export const DroneProvider = ({ children }) => {
       manager.addConnection(ip, portStr ? parseInt(portStr) : 8080);
     }
 
-    manager.onConnectionChange = (url, status) => {
-      // Could track individual statuses, for now just global "CONNECTED" if any are connected
+    manager.onConnectionChange = (url, status, detail = {}) => {
       const anyConnected = Object.values(manager.connections).some(ws => ws.connected);
-      setIsConnected(anyConnected ? "CONNECTED" : "DISCONNECTED");
-      addLog(`Connection ${url}: ${status}`);
+      const states = Object.values(manager.connectionStates || {}).map(entry => entry.state);
+      const hasAuthFailure = status === "AUTH_FAILED" || states.includes("AUTH_FAILED");
+      const hasConnecting = status === "CONNECTING" || states.includes("CONNECTING");
+      const nextStatus = anyConnected ? "CONNECTED" : hasAuthFailure ? "AUTH_FAILED" : hasConnecting ? "CONNECTING" : "DISCONNECTED";
+      setIsConnected(nextStatus);
+      setConnectionError(hasAuthFailure ? (detail.reason || detail.error || "Relay authentication failed") : "");
+      addLog(
+        `Connection ${url}: ${status}${detail.reason ? ` (${detail.reason})` : ""}`,
+        status === "AUTH_FAILED" ? "ERROR" : "INFO",
+        "PHONEOS",
+        null,
+        status === "AUTH_FAILED" ? "RELAY_AUTH_FAILED" : null
+      );
     };
 
     manager.subscribe(MessageType.HEARTBEAT, (msg) => {
@@ -480,7 +491,7 @@ export const DroneProvider = ({ children }) => {
 
   const value = {
     wsManager, isConnected, drones, selectedDrones,
-    wsUrl, setWsUrl, relayAuthToken, setRelayAuthToken, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs,
+    wsUrl, setWsUrl, relayAuthToken, setRelayAuthToken, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs, connectionError,
     sendCommand, sendTerminalCommand, sendParamRequest, toggleSelect, selectAll, selectNone, addLog,
     testOverrides, setTestOverride, clearTestOverrides, injectFailure, testSessionLog, clearTestSessionLog
   };

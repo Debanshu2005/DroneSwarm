@@ -3,7 +3,7 @@ import { useDroneContext } from '../context/DroneContext';
 import { Settings, RefreshCw, Network, Trash, Play, Activity } from 'lucide-react';
 
 export default function SettingsView() {
-  const { testMode, setTestMode, indoorMode, setIndoorMode, relayAuthToken, setRelayAuthToken, isConnected, wsManager, drones } = useDroneContext();
+  const { testMode, setTestMode, indoorMode, setIndoorMode, relayAuthToken, setRelayAuthToken, isConnected, connectionError, wsManager, drones } = useDroneContext();
   const [newId, setNewId] = useState("drone1");
   const [newIp, setNewIp] = useState("192.168.1.100");
   const [newPort, setNewPort] = useState("8080");
@@ -37,6 +37,11 @@ export default function SettingsView() {
             </div>
 
             <div style={{display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px'}}>
+               {isConnected === 'AUTH_FAILED' && (
+                  <div style={{fontSize: '12px', color: 'var(--danger)', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: '6px', padding: '10px'}}>
+                     Relay authentication failed{connectionError ? `: ${connectionError}` : ''}.
+                  </div>
+               )}
                <input
                   type="password"
                   placeholder="OPTIONAL RELAY AUTH TOKEN"
@@ -58,7 +63,10 @@ export default function SettingsView() {
                ) : (
                   Object.entries(wsManager.connections).map(([url, conn]) => {
                      const isOnline = conn.ws?.readyState === WebSocket.OPEN;
-                     const isTesting = conn.connected && !isOnline;
+                     const state = wsManager.connectionStates?.[url]?.state;
+                     const isTesting = state === 'CONNECTING' || (conn.connected && !isOnline);
+                     const isAuthFailed = state === 'AUTH_FAILED';
+                     const statusText = isOnline ? 'ONLINE' : (isAuthFailed ? 'AUTH FAILED' : isTesting ? 'CONNECTING...' : 'OFFLINE');
                      return (
                         <div key={url} style={{background: 'var(--bg-color)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border)'}}>
                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
@@ -69,7 +77,7 @@ export default function SettingsView() {
                               <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end'}}>
                                  <span style={{fontSize: '11px', fontWeight: 'bold', color: 'var(--text-muted)'}}>STATUS:</span>
                                  <span style={{fontSize: '13px', fontWeight: 'bold', color: isOnline ? 'var(--success)' : (isTesting ? 'var(--warning)' : 'var(--danger)')}}>
-                                    ● {isOnline ? 'ONLINE' : (isTesting ? 'CONNECTING...' : 'OFFLINE')}
+                                    ● {statusText}
                                  </span>
                               </div>
                            </div>
