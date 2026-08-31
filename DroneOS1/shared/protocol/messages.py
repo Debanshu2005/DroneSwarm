@@ -107,6 +107,7 @@ class CommandAction(str, Enum):
     TAKEOFF = "takeoff"
     LAND = "land"
     RTL = "rtl"
+    SRTL = "srtl"
     HOVER = "hover"
     STOP = "stop"
     MOVE = "move"

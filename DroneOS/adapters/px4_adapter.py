@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional
+from typing import Optional, Tuple
 from DroneOS.core.interfaces import IFlightController
 from DroneOS.shared.config.models import FlightConfig
 from DroneOS.shared.utils.logger import setup_logger
@@ -353,6 +353,16 @@ class PX4FlightController(IFlightController):
         except Exception as e:
             logger.error(f"Failed to stop movement cleanly: {e}")
             return False
+
+    async def get_home_position(self) -> Optional[Tuple[float, float, float]]:
+        if not self._connected or not self._telemetry.home_valid:
+            return None
+        try:
+            async for terrain_info in self.client.telemetry.home():
+                return (terrain_info.latitude_deg, terrain_info.longitude_deg, terrain_info.absolute_altitude_m)
+        except Exception as e:
+            logger.error(f"Failed to read home position: {e}")
+        return None
 
     async def set_mode(self, mode: str) -> bool:
         if not self._connected:

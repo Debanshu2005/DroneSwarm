@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Optional, Tuple
 from DroneOS.shared.protocol.messages import TelemetryData
 
 class IFlightController(ABC):
@@ -114,6 +115,14 @@ class IFlightController(ABC):
     async def stop_movement(self) -> bool:
         """
         Stops the drone movement safely by commanding neutral inputs.
+        """
+        pass
+
+    @abstractmethod
+    async def get_home_position(self) -> Optional[Tuple[float, float, float]]:
+        """
+        Retrieves the home position of the drone.
+        Outputs: (home_lat, home_lon, home_abs_alt) or None if unavailable.
         """
         pass
 

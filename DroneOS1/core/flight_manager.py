@@ -9,13 +9,14 @@ class FlightManager:
     High-level state machine and wrapper around the abstract IFlightController.
     Handles sequence of operations (e.g., must be armed before takeoff).
     """
-    def __init__(self, flight_controller: IFlightController):
+    def __init__(self, flight_controller: IFlightController, min_srtl_altitude_m: float = 2.0):
         self.fc = flight_controller
         self._last_move_time = 0.0
         self._deadman_task = None
         self._active_flight_task = None
         self.swarm_manager = None
         self._active_navigation_frame = None
+        self._min_srtl_altitude_m = min_srtl_altitude_m
 
     def set_swarm_manager(self, swarm_manager):
         self.swarm_manager = swarm_manager
@@ -74,6 +75,67 @@ class FlightManager:
         if success:
             logger.info("RTL command accepted.")
         return success
+
+    async def smart_rtl(self, params: Dict[str, Any] = None) -> bool:
+        self._cancel_active_task()
+
+        telemetry = await self.fc.get_telemetry()
+        if telemetry.altitude is None or telemetry.altitude < self._min_srtl_altitude_m:
+            logger.error(f"SRTL rejected: altitude too low ({telemetry.altitude}m, "
+                          f"minimum {self._min_srtl_altitude_m}m) for a safe same-altitude return.")
+            return False
+
+        home = await self.fc.get_home_position()
+        if home is None:
+            logger.error("SRTL rejected: home position not available.")
+            return False
+        home_lat, home_lon, _ = home
+
+        logger.warning(
+            "SRTL initiated: returning at current altitude "
+            f"({telemetry.altitude:.1f}m) WITHOUT climbing. This does not have standard "
+            "RTL's obstacle-clearance margin — operator is responsible for confirming "
+            "the direct path home is clear."
+        )
+
+        import asyncio
+        self._active_flight_task = asyncio.create_task(self._smart_rtl_loop(home_lat, home_lon))
+        return True
+
+    async def _smart_rtl_loop(self, home_lat: float, home_lon: float):
+        import asyncio, time
+        from DroneOS1.shared.nlp.trajectory_engine import global_distance_m
+        
+        acceptance_radius_m = 2.5
+        timeout_s = 60.0
+        start_time = time.monotonic()
+        
+        try:
+            while True:
+                if time.monotonic() - start_time > timeout_s:
+                    logger.error("SRTL timeout reached.")
+                    await self.fc.hover()
+                    return
+                
+                telemetry = await self.fc.get_telemetry()
+                
+                if telemetry.latitude is not None and telemetry.longitude is not None:
+                    dist = global_distance_m(telemetry.latitude, telemetry.longitude, home_lat, home_lon)
+                    if dist <= acceptance_radius_m:
+                        logger.info("SRTL arrived at home position, landing.")
+                        await self.fc.land()
+                        return
+                
+                if not telemetry.gps_valid:
+                    pass
+                else:
+                    alt = telemetry.altitude if telemetry.altitude is not None else self._min_srtl_altitude_m
+                    await self.fc.goto_location(home_lat, home_lon, alt, yaw=0.0)
+                    
+                await asyncio.sleep(0.5)
+        except asyncio.CancelledError:
+            logger.info("SRTL loop cancelled.")
+            await self.fc.hover()
 
     async def hover(self, params: Dict[str, Any] = None) -> bool:
         self._cancel_active_task()

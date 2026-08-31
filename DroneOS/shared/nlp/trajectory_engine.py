@@ -60,6 +60,7 @@ class TaskAction(str, Enum):
     HOLD = "hold"
     LAND = "land"
     RTL = "rtl"
+    SRTL = "srtl"
     TAKEOFF = "takeoff"
     TAKEOFF_LAND = "takeoff_land"
     MOVE_RELATIVE = "move_relative"
@@ -175,7 +176,8 @@ def parse_mission(
     has_takeoff = bool(re.search(r'\btakeoff\b', normalized))
     has_hover = bool(re.search(r'\bhover\b', normalized))
     has_land = bool(re.search(r'\bland\b', action_text))
-    has_rtl = bool(re.search(r'\brtl\b|\breturn\b', action_text))
+    has_srtl = bool(re.search(r'\bsrtl\b|\bsmart rtl\b', action_text))
+    has_rtl = bool(re.search(r'\brtl\b|\breturn\b', action_text)) and not has_srtl
     has_hold = bool(re.search(r'\bhold\b|\bloiter\b', action_text))
     has_arm = bool(re.search(r'\barm\b', action_text))
     has_disarm = bool(re.search(r'\bdisarm\b', action_text))
@@ -336,6 +338,7 @@ def parse_mission(
     if has_hold: tasks.append({'task': 'HOLD'})
     if has_land: tasks.append({'task': 'LAND'})
     if has_rtl: tasks.append({'task': 'RTL'})
+    if has_srtl: tasks.append({'task': 'SRTL'})
         
     return tasks
 
@@ -456,7 +459,7 @@ def build_trajectory(
     report: SensorReport,
     origin: VehicleOrigin,
 ) -> TrajectoryPlan:
-    if task.action in {TaskAction.HOVER, TaskAction.SET_MODE, TaskAction.HOLD, TaskAction.LAND, TaskAction.RTL, TaskAction.ARM, TaskAction.DISARM}:
+    if task.action in {TaskAction.HOVER, TaskAction.SET_MODE, TaskAction.HOLD, TaskAction.LAND, TaskAction.RTL, TaskAction.SRTL, TaskAction.ARM, TaskAction.DISARM}:
         frame = _frame_for_mode(report.mode)
         altitude_m = max(0.0, float(origin.relative_alt_m or 0.0))
         if task.action == TaskAction.HOVER:
@@ -473,6 +476,7 @@ def build_trajectory(
         TaskAction.HOLD,
         TaskAction.LAND,
         TaskAction.RTL,
+        TaskAction.SRTL,
     }:
         raise ValueError("cannot generate navigation trajectory with degraded position estimate")
 

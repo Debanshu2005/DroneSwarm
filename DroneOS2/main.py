@@ -167,6 +167,7 @@ class DroneOSApp:
         self.command_handler.register_handler(CommandAction.TAKEOFF, self.flight_manager.takeoff)
         self.command_handler.register_handler(CommandAction.LAND, self.flight_manager.land)
         self.command_handler.register_handler(CommandAction.RTL, self.flight_manager.rtl)
+        self.command_handler.register_handler(CommandAction.SRTL, self.flight_manager.smart_rtl)
         self.command_handler.register_handler(CommandAction.HOVER, self.flight_manager.hover)
         self.command_handler.register_handler(CommandAction.STOP, self.flight_manager.stop)
         self.command_handler.register_handler(CommandAction.MOVE, self.flight_manager.move)

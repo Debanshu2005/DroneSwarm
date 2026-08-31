@@ -147,6 +147,15 @@ class TerminalController:
             )
             return await self.command_handler.handle_command(msg)
             
+        elif task.action == TaskAction.SRTL:
+            msg = ControlMessage(
+                action=CommandAction.SRTL,
+                params={},
+                sender_id=sender_id,
+                timestamp=time.time()
+            )
+            return await self.command_handler.handle_command(msg)
+            
         elif task.action == TaskAction.FORMATION:
             msg = ControlMessage(
                 action=CommandAction.FORMATION_UPDATE,
