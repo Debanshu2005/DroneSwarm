@@ -96,3 +96,41 @@ async def test_smart_rtl_gps_degraded(mock_fc):
     
     await asyncio.sleep(0.6)
     mock_fc.goto_location.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_smart_rtl_gps_degraded_arrival_gate(mock_fc):
+    manager = FlightManager(mock_fc, min_srtl_altitude_m=2.0)
+    
+    mock_fc.get_home_position.return_value = (10.0001, 20.0001, 0.0)
+    
+    mock_fc.get_telemetry.return_value = TelemetryData(
+        altitude=5.0, flight_mode="GUIDED", gps_valid=True,
+        latitude=10.0, longitude=20.0
+    )
+    
+    result = await manager.smart_rtl()
+    assert result is True
+    
+    # Simulate gps_valid=False but latitude/longitude within acceptance radius.
+    mock_fc.get_telemetry.return_value = TelemetryData(
+        altitude=5.0, flight_mode="GUIDED", gps_valid=False,
+        latitude=10.0001, longitude=20.0001
+    )
+    
+    await asyncio.sleep(0.6)
+    
+    # Should NOT land because iteration is skipped
+    mock_fc.land.assert_not_called()
+    mock_fc.goto_location.assert_not_called()
+    
+    # Now simulate gps_valid=True
+    mock_fc.get_telemetry.return_value = TelemetryData(
+        altitude=5.0, flight_mode="GUIDED", gps_valid=True,
+        latitude=10.0001, longitude=20.0001
+    )
+    
+    await asyncio.sleep(0.6)
+    
+    # Now it should land
+    mock_fc.land.assert_called_once()
+    assert manager._active_flight_task.done()

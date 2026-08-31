@@ -103,6 +103,13 @@ class FlightManager:
         return True
 
     async def _smart_rtl_loop(self, home_lat: float, home_lon: float):
+        """
+        Structural note: This polling loop is kept separate from TerminalController._run_waypoints.
+        While they share distance-checking logic, they operate at different layers:
+        _run_waypoints passively monitors arrival after issuing a one-off command,
+        while this loop actively recalculates and re-issues goto_location with fresh altitude
+        on every iteration, and must gate all operations on GPS validity.
+        """
         import asyncio, time
         from DroneOS.shared.nlp.trajectory_engine import global_distance_m
         
@@ -119,6 +126,10 @@ class FlightManager:
                 
                 telemetry = await self.fc.get_telemetry()
                 
+                if not telemetry.gps_valid:
+                    await asyncio.sleep(0.5)
+                    continue
+                
                 if telemetry.latitude is not None and telemetry.longitude is not None:
                     dist = global_distance_m(telemetry.latitude, telemetry.longitude, home_lat, home_lon)
                     if dist <= acceptance_radius_m:
@@ -126,11 +137,8 @@ class FlightManager:
                         await self.fc.land()
                         return
                 
-                if not telemetry.gps_valid:
-                    pass
-                else:
-                    alt = telemetry.altitude if telemetry.altitude is not None else self._min_srtl_altitude_m
-                    await self.fc.goto_location(home_lat, home_lon, alt, yaw=0.0)
+                alt = telemetry.altitude if telemetry.altitude is not None else self._min_srtl_altitude_m
+                await self.fc.goto_location(home_lat, home_lon, alt, yaw=0.0)
                     
                 await asyncio.sleep(0.5)
         except asyncio.CancelledError:
