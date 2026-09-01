@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useDroneContext } from '../context/DroneContext';
 import {
-  ShieldAlert, ShieldCheck, Navigation, ArrowUp, ArrowDown, Activity,
-  ArrowLeft, Square, RotateCcw, RotateCw, ArrowRight, Map, Video, Menu,
-  Battery, Signal, Wifi, Compass, Gauge, AlertTriangle, Lock, Unlock,
-  Plus, Minus, Settings, X
+  ShieldCheck, Navigation, ArrowUp, ArrowDown,
+  ArrowLeft, Square, RotateCcw, RotateCw, ArrowRight, Menu,
+  Battery, Compass, Gauge, AlertTriangle, Lock, Unlock,
+  Plus, Minus, Settings, X, LocateFixed, Radar
 } from 'lucide-react';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
@@ -12,6 +12,8 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
 import { CommandAction } from '../protocol/messages';
+import { useDeviceLocation } from '../hooks/useDeviceLocation';
+import { DEFAULT_MAP_CENTER, resolveAirspaceZone } from '../utils/airspace';
 
 
 // Fix Leaflet's default icon path issues in React
@@ -35,16 +37,18 @@ const createDroneIcon = (color, heading) => {
   return L.divIcon({ html: svg, className: 'custom-drone-icon', iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -16] });
 };
 
-const getZoneInfo = (lat, lng) => {
-   if (!lat || !lng) return { color: '#9E9E9E', text: 'UNKNOWN ZONE' };
-   const hash = Math.floor(Math.abs(lat * 100 + lng * 100));
-   if (hash % 3 === 0) return { color: '#D32F2F', text: 'RED ZONE (NO-FLY)' };
-   if (hash % 2 === 0) return { color: '#F57C00', text: 'YELLOW ZONE (AUTH REQ)' };
-   return { color: '#388E3C', text: 'GREEN ZONE (SAFE)' };
-};
+function RecenterAutomatically({ center }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center) {
+      map.setView(center, map.getZoom(), { animate: true });
+    }
+  }, [center, map]);
+  return null;
+}
 
 export default function DroneControlView({ setView }) {
-  const { drones, nowMs, sendCommand, isConnected, indoorMode, setIndoorMode, wsManager } = useDroneContext();
+  const { drones, nowMs, sendCommand, isConnected, indoorMode, setIndoorMode } = useDroneContext();
 
   const [targetMode, setTargetMode] = useState('ALL'); // 'ALL' or droneId
   const [targetDroneId, setTargetDroneId] = useState(null);
@@ -52,7 +56,6 @@ export default function DroneControlView({ setView }) {
   // Formation defaults
   const [formationType, setFormationType] = useState('V');
   const [formationSpacing, setFormationSpacing] = useState(2.0);
-  const [formationSpeed, setFormationSpeed] = useState(0.5);
 
   // Speed defaults to 0.10 m/s
   const [movementSpeed, setMovementSpeed] = useState(0.10);
@@ -60,16 +63,8 @@ export default function DroneControlView({ setView }) {
   const [yawRate, setYawRate] = useState(15.0);
   const [targetAltitude, setTargetAltitude] = useState(1.0);
 
-  const [userLocation, setUserLocation] = useState(null);
-
-  useEffect(() => {
-     if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-           (pos) => setUserLocation([pos.coords.latitude, pos.coords.longitude]),
-           (err) => console.warn('Geolocation blocked or failed:', err)
-        );
-     }
-  }, []);
+  const location = useDeviceLocation();
+  const userLocation = location.coords;
 
   const [showConfirmModal, setShowConfirmModal] = useState(null); // { action, params, message }
   const [dismissedCmds, setDismissedCmds] = useState(new Set());
@@ -174,10 +169,10 @@ export default function DroneControlView({ setView }) {
 
   
   let mapCenter;
-  if (activeDrone && tel.latitude && tel.longitude && tel.latitude !== 0) {
-      mapCenter = [tel.latitude, tel.longitude];
-  } else if (userLocation) {
+  if (userLocation) {
       mapCenter = userLocation;
+  } else if (activeDrone && tel.latitude && tel.longitude && tel.latitude !== 0) {
+      mapCenter = [tel.latitude, tel.longitude];
   } else {
       // Find any drone with valid GPS
       const validDroneId = droneIds.find(id => drones[id]?.telemetry?.latitude && drones[id]?.telemetry?.latitude !== 0);
@@ -185,9 +180,15 @@ export default function DroneControlView({ setView }) {
           mapCenter = [drones[validDroneId].telemetry.latitude, drones[validDroneId].telemetry.longitude];
       }
   }
-  if (!mapCenter) mapCenter = [22.315, 87.310];
+  if (!mapCenter) mapCenter = DEFAULT_MAP_CENTER;
 
-  const currentZone = getZoneInfo(mapCenter[0], mapCenter[1]);
+  const currentZone = resolveAirspaceZone(userLocation?.[0] ?? mapCenter[0], userLocation?.[1] ?? mapCenter[1]);
+  const gpsSourceText = userLocation
+      ? `Pilot GPS ${userLocation[0].toFixed(5)}, ${userLocation[1].toFixed(5)}`
+      : location.status === 'requesting'
+        ? 'Requesting pilot GPS...'
+        : location.error || 'Pilot GPS unavailable';
+
   return (
     <div className="drone-control-view">
       {/* BACKGROUND MAP LAYER */}
@@ -199,7 +200,8 @@ export default function DroneControlView({ setView }) {
             </div>
          }>
              <MapContainer center={mapCenter} zoom={18} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="" />
+            <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="" />
+            <RecenterAutomatically center={mapCenter} />
             
             {droneIds.map(id => {
                const d = drones[id];
@@ -232,11 +234,11 @@ export default function DroneControlView({ setView }) {
             {userLocation && (
                <CircleMarker 
                   center={userLocation} 
-                  pathOptions={{ color: '#3B82F6', fillColor: '#3B82F6', fillOpacity: 0.8 }} 
-                  radius={6}
+                  pathOptions={{ color: '#5de4ff', fillColor: '#5de4ff', fillOpacity: 0.9 }} 
+                  radius={8}
                >
                   <Popup>
-                     <div style={{color: '#000', fontWeight: 'bold'}}>Your Location</div>
+                     <div style={{color: '#000', fontWeight: 'bold'}}>Pilot GPS</div>
                   </Popup>
                </CircleMarker>
             )}
@@ -260,6 +262,10 @@ export default function DroneControlView({ setView }) {
                        {droneIds.map(id => <option key={id} value={id}>{id}</option>)}
                     </select>
                  </div>
+
+                 <button className="hud-btn hud-gps-btn" onClick={location.requestLocation}>
+                    <LocateFixed size={14}/> PILOT GPS
+                 </button>
              </div>
              
              <div className="hud-top-right">
@@ -284,8 +290,8 @@ export default function DroneControlView({ setView }) {
                 <div className={`hud-mode-pill ${indoorMode ? 'warning-bg' : 'primary-bg'}`}>
                    {indoorMode ? 'INDOOR' : 'OUTDOOR'}
                 </div>
-                <div className="hud-mode-pill" style={{backgroundColor: currentZone.color}}>
-                   {currentZone.text}
+                <div className={`hud-mode-pill zone-pill ${currentZone.level}`} style={{'--zone-color': currentZone.color}}>
+                   <Radar size={12}/> {currentZone.label}
                 </div>
                 <button className="hud-btn" onClick={() => setView('SETTINGS')}>
                    <Settings size={12}/> SET
@@ -295,6 +301,16 @@ export default function DroneControlView({ setView }) {
          
          {/* STATUS CARDS */}
          <div className="hud-status-cards">
+            <div className={`telemetry-card zone-card ${currentZone.level}`} style={{'--zone-color': currentZone.color}}>
+               <div className="t-header"><Radar size={12}/> AIRSPACE</div>
+               <div className="t-main" style={{color: currentZone.color}}>{currentZone.shortLabel}</div>
+               <div className="t-sub">{currentZone.distanceLabel || 'ADVISORY'}</div>
+            </div>
+            <div className="telemetry-card pilot-card">
+               <div className="t-header"><LocateFixed size={12}/> LAUNCH</div>
+               <div className={`t-main ${userLocation ? 'good' : 'danger'}`}>{userLocation ? 'LOCK' : 'GPS'}</div>
+               <div className="t-sub">{userLocation && location.accuracy ? `+/- ${location.accuracy.toFixed(0)}m` : gpsSourceText}</div>
+            </div>
             <div className="telemetry-card">
                <div className="t-header"><Battery size={12}/> BAT</div>
                <div className={`t-main ${tel.battery_level > 20 ? 'good' : 'danger'}`}>{tel.battery_level != null ? `${tel.battery_level.toFixed(0)}%` : '--'}</div>
@@ -324,6 +340,21 @@ export default function DroneControlView({ setView }) {
                <div className="t-header"><RotateCw size={12}/> HDG</div>
                <div className="t-main">{tel.heading != null ? `${tel.heading.toFixed(0)}°` : '--'}</div>
             </div>
+         </div>
+
+         <div className={`flight-zone-banner ${currentZone.level}`} style={{'--zone-color': currentZone.color}}>
+            <div className="flight-zone-code">{currentZone.shortLabel}</div>
+            <div className="flight-zone-copy">
+               <div className="flight-zone-title">{currentZone.description}</div>
+               <div className="flight-zone-meta">
+                  {gpsSourceText} / {currentZone.source}{currentZone.distanceLabel ? ` / ${currentZone.distanceLabel}` : ''}
+               </div>
+            </div>
+            {!userLocation && (
+               <button className="hud-btn flight-zone-action" onClick={location.requestLocation}>
+                  <LocateFixed size={14}/> ALLOW GPS
+               </button>
+            )}
          </div>
          
          {/* E-STOP WARNING */}
@@ -842,6 +873,315 @@ export default function DroneControlView({ setView }) {
         .modal-actions { display: flex; gap: 8px; margin-top: 24px; }
         .action-btn { flex: 1; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 14px; border: none; cursor: pointer; }
         
+        /* Futuristic flight deck overrides */
+        .drone-control-view {
+           --bg-color: #05080c;
+           --surface: rgba(8, 14, 20, 0.86);
+           --surface-strong: rgba(10, 18, 26, 0.94);
+           --border: rgba(93, 228, 255, 0.2);
+           --text-main: #e7f4ff;
+           --text-muted: #8ea3b8;
+           --primary: #2f9dff;
+           --success: #28d17c;
+           --warning: #ffbf3d;
+           --danger: #ff4b55;
+           background:
+             linear-gradient(90deg, rgba(93, 228, 255, 0.06) 1px, transparent 1px),
+             linear-gradient(0deg, rgba(93, 228, 255, 0.04) 1px, transparent 1px),
+             #05080c;
+           background-size: 44px 44px, 44px 44px, auto;
+        }
+
+        .map-layer .leaflet-tile-pane {
+           filter: saturate(0.74) contrast(1.16) brightness(0.58);
+        }
+
+        .map-layer::after {
+           content: "";
+           position: absolute;
+           inset: 0;
+           z-index: 500;
+           pointer-events: none;
+           background:
+             linear-gradient(90deg, rgba(93, 228, 255, 0.07) 1px, transparent 1px),
+             linear-gradient(0deg, rgba(93, 228, 255, 0.05) 1px, transparent 1px),
+             radial-gradient(circle at 50% 42%, transparent 0 22%, rgba(5, 8, 12, 0.36) 72%),
+             linear-gradient(180deg, rgba(5, 8, 12, 0.42), transparent 24%, rgba(5, 8, 12, 0.7));
+           background-size: 84px 84px, 84px 84px, auto, auto;
+        }
+
+        .hud-top-bar,
+        .hud-bottom-bar {
+           background: rgba(5, 8, 12, 0.88);
+           border-color: rgba(93, 228, 255, 0.18);
+           box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34);
+           backdrop-filter: blur(18px);
+        }
+
+        .hud-top-bar {
+           padding: 8px 12px;
+        }
+
+        .hud-btn,
+        .hud-target-selector,
+        .hud-target-selector select {
+           color: var(--text-main);
+        }
+
+        .hud-btn,
+        .hud-target-selector {
+           background: rgba(11, 20, 29, 0.86);
+           border: 1px solid rgba(93, 228, 255, 0.24);
+           border-radius: 7px;
+           box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+        }
+
+        .hud-btn {
+           min-height: 30px;
+           color: #cdefff;
+        }
+
+        .hud-gps-btn {
+           color: #5de4ff;
+        }
+
+        .hud-status-item,
+        .hud-status-text,
+        .hud-mode-pill {
+           min-height: 26px;
+           display: inline-flex;
+           align-items: center;
+           gap: 5px;
+           padding: 5px 8px;
+           background: rgba(11, 20, 29, 0.78);
+           border: 1px solid rgba(93, 228, 255, 0.16);
+           border-radius: 999px;
+        }
+
+        .zone-pill {
+           background: rgba(7, 11, 16, 0.72);
+           border-color: color-mix(in srgb, var(--zone-color) 56%, transparent);
+           color: var(--zone-color);
+        }
+
+        .hud-status-cards {
+           padding: 8px 10px;
+           background: rgba(5, 8, 12, 0.58);
+           border-bottom: 1px solid rgba(93, 228, 255, 0.12);
+           backdrop-filter: blur(12px);
+        }
+
+        .telemetry-card {
+           min-width: 84px;
+           background:
+             linear-gradient(180deg, rgba(18, 31, 43, 0.9), rgba(7, 12, 18, 0.9));
+           border: 1px solid rgba(93, 228, 255, 0.18);
+           border-radius: 7px;
+           box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px rgba(0,0,0,0.24);
+        }
+
+        .zone-card {
+           border-color: color-mix(in srgb, var(--zone-color) 52%, rgba(93, 228, 255, 0.18));
+        }
+
+        .pilot-card .t-sub {
+           max-width: 120px;
+           overflow: hidden;
+           text-overflow: ellipsis;
+           white-space: nowrap;
+        }
+
+        .t-header {
+           color: #8ea3b8;
+           letter-spacing: 0;
+        }
+
+        .t-main {
+           color: #e7f4ff;
+           font-family: "Consolas", "SFMono-Regular", monospace;
+        }
+
+        .flight-zone-banner {
+           pointer-events: auto;
+           align-self: center;
+           width: min(760px, calc(100% - 24px));
+           display: grid;
+           grid-template-columns: 72px 1fr auto;
+           align-items: center;
+           gap: 12px;
+           margin-top: 8px;
+           padding: 10px 12px;
+           background: rgba(5, 8, 12, 0.72);
+           border: 1px solid color-mix(in srgb, var(--zone-color) 46%, transparent);
+           border-left: 4px solid var(--zone-color);
+           border-radius: 8px;
+           box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+           backdrop-filter: blur(18px);
+        }
+
+        .flight-zone-code {
+           display: grid;
+           place-items: center;
+           min-height: 42px;
+           border-radius: 6px;
+           color: var(--zone-color);
+           background: color-mix(in srgb, var(--zone-color) 16%, rgba(7, 11, 16, 0.9));
+           font-size: 12px;
+           font-weight: 900;
+        }
+
+        .flight-zone-title {
+           font-size: 12px;
+           font-weight: 800;
+           color: var(--text-main);
+        }
+
+        .flight-zone-meta {
+           margin-top: 3px;
+           font-size: 10px;
+           color: var(--text-muted);
+           overflow: hidden;
+           text-overflow: ellipsis;
+           white-space: nowrap;
+        }
+
+        .flight-zone-action {
+           white-space: nowrap;
+        }
+
+        .hud-middle {
+           padding: 14px;
+        }
+
+        .hud-left {
+           width: 236px;
+        }
+
+        .control-panel {
+           background: rgba(7, 12, 18, 0.78);
+           border: 1px solid rgba(93, 228, 255, 0.22);
+           border-radius: 8px;
+           box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 36px rgba(0,0,0,0.28);
+           backdrop-filter: blur(18px);
+        }
+
+        .panel-header {
+           color: #b7cadc;
+           letter-spacing: 0;
+           text-align: left;
+        }
+
+        .preflight-list {
+           gap: 8px;
+        }
+
+        .pf-row {
+           padding: 6px 8px;
+           background: rgba(255, 255, 255, 0.025);
+           border: 1px solid rgba(255, 255, 255, 0.05);
+           border-radius: 6px;
+           color: var(--text-main);
+        }
+
+        .pf-row.good {
+           color: #28d17c;
+           border-color: rgba(40, 209, 124, 0.2);
+        }
+
+        .pf-row.danger {
+           color: #ff6971;
+           border-color: rgba(255, 75, 85, 0.22);
+        }
+
+        .mode-toggle {
+           border: 1px solid rgba(93, 228, 255, 0.18);
+           border-radius: 7px;
+        }
+
+        .mode-toggle button.active.primary {
+           background: rgba(47, 157, 255, 0.24);
+           color: #dff6ff;
+        }
+
+        .mode-toggle button.active.warning {
+           background: rgba(255, 191, 61, 0.2);
+           color: #ffe5a4;
+        }
+
+        .d-pad {
+           gap: 7px;
+        }
+
+        .d-btn,
+        .d-center {
+           background: radial-gradient(circle at 50% 30%, rgba(93, 228, 255, 0.14), rgba(7, 12, 18, 0.94));
+           border: 1px solid rgba(93, 228, 255, 0.26);
+           border-radius: 50%;
+           box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 18px rgba(0,0,0,0.25);
+           color: #dff6ff;
+        }
+
+        .d-center {
+           width: 48px;
+           height: 48px;
+           border-radius: 50%;
+        }
+
+        .d-btn:active,
+        .d-btn.active {
+           background: radial-gradient(circle at 50% 35%, rgba(93, 228, 255, 0.42), rgba(47, 157, 255, 0.34));
+           color: #ffffff;
+           border-color: #5de4ff;
+           box-shadow: 0 0 22px rgba(93, 228, 255, 0.28);
+        }
+
+        .mini-val {
+           color: #5de4ff;
+           font-family: "Consolas", "SFMono-Regular", monospace;
+        }
+
+        .form-panel select {
+           background: rgba(5, 8, 12, 0.9);
+           color: var(--text-main);
+           border-color: rgba(93, 228, 255, 0.22);
+        }
+
+        .hud-bottom-bar {
+           padding: 10px 12px;
+        }
+
+        .command-btn {
+           border: 1px solid rgba(255, 255, 255, 0.08);
+           border-radius: 7px;
+           min-height: 54px;
+           box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 24px rgba(0,0,0,0.26);
+        }
+
+        .btn-arm { background: linear-gradient(180deg, #31b978, #147a4b); }
+        .btn-disarm { background: linear-gradient(180deg, #6d2430, #3a1219); }
+        .btn-hold { background: linear-gradient(180deg, #465563, #1e2933); }
+        .btn-takeoff { background: linear-gradient(180deg, #2f9dff, #12609e); }
+        .btn-land { background: linear-gradient(180deg, #ff4b55, #972530); }
+        .btn-rtl { background: linear-gradient(180deg, #7dd3fc, #25637d); color: #061017; }
+        .btn-emergency { background: linear-gradient(180deg, #b91c1c, #4a0b0f); }
+
+        .super-key {
+           border: 1px solid rgba(255, 255, 255, 0.3);
+           box-shadow: 0 0 18px rgba(255, 75, 85, 0.16), inset 0 1px 0 rgba(255,255,255,0.1);
+        }
+
+        .lifecycle-card {
+           background: rgba(5, 8, 12, 0.86) !important;
+           border-radius: 8px;
+           backdrop-filter: blur(14px);
+        }
+
+        .modal-content {
+           background: rgba(8, 14, 20, 0.96);
+           border: 1px solid rgba(93, 228, 255, 0.22);
+           border-radius: 8px;
+        }
+
         /* Responsive Media Queries */
         @media (max-width: 767px) and (orientation: portrait) {
            .hud-middle { flex-direction: column; overflow-y: auto; pointer-events: auto; }
