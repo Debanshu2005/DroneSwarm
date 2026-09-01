@@ -30,6 +30,21 @@ def convert_local_offset_to_global(anchor_lat: float, anchor_lon: float, anchor_
     target_alt = anchor_alt # Maintain anchor's altitude offset
     return (target_lat, target_lon, target_alt)
 
+def global_offset_local_m(from_lat: float, from_lon: float, to_lat: float, to_lon: float) -> Tuple[float, float]:
+    """
+    Computes the local NED offset (dx_north, dy_east) in meters from one global 
+    position to another, using a flat-earth approximation. This is the inverse 
+    of convert_local_offset_to_global.
+    """
+    EARTH_RADIUS_M = 6371000.0
+    dlat = to_lat - from_lat
+    dlon = to_lon - from_lon
+    
+    dx_north = dlat * (math.pi / 180.0) * EARTH_RADIUS_M
+    dy_east = dlon * (math.pi / 180.0) * EARTH_RADIUS_M * math.cos(math.radians(from_lat))
+    
+    return (dx_north, dy_east)
+
 class FormationManager:
     """
     Computes spatial offsets for drones in a swarm to maintain a specific formation.

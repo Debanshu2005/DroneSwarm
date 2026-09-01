@@ -265,7 +265,8 @@ class FlightManager:
 
     async def _formation_flight_loop(self, params: Dict[str, Any]):
         import asyncio, time, math
-        from DroneOS.core.formation_manager import FormationManager, FormationType, convert_local_offset_to_global
+        from DroneOS1.core.formation_manager import FormationManager, FormationType, convert_local_offset_to_global, global_offset_local_m
+        from DroneOS1.core.repulsion_field import compute_repulsion
         
         form_mgr = FormationManager()
         f_type_str = params.get('type', 'V').upper()
@@ -277,6 +278,7 @@ class FlightManager:
             
         spacing = float(params.get('spacing', 2.0))
         speed = float(params.get('speed', 0.5))
+        repulsion_radius_m = float(params.get('repulsion_radius_m', 2.5))
         form_mgr.set_formation(f_type, spacing)
         
         my_node_id = self.swarm_manager.identity.drone_id
@@ -337,6 +339,33 @@ class FlightManager:
                         await self.fc.hover()
                     else:
                         dx_north, dy_east, dz_down = form_mgr.get_offset(my_index, total_drones)
+                        
+                        # --- REPULSION FIELD LOGIC ---
+                        if telemetry.latitude is not None and telemetry.longitude is not None:
+                            neighbor_offsets = []
+                            for p_id in active_peers:
+                                if p_id == my_node_id:
+                                    continue
+                                peer = self.swarm_manager.registry.get_peer(p_id)
+                                if (peer and peer.last_position_time is not None and 
+                                    (now - peer.last_position_time) < 3.0 and
+                                    peer.lat is not None and peer.lon is not None):
+                                    
+                                    p_north, p_east = global_offset_local_m(
+                                        telemetry.latitude, telemetry.longitude, peer.lat, peer.lon
+                                    )
+                                    neighbor_offsets.append((p_north, p_east))
+                            
+                            rep_n, rep_e = compute_repulsion(
+                                neighbor_offsets, 
+                                radius=repulsion_radius_m, 
+                                gain=1.0, 
+                                max_displacement=2.0
+                            )
+                            dx_north += rep_n
+                            dy_east += rep_e
+                        # ----------------------------
+
                         target_lat, target_lon, target_alt = convert_local_offset_to_global(
                             anchor_peer.lat, anchor_peer.lon, anchor_peer.alt, dx_north, dy_east
                         )

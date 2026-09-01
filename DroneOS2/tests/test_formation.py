@@ -139,3 +139,158 @@ async def test_formation_flight_loop_staleness():
         
     assert mock_fc.hover.called
     assert not mock_fc.goto_location.called
+
+def test_global_offset_local_m_roundtrip():
+    from DroneOS2.core.formation_manager import convert_local_offset_to_global, global_offset_local_m
+    
+    anchor_lat = 40.0
+    anchor_lon = -75.0
+    anchor_alt = 10.0
+    
+    orig_dx = 100.0
+    orig_dy = 50.0
+    
+    t_lat, t_lon, t_alt = convert_local_offset_to_global(anchor_lat, anchor_lon, anchor_alt, orig_dx, orig_dy)
+    dx_north, dy_east = global_offset_local_m(anchor_lat, anchor_lon, t_lat, t_lon)
+    
+    assert abs(dx_north - orig_dx) < 1e-5
+    assert abs(dy_east - orig_dy) < 1e-5
+
+@pytest.mark.asyncio
+async def test_formation_flight_loop_properly_spaced():
+    mock_fc = AsyncMock()
+    mock_fc.get_telemetry.return_value = TelemetryData(gps_valid=True, flight_mode="STABILIZE", latitude=40.0, longitude=-75.0)
+    
+    mock_swarm_manager = MagicMock()
+    fm = FlightManager(mock_fc)
+    fm.set_swarm_manager(mock_swarm_manager)
+    fm.swarm_manager.identity = MagicMock()
+    fm.swarm_manager.identity.drone_id = "drone1"
+    
+    import time
+    now = time.time()
+    
+    # Anchor (drone0) at (40.0, -75.0)
+    peer_anchor = PeerStateManager("drone0")
+    peer_anchor.last_seen = now
+    peer_anchor.is_active = True
+    peer_anchor.lat = 40.0
+    peer_anchor.lon = -75.0
+    peer_anchor.alt = 10.0
+    peer_anchor.last_position_time = now
+    
+    # We are drone1. Let's make sure our telemetry is spaced out enough.
+    peer_self = PeerStateManager("drone1")
+    peer_self.last_seen = now
+    peer_self.is_active = True
+    peer_self.lat = 40.0
+    peer_self.lon = -75.0
+    
+    fm.swarm_manager.registry.peers = {"drone0": peer_anchor, "drone1": peer_self}
+    fm.swarm_manager.registry.get_peer.side_effect = lambda x: fm.swarm_manager.registry.peers.get(x)
+    
+    goto_called = asyncio.Event()
+    target_args = {}
+    async def mock_goto(lat, lon, alt, yaw=0.0):
+        target_args['lat'] = lat
+        target_args['lon'] = lon
+        goto_called.set()
+        fm._active_flight_task.cancel()
+        return True
+        
+    mock_fc.goto_location = AsyncMock(side_effect=mock_goto)
+    
+    # Spacing 5.0, Repulsion Radius 2.5
+    params = {'type': 'V', 'spacing': 5.0, 'repulsion_radius_m': 2.5}
+    fm._active_flight_task = asyncio.create_task(fm._formation_flight_loop(params))
+    
+    try:
+        await asyncio.wait_for(goto_called.wait(), timeout=2.0)
+    except asyncio.TimeoutError:
+        pytest.fail("goto_location was not called")
+        
+    # Unmodified attractive target check
+    from DroneOS2.core.formation_manager import FormationManager, convert_local_offset_to_global
+    form_mgr = FormationManager()
+    form_mgr.set_formation(FormationType.V, 5.0)
+    # drone1 is index 1
+    dx, dy, dz = form_mgr.get_offset(1, 2)
+    expected_lat, expected_lon, _ = convert_local_offset_to_global(40.0, -75.0, 10.0, dx, dy)
+    
+    assert abs(target_args['lat'] - expected_lat) < 1e-8
+    assert abs(target_args['lon'] - expected_lon) < 1e-8
+
+@pytest.mark.asyncio
+async def test_formation_flight_loop_repulsion():
+    # Similar to above, but with a drone closer than 2.5m
+    mock_fc = AsyncMock()
+    # We are at 40.0, -75.0
+    mock_fc.get_telemetry.return_value = TelemetryData(gps_valid=True, flight_mode="STABILIZE", latitude=40.0, longitude=-75.0)
+    
+    mock_swarm_manager = MagicMock()
+    fm = FlightManager(mock_fc)
+    fm.set_swarm_manager(mock_swarm_manager)
+    fm.swarm_manager.identity = MagicMock()
+    fm.swarm_manager.identity.drone_id = "drone1"
+    
+    import time
+    now = time.time()
+    
+    peer_anchor = PeerStateManager("drone0")
+    peer_anchor.last_seen = now
+    peer_anchor.is_active = True
+    peer_anchor.lat = 40.0
+    peer_anchor.lon = -75.0
+    peer_anchor.alt = 10.0
+    peer_anchor.last_position_time = now
+    
+    peer_self = PeerStateManager("drone1")
+    peer_self.last_seen = now
+    peer_self.is_active = True
+    
+    # drone2 is dangerously close to us
+    from DroneOS2.core.formation_manager import convert_local_offset_to_global
+    d2_lat, d2_lon, _ = convert_local_offset_to_global(40.0, -75.0, 10.0, 1.0, 0.0)
+    peer_close = PeerStateManager("drone2")
+    peer_close.last_seen = now
+    peer_close.is_active = True
+    peer_close.lat = d2_lat
+    peer_close.lon = d2_lon
+    peer_close.last_position_time = now
+    
+    fm.swarm_manager.registry.peers = {"drone0": peer_anchor, "drone1": peer_self, "drone2": peer_close}
+    fm.swarm_manager.registry.get_peer.side_effect = lambda x: fm.swarm_manager.registry.peers.get(x)
+    
+    goto_called = asyncio.Event()
+    target_args = {}
+    async def mock_goto(lat, lon, alt, yaw=0.0):
+        target_args['lat'] = lat
+        target_args['lon'] = lon
+        goto_called.set()
+        fm._active_flight_task.cancel()
+        return True
+        
+    mock_fc.goto_location = AsyncMock(side_effect=mock_goto)
+    
+    # Spacing 5.0, Repulsion Radius 2.5
+    params = {'type': 'V', 'spacing': 5.0, 'repulsion_radius_m': 2.5}
+    fm._active_flight_task = asyncio.create_task(fm._formation_flight_loop(params))
+    
+    try:
+        await asyncio.wait_for(goto_called.wait(), timeout=2.0)
+    except asyncio.TimeoutError:
+        pytest.fail("goto_location was not called")
+        
+    # Unmodified target
+    from DroneOS2.core.formation_manager import FormationManager
+    form_mgr = FormationManager()
+    form_mgr.set_formation(FormationType.V, 5.0)
+    # drone1 is index 1
+    dx, dy, dz = form_mgr.get_offset(1, 3)
+    
+    expected_unmodified_lat, expected_unmodified_lon, _ = convert_local_offset_to_global(40.0, -75.0, 10.0, dx, dy)
+    
+    # Because drone2 is 1m North, we should be repelled South. So target_lat should be LESS than expected_unmodified_lat
+    assert target_args['lat'] < expected_unmodified_lat
+    # It should be measurably displaced
+    assert abs(target_args['lat'] - expected_unmodified_lat) > 1e-8
