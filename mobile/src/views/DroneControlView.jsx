@@ -1182,6 +1182,238 @@ export default function DroneControlView({ setView }) {
            border-radius: 8px;
         }
 
+        @media (orientation: landscape) and (max-height: 720px) {
+           .hud-overlay {
+              overflow: hidden;
+           }
+
+           .hud-top-bar {
+              flex-wrap: nowrap;
+              gap: 8px;
+              min-height: 46px;
+              padding: 6px 10px;
+              overflow-x: auto;
+              overflow-y: hidden;
+           }
+
+           .hud-top-bar::-webkit-scrollbar,
+           .hud-status-cards::-webkit-scrollbar,
+           .hud-bottom-bar::-webkit-scrollbar {
+              display: none;
+           }
+
+           .hud-top-left,
+           .hud-top-right {
+              flex-wrap: nowrap;
+              gap: 6px;
+              flex-shrink: 0;
+           }
+
+           .hud-btn,
+           .hud-target-selector,
+           .hud-status-item,
+           .hud-status-text,
+           .hud-mode-pill {
+              min-height: 34px;
+              padding: 7px 9px;
+              font-size: 10px;
+              white-space: nowrap;
+           }
+
+           .hud-target-selector span {
+              display: none;
+           }
+
+           .hud-target-selector select {
+              max-width: 118px;
+              font-size: 10px;
+           }
+
+           .hud-status-cards {
+              height: 68px;
+              padding: 7px 10px;
+              gap: 7px;
+              align-items: stretch;
+              overflow-x: auto;
+              flex-shrink: 0;
+           }
+
+           .telemetry-card {
+              flex: 0 0 118px;
+              min-width: 118px;
+              padding: 7px 9px;
+           }
+
+           .t-header {
+              font-size: 9px;
+              margin-bottom: 4px;
+           }
+
+           .t-main {
+              font-size: 15px;
+           }
+
+           .t-sub {
+              font-size: 9px;
+              max-width: 100%;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+           }
+
+           .flight-zone-banner {
+              position: absolute;
+              top: 126px;
+              left: 50%;
+              transform: translateX(-50%);
+              width: min(680px, calc(100% - 320px));
+              min-width: 360px;
+              grid-template-columns: 58px 1fr auto;
+              min-height: 50px;
+              margin: 0;
+              padding: 8px 10px;
+              z-index: 24;
+           }
+
+           .flight-zone-code {
+              min-height: 34px;
+              font-size: 11px;
+           }
+
+           .flight-zone-title {
+              font-size: 11px;
+           }
+
+           .flight-zone-meta {
+              font-size: 9px;
+           }
+
+           .flight-zone-action {
+              min-height: 30px;
+              padding: 6px 8px;
+           }
+
+           .hud-middle {
+              padding: 10px 12px 8px;
+              gap: 10px;
+              min-height: 0;
+           }
+
+           .hud-left {
+              width: 214px;
+              gap: 8px;
+           }
+
+           .hud-right {
+              align-self: stretch;
+              justify-content: flex-end;
+              max-width: 440px;
+           }
+
+           .hud-left .hud-spacer,
+           .hud-right .hud-spacer {
+              display: none;
+           }
+
+           .control-panel {
+              padding: 9px;
+           }
+
+           .panel-header {
+              font-size: 9px;
+              margin-bottom: 7px;
+           }
+
+           .preflight-list {
+              gap: 5px;
+           }
+
+           .pf-row {
+              padding: 5px 7px;
+              font-size: 10px;
+           }
+
+           .pf-reason {
+              font-size: 9px;
+              margin-top: 6px;
+              padding: 5px;
+           }
+
+           .mode-toggle button {
+              padding: 8px 6px;
+              font-size: 9px;
+           }
+
+           .right-controls-group {
+              align-items: flex-end;
+              gap: 7px;
+           }
+
+           .mini-panel {
+              min-width: 58px;
+           }
+
+           .mini-val {
+              font-size: 13px;
+              margin: 3px 0;
+           }
+
+           .mini-unit {
+              font-size: 8px;
+           }
+
+           .d-pad {
+              gap: 5px;
+           }
+
+           .d-btn {
+              width: 42px;
+              height: 42px;
+           }
+
+           .h-btn {
+              width: 38px;
+              height: 38px;
+           }
+
+           .d-center {
+              width: 42px;
+              height: 42px;
+           }
+
+           .d-btn .d-label {
+              font-size: 8px;
+           }
+
+           .hud-bottom-bar {
+              min-height: 70px;
+              padding: 7px 10px 8px;
+              gap: 7px;
+              overflow-x: auto;
+              flex-shrink: 0;
+           }
+
+           .command-btn {
+              flex: 0 0 122px;
+              min-width: 122px;
+              min-height: 54px;
+              padding: 8px 6px;
+           }
+
+           .cmd-main {
+              font-size: 11px;
+           }
+
+           .cmd-sub {
+              font-size: 8px;
+           }
+
+           .lifecycle-overlay {
+              top: 124px;
+              width: 190px;
+           }
+        }
+
         /* Responsive Media Queries */
         @media (max-width: 767px) and (orientation: portrait) {
            .hud-middle { flex-direction: column; overflow-y: auto; pointer-events: auto; }
