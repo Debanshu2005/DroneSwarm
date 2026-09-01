@@ -7,7 +7,7 @@ import {
   Plus, Minus, Settings, X
 } from 'lucide-react';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -35,6 +35,14 @@ const createDroneIcon = (color, heading) => {
   return L.divIcon({ html: svg, className: 'custom-drone-icon', iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -16] });
 };
 
+const getZoneInfo = (lat, lng) => {
+   if (!lat || !lng) return { color: '#9E9E9E', text: 'UNKNOWN ZONE' };
+   const hash = Math.floor(Math.abs(lat * 100 + lng * 100));
+   if (hash % 3 === 0) return { color: '#D32F2F', text: 'RED ZONE (NO-FLY)' };
+   if (hash % 2 === 0) return { color: '#F57C00', text: 'YELLOW ZONE (AUTH REQ)' };
+   return { color: '#388E3C', text: 'GREEN ZONE (SAFE)' };
+};
+
 export default function DroneControlView({ setView }) {
   const { drones, nowMs, sendCommand, isConnected, indoorMode, setIndoorMode, wsManager } = useDroneContext();
 
@@ -52,6 +60,16 @@ export default function DroneControlView({ setView }) {
   const [yawRate, setYawRate] = useState(15.0);
   const [targetAltitude, setTargetAltitude] = useState(1.0);
 
+  const [userLocation, setUserLocation] = useState(null);
+
+  useEffect(() => {
+     if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+           (pos) => setUserLocation([pos.coords.latitude, pos.coords.longitude]),
+           (err) => console.warn('Geolocation blocked or failed:', err)
+        );
+     }
+  }, []);
 
   const [showConfirmModal, setShowConfirmModal] = useState(null); // { action, params, message }
   const [dismissedCmds, setDismissedCmds] = useState(new Set());
@@ -135,18 +153,7 @@ export default function DroneControlView({ setView }) {
      };
      document.addEventListener('visibilitychange', handleVisibilityChange);
      
-  let mapCenter = [22.315, 87.310]; // Fallback
-  if (activeDrone && tel.latitude && tel.longitude && tel.latitude !== 0) {
-      mapCenter = [tel.latitude, tel.longitude];
-  } else {
-      // Find any drone with valid GPS
-      const validDroneId = droneIds.find(id => drones[id]?.telemetry?.latitude && drones[id]?.telemetry?.latitude !== 0);
-      if (validDroneId) {
-          mapCenter = [drones[validDroneId].telemetry.latitude, drones[validDroneId].telemetry.longitude];
-      }
-  }
-
-  return () => {
+     return () => {
          document.removeEventListener('visibilitychange', handleVisibilityChange);
          stopMove();
      };
@@ -166,9 +173,11 @@ export default function DroneControlView({ setView }) {
   const connectedDronesCount = droneIds.filter(id => (nowMs - drones[id].lastSeen) < 4000).length;
 
   
-  let mapCenter = [22.315, 87.310]; // Fallback
+  let mapCenter;
   if (activeDrone && tel.latitude && tel.longitude && tel.latitude !== 0) {
       mapCenter = [tel.latitude, tel.longitude];
+  } else if (userLocation) {
+      mapCenter = userLocation;
   } else {
       // Find any drone with valid GPS
       const validDroneId = droneIds.find(id => drones[id]?.telemetry?.latitude && drones[id]?.telemetry?.latitude !== 0);
@@ -176,6 +185,9 @@ export default function DroneControlView({ setView }) {
           mapCenter = [drones[validDroneId].telemetry.latitude, drones[validDroneId].telemetry.longitude];
       }
   }
+  if (!mapCenter) mapCenter = [22.315, 87.310];
+
+  const currentZone = getZoneInfo(mapCenter[0], mapCenter[1]);
   return (
     <div className="drone-control-view">
       {/* BACKGROUND MAP LAYER */}
@@ -199,13 +211,35 @@ export default function DroneControlView({ setView }) {
                const icon = createDroneIcon(color, t.heading);
                
                return (
-                  <Marker key={id} position={[t.latitude, t.longitude]} icon={icon}>
-                     <Popup>
-                        <div style={{color: '#000', fontWeight: 'bold'}}>{id}</div>
-                     </Popup>
-                  </Marker>
+                  <React.Fragment key={id}>
+                     <Marker position={[t.latitude, t.longitude]} icon={icon}>
+                        <Popup>
+                           <div style={{color: '#000', fontWeight: 'bold'}}>{id}</div>
+                        </Popup>
+                     </Marker>
+                     {d.path && d.path.length > 1 && (
+                        <Polyline 
+                           positions={d.path} 
+                           color={color} 
+                           weight={3} 
+                           opacity={0.6}
+                        />
+                     )}
+                  </React.Fragment>
                );
             })}
+
+            {userLocation && (
+               <CircleMarker 
+                  center={userLocation} 
+                  pathOptions={{ color: '#3B82F6', fillColor: '#3B82F6', fillOpacity: 0.8 }} 
+                  radius={6}
+               >
+                  <Popup>
+                     <div style={{color: '#000', fontWeight: 'bold'}}>Your Location</div>
+                  </Popup>
+               </CircleMarker>
+            )}
          </MapContainer>
          </ErrorBoundary>
       </div>
@@ -249,6 +283,9 @@ export default function DroneControlView({ setView }) {
                 </div>
                 <div className={`hud-mode-pill ${indoorMode ? 'warning-bg' : 'primary-bg'}`}>
                    {indoorMode ? 'INDOOR' : 'OUTDOOR'}
+                </div>
+                <div className="hud-mode-pill" style={{backgroundColor: currentZone.color}}>
+                   {currentZone.text}
                 </div>
                 <button className="hud-btn" onClick={() => setView('SETTINGS')}>
                    <Settings size={12}/> SET
@@ -554,17 +591,17 @@ export default function DroneControlView({ setView }) {
       {/* STYLES */}
       <style dangerouslySetInnerHTML={{__html: `
         :root {
-           --bg-color: #F6F7F9;
-           --surface: #FFFFFF;
-           --border: #E5E7EB;
-           --text-main: #111827;
-           --text-muted: #6B7280;
-           --primary: #2563EB;
-           --success: #10B981;
-           --warning: #F59E0B;
-           --danger: #EF4444;
-           --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-           --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+           --bg-color: #121212;
+           --surface: #1E1E1E;
+           --border: #333333;
+           --text-main: #E0E0E0;
+           --text-muted: #9E9E9E;
+           --primary: #0066CC;
+           --success: #388E3C;
+           --warning: #F57C00;
+           --danger: #D32F2F;
+           --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+           --shadow-md: 0 4px 6px rgba(0,0,0,0.3);
         }
 
         .drone-control-view {
@@ -572,10 +609,10 @@ export default function DroneControlView({ setView }) {
            flex-direction: column;
            height: 100vh;
            width: 100vw;
-           background-color: #E2E8F0;
+           background-color: var(--bg-color);
            position: relative;
            overflow: hidden;
-           font-family: 'Outfit', sans-serif;
+           font-family: 'Inter', sans-serif;
         }
 
         .map-layer {

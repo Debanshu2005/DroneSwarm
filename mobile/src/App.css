@@ -1,30 +1,30 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg-color: #F6F7F9;
-  --surface: #FFFFFF;
-  --border: #E2E5E9;
+  --bg-color: #121212;
+  --surface: #1E1E1E;
+  --border: #333333;
   
-  --primary: #2563EB;
-  --primary-hover: #1D4ED8;
+  --primary: #0066CC;
+  --primary-hover: #0052A3;
   
-  --danger: #DC2626;
-  --danger-bg: #FEF2F2;
-  --danger-border: #F87171;
+  --danger: #D32F2F;
+  --danger-bg: rgba(211, 47, 47, 0.1);
+  --danger-border: rgba(211, 47, 47, 0.5);
   
-  --success: #16A34A;
-  --success-bg: #F0FDF4;
-  --success-border: #4ADE80;
+  --success: #388E3C;
+  --success-bg: rgba(56, 142, 60, 0.1);
+  --success-border: rgba(56, 142, 60, 0.5);
   
-  --warning: #D97706;
-  --warning-bg: #FFFBEB;
-  --warning-border: #FBBF24;
+  --warning: #F57C00;
+  --warning-bg: rgba(245, 124, 0, 0.1);
+  --warning-border: rgba(245, 124, 0, 0.5);
   
-  --text-main: #111827;
-  --text-muted: #667085;
+  --text-main: #E0E0E0;
+  --text-muted: #9E9E9E;
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.3);
 }
 
 * {
@@ -70,7 +70,7 @@ p, span, div { font-size: 14px; color: var(--text-main); }
 .glass-panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 4px;
   box-shadow: var(--shadow-sm);
   padding: 16px;
 }
@@ -80,7 +80,7 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   align-items: center;
   gap: 8px;
   padding: 4px 12px;
-  border-radius: 16px;
+  border-radius: 4px;
   font-size: 13px;
   font-weight: 600;
   background: var(--surface);
@@ -91,11 +91,12 @@ p, span, div { font-size: 14px; color: var(--text-main); }
 .indicator {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 2px;
+  box-shadow: 0 0 8px currentColor;
 }
-.connected { background: var(--success); }
-.disconnected { background: var(--danger); }
-.warning-ind { background: var(--warning); }
+.connected { background: var(--success); color: var(--success); }
+.disconnected { background: var(--danger); color: var(--danger); }
+.warning-ind { background: var(--warning); color: var(--warning); }
 
 .icon-btn {
   background: transparent;
@@ -118,36 +119,35 @@ p, span, div { font-size: 14px; color: var(--text-main); }
 .primary-btn {
   background: var(--primary);
   color: #FFFFFF;
-  border: none;
+  border: 1px solid var(--primary);
   padding: 10px 16px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 .primary-btn:hover { background: var(--primary-hover); }
-.primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.primary-btn:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--text-muted); }
 
 .secondary-btn {
   background: var(--surface);
   color: var(--text-main);
   border: 1px solid var(--border);
   padding: 10px 16px;
-  border-radius: 8px;
+  border-radius: 4px;
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
   display: flex;
   align-items: center;
   gap: 8px;
   justify-content: center;
 }
 .secondary-btn:hover { background: var(--bg-color); }
-
 .mt-4 { margin-top: 16px; }
 
 /* Desktop Sidebar */
@@ -168,7 +168,7 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   top: 0;
   bottom: 0;
   z-index: 1000;
-  box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+  box-shadow: 5px 0 15px rgba(0, 0, 0, 0.5);
 }
 .drawer-overlay {
   position: absolute;
@@ -195,12 +195,12 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: 4px;
   background: transparent;
   border: none;
   color: var(--text-muted);
-  font-family: 'Outfit', sans-serif;
-  font-size: 15px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
@@ -285,10 +285,10 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   padding: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
 }
-.metric-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
-.metric-value { font-size: 24px; font-weight: 700; color: var(--text-main); }
+.metric-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; font-family: 'Inter', sans-serif; }
+.metric-value { font-size: 24px; font-weight: 700; color: var(--text-main); font-family: 'Inter', sans-serif; }
 .metric-value.good { color: var(--success); }
 .metric-value.danger { color: var(--danger); }
 .metric-value.warning { color: var(--warning); }
@@ -305,8 +305,8 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   justify-content: center;
   gap: 8px;
   padding: 16px 12px;
-  border-radius: 8px;
-  font-family: 'Outfit', sans-serif;
+  border-radius: 4px;
+  font-family: 'Inter', sans-serif;
   font-size: 14px;
   font-weight: 600;
   border: 1px solid var(--border);
@@ -330,7 +330,7 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   gap: 4px;
   font-size: 11px;
   padding: 4px 8px;
-  border-radius: 12px;
+  border-radius: 4px;
   font-weight: 700;
   background: var(--bg-color);
   color: var(--text-main);
@@ -366,7 +366,7 @@ p, span, div { font-size: 14px; color: var(--text-main); }
 /* Modals */
 .modal-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(17, 24, 39, 0.5); /* semi-transparent dark */
+  background: rgba(18, 18, 18, 0.7);
   display: flex; justify-content: center; align-items: center; z-index: 10000;
   padding: 16px;
 }
@@ -374,7 +374,7 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   width: 100%;
   max-width: 400px;
   background: var(--surface);
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 24px;
   box-shadow: var(--shadow-md);
   display: flex;
@@ -387,18 +387,17 @@ p, span, div { font-size: 14px; color: var(--text-main); }
 .input-group { display: flex; flex-direction: column; gap: 6px; }
 .input-group label { font-size: 13px; color: var(--text-muted); font-weight: 500; }
 .input-group input, .input-group select {
-  background: #FFFFFF;
+  background: var(--bg-color);
   border: 1px solid var(--border);
   color: var(--text-main);
   padding: 10px 12px;
-  border-radius: 8px;
-  font-family: 'Outfit', sans-serif;
+  border-radius: 4px;
+  font-family: 'Inter', sans-serif;
   font-size: 14px;
   outline: none;
 }
 .input-group input:focus, .input-group select:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
 }
 
 .setting-row {
@@ -408,19 +407,19 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   padding: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   margin-bottom: 8px;
 }
 .setting-info { display: flex; flex-direction: column; }
-.setting-title { font-size: 14px; font-weight: 600; color: var(--text-main); }
+.setting-title { font-size: 14px; font-weight: 600; color: var(--text-main); font-family: 'Inter', sans-serif; }
 .setting-desc { font-size: 12px; color: var(--text-muted); }
 
 /* Joysticks (Manual Control) */
 .joystick-container { display: flex; justify-content: center; gap: 30px; margin-top: 10px; flex-wrap: wrap; }
 .d-pad, .z-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.d-btn { background: var(--bg-color); border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--text-main); font-weight: bold; }
+.d-btn { background: var(--bg-color); border: 1px solid var(--border); border-radius: 4px; padding: 12px; cursor: pointer; display: flex; justify-content: center; align-items: center; color: var(--text-main); font-weight: bold; }
 .d-btn:active { background: var(--border); }
-.d-center { display: flex; justify-content: center; align-items: center; border: 1px solid var(--border); border-radius: 8px; color: var(--text-muted); cursor: pointer;}
+.d-center { display: flex; justify-content: center; align-items: center; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); cursor: pointer; }
 .d-center:active { background: var(--border); }
 
 /* Drone List (DronesView) */
@@ -431,7 +430,7 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   padding: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 4px;
   margin-bottom: 12px;
   cursor: pointer;
   transition: all 0.2s;
