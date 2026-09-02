@@ -11,6 +11,20 @@ const AIRPORT_ADVISORY_ZONES = [
   { id: 'VEBS', name: 'Bhubaneswar Airport', lat: 20.2444, lng: 85.8178 },
 ];
 
+const MILITARY_ADVISORY_ZONES = [
+  { id: 'VEDX', name: 'Kalaikunda Air Force Station', lat: 22.3395, lng: 87.2145 },
+  { id: 'SALUA', name: 'Air Force Station Salua', lat: 22.27278, lng: 87.28944 },
+  { id: 'VIAM', name: 'Ambala Air Force Station', lat: 30.37083, lng: 76.81778 },
+  { id: 'VIDX', name: 'Hindan Air Force Station', lat: 28.70778, lng: 77.35833 },
+  // Additional verified bases
+  { id: 'VAPO', name: 'Pune Air Force Station', lat: 18.5725, lng: 73.87833 },
+  { id: 'VIGR', name: 'Gwalior Air Force Station', lat: 26.29333, lng: 78.22778 },
+  { id: 'VIPK', name: 'Pathankot Air Force Station', lat: 32.23361, lng: 75.63444 },
+  { id: 'VIAG', name: 'Agra Air Force Station', lat: 27.16194, lng: 77.97083 },
+  { id: 'VOSR', name: 'Sulur Air Force Station', lat: 11.01361, lng: 77.15972 },
+  { id: 'VIJO', name: 'Jodhpur Air Force Station', lat: 26.25722, lng: 73.05167 },
+];
+
 export const ZONE_LEGEND = {
   green: {
     level: 'green',
@@ -24,14 +38,14 @@ export const ZONE_LEGEND = {
     label: 'YELLOW ZONE',
     shortLabel: 'YELLOW',
     color: '#ffbf3d',
-    description: 'Controlled airspace advisory near airport perimeter. ATC permission may be required.',
+    description: 'Controlled airspace advisory near installation perimeter. Permission may be required.',
   },
   red: {
     level: 'red',
     label: 'RED ZONE',
     shortLabel: 'RED',
     color: '#ff4b55',
-    description: 'No-fly advisory near airport perimeter. Central Government permission is required.',
+    description: 'No-fly advisory near installation perimeter. Permission is required.',
   },
   unknown: {
     level: 'unknown',
@@ -74,25 +88,75 @@ export function resolveAirspaceZone(lat, lng) {
     }))
     .sort((a, b) => a.distanceKm - b.distanceKm)[0];
 
-  if (nearestAirport && nearestAirport.distanceKm <= 5) {
+  const nearestMilitary = MILITARY_ADVISORY_ZONES
+    .map((base) => ({
+      ...base,
+      distanceKm: distanceKm(lat, lng, base.lat, base.lng),
+    }))
+    .sort((a, b) => a.distanceKm - b.distanceKm)[0];
+
+  let currentZoneLevel = 'green';
+  let activeAdvisory = null;
+  
+  // Check Military first (stricter buffers)
+  if (nearestMilitary) {
+    if (nearestMilitary.distanceKm <= 10) {
+      currentZoneLevel = 'red';
+      activeAdvisory = nearestMilitary;
+    } else if (nearestMilitary.distanceKm <= 20) {
+      currentZoneLevel = 'yellow';
+      activeAdvisory = nearestMilitary;
+    }
+  }
+
+  // Check Civilian (standard buffers)
+  if (nearestAirport) {
+    if (nearestAirport.distanceKm <= 5) {
+      // RED overrides anything
+      currentZoneLevel = 'red';
+      activeAdvisory = nearestAirport;
+    } else if (nearestAirport.distanceKm <= 12 && currentZoneLevel !== 'red') {
+      // YELLOW overrides GREEN
+      currentZoneLevel = 'yellow';
+      // Only swap the advisory if we weren't already yellow from military,
+      // or if we want to show the closest. Usually, military takes precedence, 
+      // but if we are green from military and yellow from civilian, we use civilian.
+      if (!activeAdvisory || activeAdvisory.distanceKm > 20) {
+         activeAdvisory = nearestAirport;
+      } else {
+         // Both are yellow, pick the closer one relatively? Let's just pick the closer absolute distance.
+         if (nearestAirport.distanceKm < activeAdvisory.distanceKm) {
+             activeAdvisory = nearestAirport;
+         }
+      }
+    }
+  }
+
+  if (currentZoneLevel === 'red') {
     return {
       ...ZONE_LEGEND.red,
-      source: nearestAirport.name,
-      distanceLabel: `${nearestAirport.distanceKm.toFixed(1)} km`,
+      source: activeAdvisory.name,
+      distanceLabel: `${activeAdvisory.distanceKm.toFixed(1)} km`,
+    };
+  }
+  
+  if (currentZoneLevel === 'yellow') {
+    return {
+      ...ZONE_LEGEND.yellow,
+      source: activeAdvisory.name,
+      distanceLabel: `${activeAdvisory.distanceKm.toFixed(1)} km`,
     };
   }
 
-  if (nearestAirport && nearestAirport.distanceKm <= 12) {
-    return {
-      ...ZONE_LEGEND.yellow,
-      source: nearestAirport.name,
-      distanceLabel: `${nearestAirport.distanceKm.toFixed(1)} km`,
-    };
-  }
+  // Green Zone
+  // Let's just show the closest tracked facility (civilian or military) as the source, even if green
+  const closestFacility = [nearestAirport, nearestMilitary]
+    .filter(Boolean)
+    .sort((a, b) => a.distanceKm - b.distanceKm)[0];
 
   return {
     ...ZONE_LEGEND.green,
-    source: nearestAirport ? nearestAirport.name : 'Local advisory set',
-    distanceLabel: nearestAirport ? `${nearestAirport.distanceKm.toFixed(1)} km` : null,
+    source: closestFacility ? closestFacility.name : 'Local advisory set',
+    distanceLabel: closestFacility ? `${closestFacility.distanceKm.toFixed(1)} km` : null,
   };
 }
