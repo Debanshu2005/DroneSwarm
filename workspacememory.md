@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-09-01T16:48:05.041Z
+Generated: 2026-09-02T04:12:08.326Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -18,14 +18,14 @@ Structured manifest: workspace.json
 - Graphify graph: not available yet
 - Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: DroneOS/core/repulsion_field.py
+- Active file in focus: mobile/src/views/DroneControlView.jsx
 - Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
-- Suggested starting points: DroneOS/core/repulsion_field.py, DroneOS/tests/test_terminal_controller.py, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md
+- Suggested starting points: mobile/src/views/DroneControlView.jsx, DroneOS/tests/test_terminal_controller.py, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md
 ## Current Workspace
-- Active file: DroneOS/core/repulsion_field.py
-- Tracked files in snapshot: 2145
-- Top-level areas: venv (1780), mobile (128), DroneOS (61), DroneOS1 (61), DroneOS2 (61), [root] (21), deploy (19), tests (6)
-- Primary file types: .py (1645), [no extension] (198), .txt (53), .typed (29), .png (26), .jsx (21), .js (15), .yaml (15)
+- Active file: mobile/src/views/DroneControlView.jsx
+- Tracked files in snapshot: 2149
+- Top-level areas: venv (1780), mobile (132), DroneOS (61), DroneOS1 (61), DroneOS2 (61), [root] (21), deploy (19), tests (6)
+- Primary file types: .py (1645), [no extension] (198), .txt (53), .typed (29), .png (26), .jsx (21), .js (17), .yaml (15)
 - Key files: .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md, mobile/.gitignore, mobile/README.md, mobile/android/.gitignore, mobile/android/app/.gitignore
 ## Package Snapshot
 - Package metadata unavailable: package.json was not found.
@@ -51,7 +51,7 @@ Structured manifest: workspace.json
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-09-01 526e4f9 feat: implement core drone flight management, formation control, and repulsion logic across multiple drone platforms
+- HEAD: 2026-09-02 f329e4f feat: implement DroneControlView with interactive map, telemetry monitoring, and multi-drone command interface
 - Working tree summary: clean
 - Working tree: clean
 
@@ -61,8 +61,8 @@ Visibility: public | Default branch: main
 Stars: 0 | Forks: 0 | Open issues: 0
 
 Latest commit on main:
-- 526e4f9 by Debanshu2005 on 2026-09-01
-  feat: implement core drone flight management, formation control, and repulsion logic across multiple drone platforms
+- f329e4f by Debanshu2005 on 2026-09-01
+  feat: implement DroneControlView with interactive map, telemetry monitoring, and multi-drone command interface
 
 URL: https://github.com/Debanshu2005/DroneSwarm
 

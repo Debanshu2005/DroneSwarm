@@ -11,6 +11,37 @@ const AIRPORT_ADVISORY_ZONES = [
   { id: 'VEBS', name: 'Bhubaneswar Airport', lat: 20.2444, lng: 85.8178 },
 ];
 
+export const ZONE_LEGEND = {
+  green: {
+    level: 'green',
+    label: 'GREEN ZONE',
+    shortLabel: 'GREEN',
+    color: '#28d17c',
+    description: 'No bundled red/yellow advisory detected near this GPS point.',
+  },
+  yellow: {
+    level: 'yellow',
+    label: 'YELLOW ZONE',
+    shortLabel: 'YELLOW',
+    color: '#ffbf3d',
+    description: 'Controlled airspace advisory near airport perimeter. ATC permission may be required.',
+  },
+  red: {
+    level: 'red',
+    label: 'RED ZONE',
+    shortLabel: 'RED',
+    color: '#ff4b55',
+    description: 'No-fly advisory near airport perimeter. Central Government permission is required.',
+  },
+  unknown: {
+    level: 'unknown',
+    label: 'GPS REQUIRED',
+    shortLabel: 'GPS',
+    color: '#8a96a8',
+    description: 'Allow device GPS to classify the active flight area.',
+  }
+};
+
 const toRad = (value) => (value * Math.PI) / 180;
 
 export const distanceKm = (aLat, aLng, bLat, bLng) => {
@@ -30,11 +61,7 @@ export const distanceKm = (aLat, aLng, bLat, bLng) => {
 export function resolveAirspaceZone(lat, lng) {
   if (lat == null || lng == null || Number.isNaN(lat) || Number.isNaN(lng)) {
     return {
-      level: 'unknown',
-      label: 'GPS REQUIRED',
-      shortLabel: 'GPS',
-      color: '#8a96a8',
-      description: 'Allow device GPS to classify the active flight area.',
+      ...ZONE_LEGEND.unknown,
       source: 'Device GPS',
       distanceLabel: null,
     };
@@ -49,11 +76,7 @@ export function resolveAirspaceZone(lat, lng) {
 
   if (nearestAirport && nearestAirport.distanceKm <= 5) {
     return {
-      level: 'red',
-      label: 'RED ZONE',
-      shortLabel: 'RED',
-      color: '#ff4b55',
-      description: 'No-fly advisory near airport perimeter. Central Government permission is required.',
+      ...ZONE_LEGEND.red,
       source: nearestAirport.name,
       distanceLabel: `${nearestAirport.distanceKm.toFixed(1)} km`,
     };
@@ -61,22 +84,14 @@ export function resolveAirspaceZone(lat, lng) {
 
   if (nearestAirport && nearestAirport.distanceKm <= 12) {
     return {
-      level: 'yellow',
-      label: 'YELLOW ZONE',
-      shortLabel: 'YELLOW',
-      color: '#ffbf3d',
-      description: 'Controlled airspace advisory near airport perimeter. ATC permission may be required.',
+      ...ZONE_LEGEND.yellow,
       source: nearestAirport.name,
       distanceLabel: `${nearestAirport.distanceKm.toFixed(1)} km`,
     };
   }
 
   return {
-    level: 'green',
-    label: 'GREEN ZONE',
-    shortLabel: 'GREEN',
-    color: '#28d17c',
-    description: 'No bundled red/yellow advisory detected near this GPS point.',
+    ...ZONE_LEGEND.green,
     source: nearestAirport ? nearestAirport.name : 'Local advisory set',
     distanceLabel: nearestAirport ? `${nearestAirport.distanceKm.toFixed(1)} km` : null,
   };

@@ -6,6 +6,7 @@ import L from 'leaflet';
 import { AlertCircle, Crosshair, Layers, Navigation } from 'lucide-react';
 import { useDeviceLocation } from '../hooks/useDeviceLocation';
 import { DEFAULT_MAP_CENTER, DIGITAL_SKY_AIRSPACE_URL, resolveAirspaceZone } from '../utils/airspace';
+import AirspaceZonePanel from '../components/AirspaceZonePanel';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -125,17 +126,12 @@ export default function MapView() {
          </div>
       </div>
 
-      <div className={`airspace-zone-panel ${currentZone.level}`} style={{'--zone-color': currentZone.color}}>
-         <div className="zone-panel-code">{currentZone.shortLabel}</div>
-         <div>
-            <div className="zone-panel-title">{currentZone.description}</div>
-            <div className="zone-panel-meta">
-               {currentZone.source}
-               {currentZone.distanceLabel ? ` / ${currentZone.distanceLabel}` : ''}
-               {' / DigitalSky sync not connected'}
-            </div>
-         </div>
-      </div>
+      <AirspaceZonePanel 
+         className="map-view-position" 
+         currentZone={currentZone} 
+         userLocation={userLocation} 
+         location={location} 
+      />
 
       {!userLocation && (
          <div className="gps-permission-panel">

@@ -14,6 +14,7 @@ import L from 'leaflet';
 import { CommandAction } from '../protocol/messages';
 import { useDeviceLocation } from '../hooks/useDeviceLocation';
 import { DEFAULT_MAP_CENTER, resolveAirspaceZone } from '../utils/airspace';
+import AirspaceZonePanel from '../components/AirspaceZonePanel';
 
 
 // Fix Leaflet's default icon path issues in React
@@ -290,9 +291,6 @@ export default function DroneControlView({ setView }) {
                 <div className={`hud-mode-pill ${indoorMode ? 'warning-bg' : 'primary-bg'}`}>
                    {indoorMode ? 'INDOOR' : 'OUTDOOR'}
                 </div>
-                <div className={`hud-mode-pill zone-pill ${currentZone.level}`} style={{'--zone-color': currentZone.color}}>
-                   <Radar size={12}/> {currentZone.label}
-                </div>
                 <button className="hud-btn" onClick={() => setView('SETTINGS')}>
                    <Settings size={12}/> SET
                 </button>
@@ -301,11 +299,6 @@ export default function DroneControlView({ setView }) {
          
          {/* STATUS CARDS */}
          <div className="hud-status-cards">
-            <div className={`telemetry-card zone-card ${currentZone.level}`} style={{'--zone-color': currentZone.color}}>
-               <div className="t-header"><Radar size={12}/> AIRSPACE</div>
-               <div className="t-main" style={{color: currentZone.color}}>{currentZone.shortLabel}</div>
-               <div className="t-sub">{currentZone.distanceLabel || 'ADVISORY'}</div>
-            </div>
             <div className="telemetry-card pilot-card">
                <div className="t-header"><LocateFixed size={12}/> LAUNCH</div>
                <div className={`t-main ${userLocation ? 'good' : 'danger'}`}>{userLocation ? 'LOCK' : 'GPS'}</div>
@@ -342,20 +335,7 @@ export default function DroneControlView({ setView }) {
             </div>
          </div>
 
-         <div className={`flight-zone-banner ${currentZone.level}`} style={{'--zone-color': currentZone.color}}>
-            <div className="flight-zone-code">{currentZone.shortLabel}</div>
-            <div className="flight-zone-copy">
-               <div className="flight-zone-title">{currentZone.description}</div>
-               <div className="flight-zone-meta">
-                  {gpsSourceText} / {currentZone.source}{currentZone.distanceLabel ? ` / ${currentZone.distanceLabel}` : ''}
-               </div>
-            </div>
-            {!userLocation && (
-               <button className="hud-btn flight-zone-action" onClick={location.requestLocation}>
-                  <LocateFixed size={14}/> ALLOW GPS
-               </button>
-            )}
-         </div>
+         <AirspaceZonePanel currentZone={currentZone} userLocation={userLocation} location={location} />
          
          {/* E-STOP WARNING */}
          {activeDrone?.commandState?.action === CommandAction.EMERGENCY && activeDrone?.commandState?.state === 'ACCEPTED' && (

@@ -3,6 +3,7 @@ import { useDroneContext } from '../context/DroneContext';
 import { ShieldAlert, ShieldCheck, Navigation, ArrowUp, ArrowDown, Activity, Signal } from 'lucide-react';
 import { CommandAction } from '../protocol/messages';
 import { evaluatePreflightChecklist } from '../utils/DroneHealth';
+import AttitudeIndicator from '../components/AttitudeIndicator';
 
 export default function DashboardView() {
   const { drones, selectedDrones, nowMs, sendCommand, isConnected, indoorMode } = useDroneContext();
@@ -204,31 +205,41 @@ export default function DashboardView() {
                )}
             </div>
 
-            <div className="metrics-row" style={{marginBottom: 0, gap: '8px'}}>
-               <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                  <span className="metric-label">Mode</span>
-                  <span className="metric-value" style={{fontSize: '16px'}}>{tel.flight_mode || 'UNK'}</span>
-               </div>
-               <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                  <span className="metric-label">Armed</span>
-                  <span className={`metric-value ${tel.armed_state === 'ARMED' ? 'danger' : 'good'}`} style={{fontSize: '16px'}}>{tel.armed_state || 'DISARMED'}</span>
-               </div>
-               <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                  <span className="metric-label">Battery</span>
-                  <span className="metric-value" style={{fontSize: '16px'}}>{tel.battery_level ?? '--'}%</span>
-               </div>
-               <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                  <span className="metric-label">GPS</span>
-                  <span className="metric-value" style={{fontSize: '16px'}}>{tel.gps_valid ? '3D FIX' : 'NO FIX'}</span>
-               </div>
-               <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                  <span className="metric-label">Alt</span>
-                  <span className="metric-value" style={{fontSize: '16px'}}>{tel.altitude != null ? tel.altitude.toFixed(1) : '--'}m</span>
-               </div>
-               <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                  <span className="metric-label">Speed</span>
-                  <span className="metric-value" style={{fontSize: '16px'}}>{tel.ground_speed != null ? tel.ground_speed.toFixed(1) : '--'}m/s</span>
-               </div>
+            <div style={{display: 'flex', gap: '16px', flexWrap: 'wrap'}}>
+              <div style={{flex: '1 1 300px'}}>
+                <AttitudeIndicator 
+                   roll={tel.roll} 
+                   pitch={tel.pitch} 
+                   heading={tel.heading} 
+                />
+              </div>
+              
+              <div style={{flex: '1 1 200px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', alignContent: 'center'}}>
+                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                    <span className="metric-label">Mode</span>
+                    <span className="metric-value" style={{fontSize: '16px'}}>{tel.flight_mode || 'UNK'}</span>
+                 </div>
+                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                    <span className="metric-label">Armed</span>
+                    <span className={`metric-value ${tel.armed_state === 'ARMED' ? 'danger' : 'good'}`} style={{fontSize: '16px'}}>{tel.armed_state || 'DISARMED'}</span>
+                 </div>
+                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                    <span className="metric-label">Battery</span>
+                    <span className="metric-value" style={{fontSize: '16px'}}>{tel.battery_level ?? '--'}%</span>
+                 </div>
+                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                    <span className="metric-label">GPS</span>
+                    <span className="metric-value" style={{fontSize: '16px'}}>{tel.gps_valid ? '3D FIX' : 'NO FIX'}</span>
+                 </div>
+                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                    <span className="metric-label">Alt</span>
+                    <span className="metric-value" style={{fontSize: '16px'}}>{tel.altitude != null ? tel.altitude.toFixed(1) : '--'}m</span>
+                 </div>
+                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                    <span className="metric-label">Speed</span>
+                    <span className="metric-value" style={{fontSize: '16px'}}>{tel.ground_speed != null ? tel.ground_speed.toFixed(1) : '--'}m/s</span>
+                 </div>
+              </div>
             </div>
           </div>
 

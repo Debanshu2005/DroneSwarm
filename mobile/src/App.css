@@ -326,7 +326,7 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   white-space: nowrap;
 }
 
-.airspace-zone-panel,
+.flight-zone-banner,
 .gps-permission-panel,
 .map-hint-panel,
 .digital-sky-link {
@@ -334,40 +334,54 @@ p, span, div { font-size: 14px; color: var(--text-main); }
   z-index: 900;
 }
 
-.airspace-zone-panel {
-  left: 18px;
-  bottom: 56px;
-  max-width: 460px;
+.flight-zone-banner {
+  pointer-events: auto;
+  align-self: center;
+  width: min(760px, calc(100% - 24px));
   display: grid;
-  grid-template-columns: 70px 1fr;
-  gap: 14px;
-  padding: 14px;
-  background: rgba(7, 11, 16, 0.84);
-  border: 1px solid color-mix(in srgb, var(--zone-color) 52%, transparent);
+  grid-template-columns: 72px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(5, 8, 12, 0.84);
+  border: 1px solid color-mix(in srgb, var(--zone-color) 46%, transparent);
+  border-left: 4px solid var(--zone-color);
   border-radius: 8px;
-  backdrop-filter: blur(16px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
 }
 
-.zone-panel-code {
+.flight-zone-banner.map-view-position {
+  left: 18px;
+  bottom: 56px;
+  width: auto;
+  max-width: 500px;
+}
+
+.flight-zone-code {
   display: grid;
   place-items: center;
-  min-height: 54px;
+  min-height: 42px;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--zone-color) 20%, rgba(7, 11, 16, 0.9));
   color: var(--zone-color);
-  font-size: 13px;
+  background: color-mix(in srgb, var(--zone-color) 16%, rgba(7, 11, 16, 0.9));
+  font-size: 12px;
   font-weight: 900;
 }
 
-.zone-panel-title {
+.flight-zone-title {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
+  color: var(--text-main);
 }
 
-.zone-panel-meta {
-  margin-top: 5px;
-  color: var(--text-muted);
+.flight-zone-meta {
+  margin-top: 3px;
   font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gps-permission-panel,
