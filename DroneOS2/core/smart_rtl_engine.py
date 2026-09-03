@@ -20,7 +20,7 @@ class SmartRtlEngine:
         telemetry = state_store.local_telemetry
         if not telemetry or not telemetry.gps_valid or telemetry.latitude is None or telemetry.longitude is None:
             logger.warning("Smart RTL active but GPS invalid. Hovering.")
-            return FlightIntent(IntentSource.MANUAL, IntentAction.HOVER, ttl_seconds=1.0)
+            return FlightIntent(IntentSource.SAFETY, IntentAction.HOVER, ttl_seconds=1.0)
             
         if not state_store.smart_rtl_target:
             logger.error("Smart RTL active but target not set. Cancelling.")
@@ -35,7 +35,7 @@ class SmartRtlEngine:
         if self.config and getattr(self.config, 'smart_rtl', None):
             timeout = float(self.config.smart_rtl.timeout_s)
             
-        if time.time() - state_store.smart_rtl_start_time > timeout:
+        if time.monotonic() - state_store.smart_rtl_start_time > timeout:
             logger.error("Smart RTL timeout exceeded! Cancelling.")
             state_store.smart_rtl_active = False
             self.internal_state = "IDLE"
@@ -61,14 +61,15 @@ class SmartRtlEngine:
                 self.internal_state = "COMPLETE"
                 return None
                 
-            return FlightIntent(IntentSource.MANUAL, IntentAction.LAND, ttl_seconds=2.0)
+            return FlightIntent(IntentSource.SAFETY, IntentAction.LAND, ttl_seconds=2.0)
             
         else:
             self.internal_state = "NAVIGATING"
             return FlightIntent(
-                IntentSource.MANUAL, 
+                IntentSource.SAFETY, 
                 IntentAction.GOTO, 
                 ttl_seconds=1.0, 
                 params={"lat": target_lat, "lon": target_lon, "alt": target_alt, "yaw": 0.0}
             )
+
 

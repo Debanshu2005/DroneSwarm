@@ -85,7 +85,7 @@ class FlightManager:
         # Initiate the Smart RTL Engine state
         self.state_store.smart_rtl_active = True
         self.state_store.smart_rtl_target = (home_lat, home_lon, telemetry.altitude)
-        self.state_store.smart_rtl_start_time = time.time()
+        self.state_store.smart_rtl_start_time = time.monotonic()
         
         logger.info("Smart RTL initiated.")
         return True
@@ -167,4 +167,5 @@ class FlightManager:
             return False
         mode = getattr(telemetry, "flight_mode", "") or ""
         return mode.upper() in {"AUTO", "MISSION", "GUIDED", "LOITER", "RTL", "HOLD", "POSCTL", "POSITION", "OFFBOARD"}
+
 
