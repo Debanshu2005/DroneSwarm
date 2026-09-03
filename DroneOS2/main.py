@@ -145,11 +145,11 @@ class DroneOSApp:
             self.navigation_manager,
             self.safety_module,
             self.state_store,
-            config=self.config
+            config=self.flight_cfg
         )
         
         from DroneOS2.core.flight_pipeline import FlightPipeline
-        self.flight_pipeline = FlightPipeline(self.state_store, self.flight_controller, self.flight_cfg)
+        self.flight_pipeline = FlightPipeline(self.state_store, self.flight_controller, self.flight_cfg, self.decision_engine)
         
         self.telemetry_publisher = TelemetryPublisher(
             self.node_id, 
@@ -396,12 +396,9 @@ class DroneOSApp:
             
         await self.network.broadcast_message(response)
 
-    async def _autonomous_evaluation_loop(self) -> None:
+    async def _system_monitor_loop(self) -> None:
         while self._running:
             try:
-                telemetry = await self.flight_controller.get_telemetry()
-                await self.decision_engine.evaluate_tick(telemetry)
-                
                 # Periodically log and publish diagnostic metrics at DEBUG level
                 report = self.diagnostics.get_full_report()
                 logger.debug(f"Diagnostics: {report}")
@@ -416,10 +413,10 @@ class DroneOSApp:
                 self._dispatch_task(self.network.broadcast_message(diag_msg))
                 
             except asyncio.CancelledError:
-                logger.info("Autonomous evaluation loop cancelled.")
+                logger.info("System monitor loop cancelled.")
                 break
             except Exception as e:
-                logger.exception(f"Decision Engine error: {e}")
+                logger.exception(f"System monitor error: {e}")
                 
             # Watchdog for Pixhawk reconnection
             if getattr(self.flight_controller, '_connected', False) is False:
@@ -429,7 +426,7 @@ class DroneOSApp:
                 except Exception as e:
                     logger.debug(f"Reconnect attempt failed: {e}")
                     
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
 
     async def run(self) -> None:
         logger.info(f"Starting DroneOS Node: {self.node_id}")
@@ -455,7 +452,7 @@ class DroneOSApp:
         # Start central flight pipeline
         self._dispatch_task(self.flight_pipeline.run_pipeline_loop())
         
-        self._dispatch_task(self._autonomous_evaluation_loop())
+        self._dispatch_task(self._system_monitor_loop())
         self._dispatch_task(self.terminal_controller.run_repl())
         
         # Start publisher loops

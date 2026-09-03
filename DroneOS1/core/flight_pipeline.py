@@ -102,10 +102,11 @@ class CommandWriter:
 
 
 class FlightPipeline:
-    def __init__(self, state_store: FlightStateStore, fc: IFlightController, config):
+    def __init__(self, state_store: FlightStateStore, fc: IFlightController, config, decision_engine):
         self.state_store = state_store
         self.fc = fc
         self.config = config
+        self.decision_engine = decision_engine
         self.arbiter = Arbiter()
         self.safety_filter = SafetyFilter(config)
         self.command_writer = CommandWriter(fc)
@@ -130,6 +131,9 @@ class FlightPipeline:
                 telemetry = self.state_store.local_telemetry
                 
             # 2. Evaluate Engines
+            # Synchronously evaluate all other intent producers first
+            await self.decision_engine.evaluate_tick(telemetry)
+            
             srtl_intent = self.srtl_engine.compute_intent(self.state_store)
             if srtl_intent:
                 self.state_store.submit_intent(srtl_intent)
