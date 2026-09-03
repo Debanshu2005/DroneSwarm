@@ -54,6 +54,15 @@ export default function DroneControlView({ setView }) {
   const [targetMode, setTargetMode] = useState('ALL'); // 'ALL' or droneId
   const [targetDroneId, setTargetDroneId] = useState(null);
 
+  const [mapStyle, setMapStyle] = useState('satellite');
+  const [centerMode, setCenterMode] = useState('DRONE');
+  
+  const tiles = {
+     street: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+     satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+     terrain: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}'
+  };
+
   // Formation defaults
   const [formationType, setFormationType] = useState('V');
   const [formationSpacing, setFormationSpacing] = useState(2.0);
@@ -111,8 +120,8 @@ export default function DroneControlView({ setView }) {
   };
 
   const requestCommand = (action, params = null, danger = false) => {
-    // LAND, RTL, EMERGENCY are SUPER KEYS - always execute immediately, no confirmation
-    if (action === CommandAction.LAND || action === CommandAction.RTL || action === CommandAction.EMERGENCY) {
+    // LAND, RTL, SRTL, EMERGENCY are SUPER KEYS - always execute immediately, no confirmation
+    if (action === CommandAction.LAND || action === CommandAction.RTL || action === CommandAction.SRTL || action === CommandAction.EMERGENCY) {
         stopMove(); // High priority commands cancel active movement immediately
         executeCommand(action, params);
         return;
@@ -170,10 +179,12 @@ export default function DroneControlView({ setView }) {
 
   
   let mapCenter;
-  if (userLocation) {
+  if (centerMode === 'PILOT' && userLocation) {
       mapCenter = userLocation;
   } else if (activeDrone && tel.latitude && tel.longitude && tel.latitude !== 0) {
       mapCenter = [tel.latitude, tel.longitude];
+  } else if (userLocation) {
+      mapCenter = userLocation;
   } else {
       // Find any drone with valid GPS
       const validDroneId = droneIds.find(id => drones[id]?.telemetry?.latitude && drones[id]?.telemetry?.latitude !== 0);
@@ -201,7 +212,7 @@ export default function DroneControlView({ setView }) {
             </div>
          }>
              <MapContainer center={mapCenter} zoom={18} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-            <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="" />
+            <TileLayer url={tiles[mapStyle]} attribution="" />
             <RecenterAutomatically center={mapCenter} />
             
             {droneIds.map(id => {
@@ -261,6 +272,23 @@ export default function DroneControlView({ setView }) {
                     <select value={targetMode === 'ALL' ? 'ALL' : targetDroneId || ''} onChange={handleTargetChange}>
                        <option value="ALL">ALL DRONES</option>
                        {droneIds.map(id => <option key={id} value={id}>{id}</option>)}
+                    </select>
+                 </div>
+
+                 <div className="hud-target-selector">
+                    <span>MAP:</span>
+                    <select value={mapStyle} onChange={(e) => setMapStyle(e.target.value)}>
+                       <option value="satellite">SAT</option>
+                       <option value="street">STR</option>
+                       <option value="terrain">TER</option>
+                    </select>
+                 </div>
+                 
+                 <div className="hud-target-selector">
+                    <span>CENTER:</span>
+                    <select value={centerMode} onChange={(e) => setCenterMode(e.target.value)}>
+                       <option value="DRONE">DRONE</option>
+                       <option value="PILOT">PILOT</option>
                     </select>
                  </div>
 
@@ -538,12 +566,15 @@ export default function DroneControlView({ setView }) {
                    {tel.armed_state !== 'ARMED' && <div className="cmd-sub">NOT ARMED</div>}
                 </button>
                 
-                {/* LAND & RTL = SUPER KEYS */}
+                {/* LAND, RTL, SRTL = SUPER KEYS */}
                 <button className="command-btn btn-land super-key" onClick={() => requestCommand(CommandAction.LAND)}>
                    <div className="cmd-main"><ArrowDown size={16}/> LAND</div>
                 </button>
                 <button className="command-btn btn-rtl super-key" onClick={() => requestCommand(CommandAction.RTL)}>
                    <div className="cmd-main"><Navigation size={16}/> RTL</div>
+                </button>
+                <button className="command-btn btn-rtl super-key" style={{background: '#0ea5e9'}} onClick={() => requestCommand(CommandAction.SRTL)}>
+                   <div className="cmd-main"><Navigation size={16}/> SRTL</div>
                 </button>
                 <button className="command-btn btn-emergency" onClick={() => requestCommand(CommandAction.EMERGENCY, null, true)}>
                    <div className="cmd-main"><AlertTriangle size={14}/> E-STOP</div>
