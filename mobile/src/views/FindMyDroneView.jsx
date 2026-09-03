@@ -4,7 +4,7 @@ import { useDeviceLocation } from '../hooks/useDeviceLocation';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Navigation, Compass, MapPin, Signal, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Navigation, Compass, MapPin, Signal, AlertTriangle, AlertCircle, ArrowLeft } from 'lucide-react';
 import { calculateDistance, calculateBearing } from '../utils/geoUtils';
 
 // Fix Leaflet's default icon path issues in React
@@ -36,7 +36,7 @@ function RecenterAutomatically({ center, zoom = 16 }) {
   return null;
 }
 
-export default function FindMyDroneView() {
+export default function FindMyDroneView({ setView }) {
   const { drones, nowMs } = useDroneContext();
   const location = useDeviceLocation();
   const userLocation = location.coords;
@@ -131,12 +131,19 @@ export default function FindMyDroneView() {
       
       {/* Title & Status */}
       <div className="glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px' }}>
-         <div>
-            <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, color: 'var(--text-main)' }}>
-               <Compass size={24} color="var(--primary)" /> FIND MY DRONE
-            </h2>
-            <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
-               Track and retrieve lost or disconnected drones
+         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {setView && (
+                <button onClick={() => setView('DASHBOARD')} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '8px' }}>
+                    <ArrowLeft size={20} />
+                </button>
+            )}
+            <div>
+               <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0, color: 'var(--text-main)' }}>
+                  <Compass size={24} color="var(--primary)" /> FIND MY DRONE
+               </h2>
+               <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
+                  Track and retrieve lost or disconnected drones
+               </div>
             </div>
          </div>
          

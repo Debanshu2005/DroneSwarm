@@ -12,6 +12,7 @@
     "android:release": "npx cap sync android && cd android && export JAVA_HOME=$HOME/jdk/jdk-17.0.12+7 && export ANDROID_HOME=$HOME/Android/Sdk && export PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH && ./gradlew assembleRelease"
   },
   "dependencies": {
+    "@capacitor/app": "^6.0.3",
     "@capacitor/core": "^6.2.1",
     "@capacitor/screen-orientation": "^6.0.4",
     "leaflet": "^1.9.4",

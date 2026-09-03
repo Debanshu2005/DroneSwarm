@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useDroneContext } from './context/DroneContext';
 import { LayoutDashboard, Map as MapIcon, Route, Network, ShieldAlert, Activity, Settings, Menu, X, Navigation, TestTube, Terminal } from 'lucide-react';
 import { ScreenOrientation } from '@capacitor/screen-orientation';
+import { App as CapacitorApp } from '@capacitor/app';
 import './App.css';
 
 import DashboardView from './views/DashboardView';
@@ -44,6 +45,29 @@ function App() {
     applyOrientation();
   }, [currentView]);
 
+  const lastBackPress = useRef(0);
+  useEffect(() => {
+    let listener = null;
+    CapacitorApp.addListener('backButton', () => {
+       if (currentView !== 'DASHBOARD') {
+           setCurrentView('DASHBOARD');
+       } else {
+           const now = Date.now();
+           if (now - lastBackPress.current < 2000) {
+               CapacitorApp.exitApp();
+           } else {
+               lastBackPress.current = now;
+           }
+       }
+    }).then(l => {
+        listener = l;
+    });
+    
+    return () => {
+        if (listener) listener.remove();
+    };
+  }, [currentView]);
+
   
   // Latency calculation from wsManager
   const latency = wsManager?.latency || 0;
@@ -68,7 +92,7 @@ function App() {
       case 'FLIGHT': return <DroneControlView setView={setCurrentView} />;
       case 'MAP': return <MapView />;
       case 'TERMINAL': return <TerminalView setView={setCurrentView} />;
-      case 'FIND_DRONE': return <FindMyDroneView />;
+      case 'FIND_DRONE': return <FindMyDroneView setView={setCurrentView} />;
       default: return <DashboardView />;
     }
   };
