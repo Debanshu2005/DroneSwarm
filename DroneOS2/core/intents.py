@@ -31,12 +31,13 @@ class FlightIntent:
     ):
         self.source = source
         self.action = action
-        self.timestamp = time.time()
+        self.timestamp = time.monotonic()
         self.ttl_seconds = ttl_seconds
         self.params = params or {}
 
     def is_expired(self) -> bool:
-        return (time.time() - self.timestamp) > self.ttl_seconds
+        return (time.monotonic() - self.timestamp) > self.ttl_seconds
 
     def __repr__(self):
-        return f"<FlightIntent source={self.source.name} action={self.action.value} age={time.time()-self.timestamp:.2f}s>"
+        return f"<FlightIntent source={self.source.name} action={self.action.value} age={time.monotonic()-self.timestamp:.2f}s>"
+

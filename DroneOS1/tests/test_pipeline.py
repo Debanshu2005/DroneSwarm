@@ -53,7 +53,7 @@ def test_intent_expiration():
     collision_intent = FlightIntent(IntentSource.COLLISION, IntentAction.MOVE_VELOCITY, ttl_seconds=0.1)
     
     # Force expiration
-    collision_intent.timestamp = time.time() - 1.0 
+    collision_intent.timestamp = time.monotonic() - 1.0 
     
     winner = arbiter.select_winner({
         IntentSource.MISSION: mission_intent,
@@ -88,3 +88,4 @@ async def test_command_ownership():
     intent = FlightIntent(IntentSource.SAFETY, IntentAction.EMERGENCY_KILL)
     await cw.execute(intent)
     mock_fc.kill.assert_called_once()
+
