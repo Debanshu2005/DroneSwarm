@@ -153,9 +153,9 @@ export default function FindMyDroneView() {
          </div>
       </div>
 
-      <div style={{ display: 'flex', flex: 1, gap: '16px', minHeight: '400px' }}>
+      <div className="find-drone-container">
           {/* Sidebar List */}
-          <div className="glass-panel" style={{ width: '300px', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}>
+          <div className="glass-panel find-drone-sidebar">
              <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', background: 'rgba(0,0,0,0.2)' }}>
                 <h3 style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>FLEET TRACKING</h3>
              </div>
@@ -209,7 +209,7 @@ export default function FindMyDroneView() {
           </div>
 
           {/* Map Area */}
-          <div className="glass-panel" style={{ flex: 1, padding: '4px', position: 'relative', overflow: 'hidden' }}>
+          <div className="glass-panel find-drone-map">
              {selectedDrone && (
                  <div style={{ position: 'absolute', top: '16px', left: '16px', zIndex: 1000, display: 'flex', gap: '12px' }}>
                     
@@ -284,6 +284,46 @@ export default function FindMyDroneView() {
              </MapContainer>
           </div>
       </div>
+
+      <style dangerouslySetInnerHTML={{__html: `
+        .find-drone-container {
+           display: flex;
+           flex: 1;
+           gap: 16px;
+           min-height: 400px;
+           flex-direction: row;
+        }
+        .find-drone-sidebar {
+           width: 300px;
+           display: flex;
+           flex-direction: column;
+           overflow: hidden;
+           padding: 0;
+           flex-shrink: 0;
+        }
+        .find-drone-map {
+           flex: 1;
+           padding: 4px;
+           position: relative;
+           overflow: hidden;
+           min-height: 300px;
+        }
+        
+        /* Mobile Portrait Optimization */
+        @media (max-width: 767px) and (orientation: portrait) {
+           .find-drone-container {
+               flex-direction: column-reverse;
+           }
+           .find-drone-sidebar {
+               width: 100%;
+               flex: 1;
+           }
+           .find-drone-map {
+               width: 100%;
+               flex: 1.5;
+           }
+        }
+      `}} />
     </div>
   );
 }

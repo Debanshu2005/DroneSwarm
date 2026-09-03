@@ -230,7 +230,7 @@ function App() {
                  <button className="menu-btn mobile-only" onClick={handleOpenDrawer} style={{marginRight: '16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', padding: '8px', cursor: 'pointer'}}>
                     <Menu size={24} />
                  </button>
-                 <h1 style={{margin: 0, fontSize: '24px'}}>{currentView || 'DASHBOARD'}</h1>
+                 <h1 style={{margin: 0, fontSize: '24px'}}>{currentView === 'FIND_DRONE' ? 'FIND MY DRONE' : (currentView || 'DASHBOARD')}</h1>
               </div>
               <ErrorBoundary>
                  {renderView()}
