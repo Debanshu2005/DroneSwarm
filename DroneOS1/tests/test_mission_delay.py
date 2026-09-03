@@ -88,3 +88,4 @@ async def test_non_blocking_waypoint_delay(mock_deps):
         assert getattr(engine, '_waypoint_delay_start', None) is None
 
 
+

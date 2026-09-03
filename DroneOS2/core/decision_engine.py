@@ -123,7 +123,7 @@ class LocalDecisionEngine:
                         self.state_store.submit_intent(intent)
                     return
 
-                reached = await self.mission.executor.execute_waypoint(
+                reached = self.mission.executor.execute_waypoint(
                     current_telemetry, 
                     self.mission.tracker.current_index
                 )
@@ -138,4 +138,5 @@ class LocalDecisionEngine:
                     else:
                         logger.info("Advancing mission.")
                         self.mission.advance_waypoint()
+
 

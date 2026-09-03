@@ -38,7 +38,7 @@ class NavigationManager:
         self.state_store = state_store
         self.waypoint_tolerance: float = 2.0  # meters
 
-    async def navigate_to_waypoint(self, current_telemetry: TelemetryData, target_lat: float, target_lon: float, target_alt: float, target_speed: float) -> bool:
+    def navigate_to_waypoint(self, current_telemetry: TelemetryData, target_lat: float, target_lon: float, target_alt: float, target_speed: float) -> bool:
         if current_telemetry.latitude is None or current_telemetry.longitude is None:
             logger.warning("Cannot navigate without GPS lock.")
             # Emit HOVER intent to stop if GPS lost
@@ -87,3 +87,4 @@ class NavigationManager:
         self.state_store.submit_intent(intent)
         
         return False 
+

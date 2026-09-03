@@ -102,11 +102,11 @@ class MissionExecutor:
     def set_waypoints(self, waypoints: List[Waypoint]):
         self.waypoints = waypoints
 
-    async def execute_waypoint(self, current_telemetry, index: int) -> bool:
+    def execute_waypoint(self, current_telemetry, index: int) -> bool:
         if index >= len(self.waypoints):
             return True
         wp = self.waypoints[index]
-        reached = await self.nav.navigate_to_waypoint(
+        reached = self.nav.navigate_to_waypoint(
             current_telemetry, 
             wp.latitude, 
             wp.longitude, 
@@ -432,3 +432,4 @@ class MissionReceiver:
                 status_text="Mission CLEARED.", severity="info"
             )
             self.manager._dispatch_task(self.manager.network.broadcast_message(feedback))
+
