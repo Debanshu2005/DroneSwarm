@@ -22,6 +22,7 @@ import LogsView from './views/LogsView';
 import AdvancedTestView from './views/AdvancedTestView';
 import MapView from './views/MapView';
 import TerminalView from './views/TerminalView';
+import FindMyDroneView from './views/FindMyDroneView';
 
 function App() {
   const { isConnected, connectionError, testMode, indoorMode, nowMs, wsManager, drones } = useDroneContext();
@@ -67,6 +68,7 @@ function App() {
       case 'FLIGHT': return <DroneControlView setView={setCurrentView} />;
       case 'MAP': return <MapView />;
       case 'TERMINAL': return <TerminalView setView={setCurrentView} />;
+      case 'FIND_DRONE': return <FindMyDroneView />;
       default: return <DashboardView />;
     }
   };
@@ -132,6 +134,7 @@ function App() {
       items: [
         { id: 'FLIGHT', label: 'Flight Control', icon: <Navigation size={20}/> },
         { id: 'MAP', label: 'Map', icon: <MapIcon size={20}/> },
+        { id: 'FIND_DRONE', label: 'Find Drone', icon: <Navigation size={20}/> },
         { id: 'MISSION', label: 'Mission', icon: <Route size={20}/> },
         { id: 'TERMINAL', label: 'Terminal', icon: <Terminal size={20}/> }
       ]
