@@ -23,6 +23,14 @@ class CollisionAvoidanceConfig(BaseModel):
     emergency_distance: float = 1.5
     neighbor_timeout_sec: float = 3.0
 
+class SafetyLimitsConfig(BaseModel):
+    max_horizontal_velocity: float = 5.0
+    max_vertical_velocity: float = 3.0
+
+class SmartRtlConfig(BaseModel):
+    arrival_radius_m: float = 2.0
+    timeout_s: float = 60.0
+
 class FlightConfig(BaseModel):
     adapter_type: str
     takeoff_altitude: float
@@ -33,6 +41,8 @@ class FlightConfig(BaseModel):
     airsim_timeout: float = 5.0
     airsim_retry_count: int = 3
     collision_avoidance: Optional[CollisionAvoidanceConfig] = None
+    safety_limits: Optional[SafetyLimitsConfig] = None
+    smart_rtl: Optional[SmartRtlConfig] = None
 
 class SafetyConfig(BaseModel):
     low_battery_threshold: float = 20.0
@@ -41,7 +51,7 @@ class SafetyConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     level: str = "INFO"
-    log_file: str = "logs/droneos.log"
+    log_file: str = "logs/DroneOS2.log"
     max_bytes: int = 10485760 # 10MB
     backup_count: int = 5
 
@@ -68,6 +78,7 @@ class MovementConfig(BaseModel):
 class FormationConfig(BaseModel):
     default_formation: str = "V"
     spacing: float = 5.0
+    velocity_gain: float = 1.0
 
 class GSConfig(BaseModel):
     ui: GSUIConfig
@@ -83,3 +94,4 @@ class AppConfig(BaseModel):
     mission: Optional[MissionConfig] = None
     movement: Optional[MovementConfig] = None
     formation: Optional[FormationConfig] = None
+

@@ -4,6 +4,8 @@ from DroneOS.core.collision_avoidance import ICollisionAvoidance
 from DroneOS.core.mission_manager import MissionManager
 from DroneOS.core.swarm_manager import SwarmMembership
 from DroneOS.core.navigation_manager import NavigationManager
+from DroneOS.core.flight_state import FlightStateStore
+from DroneOS.core.intents import FlightIntent, IntentSource, IntentAction
 from DroneOS.shared.protocol.messages import TelemetryData
 
 logger = setup_logger("DecisionEngine")
@@ -20,39 +22,35 @@ class LocalDecisionEngine:
         swarm_manager: SwarmMembership,
         collision_avoidance: ICollisionAvoidance,
         navigation_manager: NavigationManager,
-        safety_module
+        safety_module,
+        state_store: FlightStateStore,
+        config=None
     ):
-        """
-        Initializes the DecisionEngine, binding the high-level managers 
-        to evaluate situational context continuously.
-        """
         self.mission = mission_manager
         self.swarm = swarm_manager
         self.ca = collision_avoidance
         self.nav = navigation_manager
         self.safety = safety_module
+        self.state_store = state_store
+        self.config = config
         self.is_active = True
         self.active_bids = {}
+        
+        # Pull formation engine into tick evaluation
+        from DroneOS.core.formation_engine import FormationEngine
+        self.formation_engine = FormationEngine(swarm_manager, state_store, config=config)
 
     def calculate_bid(self, my_telemetry: TelemetryData, target_lat: float, target_lon: float) -> float:
-        """Calculates CNP bid based on Haversine distance and battery life."""
         if not my_telemetry.latitude or not my_telemetry.longitude:
             return float('inf')
             
         import math
-        # Simplified distance metric for bidding
         dist = math.hypot(my_telemetry.latitude - target_lat, my_telemetry.longitude - target_lon)
-        
-        # Battery penalty (lower battery = higher bid/less likely to win)
         batt = my_telemetry.battery_level or 100.0
         penalty = (100.0 - batt) * 0.1
         return dist + penalty
 
     async def evaluate_tick(self, current_telemetry: TelemetryData) -> None:
-        """
-        Called periodically by the main loop.
-        Evaluates current state against swarm intent and modifies navigation if required.
-        """
         if not self.is_active:
             return
             
@@ -86,24 +84,57 @@ class LocalDecisionEngine:
             elif state == "AVOIDANCE":
                 logger.warning(log_str + " | action: EVASIVE_MOVE")
                 if correction:
-                    await self.nav.flight_manager.move(correction)
+                    intent = FlightIntent(IntentSource.COLLISION, IntentAction.MOVE_VELOCITY, ttl_seconds=1.0, params=correction)
+                    self.state_store.submit_intent(intent)
                 return
             elif state == "EMERGENCY":
                 logger.critical(log_str + " | action: EMERGENCY_HOVER")
-                await self.nav.flight_manager.hover()
+                intent = FlightIntent(IntentSource.COLLISION, IntentAction.HOVER, ttl_seconds=1.0)
+                self.state_store.submit_intent(intent)
                 return
 
-        # 3. Proceed with Mission Execution
+        # 3. Proceed with Formation Execution
+        # If formation is active (signaled by params existing)
+        if self.nav.flight_manager.formation_params:
+            intent = self.formation_engine.compute_intent(
+                current_telemetry, 
+                peer_telemetry, 
+                self.nav.flight_manager.formation_params
+            )
+            if intent:
+                self.state_store.submit_intent(intent)
+            return
+
+        # 4. Proceed with Mission Execution
         mission_state = self.mission.get_current_state()
         if mission_state == "RUNNING":
             wp = self.mission.get_current_waypoint()
             if wp:
+                if getattr(self, '_waypoint_delay_start', None) is not None:
+                    import time
+                    elapsed = time.monotonic() - self._waypoint_delay_start
+                    if elapsed >= wp.delay:
+                        logger.info(f"Waypoint delay of {wp.delay}s completed. Advancing mission.")
+                        self._waypoint_delay_start = None
+                        self.mission.advance_waypoint()
+                    else:
+                        # Emitting HOVER intent during the dwell allows manual/collision to override
+                        intent = FlightIntent(IntentSource.MISSION, IntentAction.HOVER, ttl_seconds=1.0)
+                        self.state_store.submit_intent(intent)
+                    return
+
                 reached = await self.mission.executor.execute_waypoint(
                     current_telemetry, 
                     self.mission.tracker.current_index
                 )
                 if reached:
-                    logger.info("Waypoint reached, advancing mission.")
+                    logger.info("Waypoint reached.")
                     if wp.delay > 0:
-                        await asyncio.sleep(wp.delay)
-                    self.mission.advance_waypoint()
+                        logger.info(f"Starting waypoint delay of {wp.delay}s.")
+                        import time
+                        self._waypoint_delay_start = time.monotonic()
+                        intent = FlightIntent(IntentSource.MISSION, IntentAction.HOVER, ttl_seconds=1.0)
+                        self.state_store.submit_intent(intent)
+                    else:
+                        logger.info("Advancing mission.")
+                        self.mission.advance_waypoint()

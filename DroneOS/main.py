@@ -90,9 +90,14 @@ class DroneOSApp:
             drone_cfg=self.drone_cfg, 
             flight_cfg=self.flight_cfg
         )
-        self.flight_manager = FlightManager(self.flight_controller)
+        
+        # New Single Pipeline Architecture State
+        from DroneOS.core.flight_state import FlightStateStore
+        self.state_store = FlightStateStore()
+        
+        self.flight_manager = FlightManager(self.flight_controller, self.state_store)
         # Safety & Failsafe Module
-        self.safety_module = SafetyModule(self.flight_controller, config=self.flight_cfg)
+        self.safety_module = SafetyModule(self.flight_controller, self.state_store, config=self.flight_cfg)
         self.health_monitor = HealthMonitor(timeout_seconds=self.network_cfg.connection_timeout)
         self.battery_monitor = BatteryMonitor()
         self.gps_monitor = GpsMonitor()
@@ -120,7 +125,7 @@ class DroneOSApp:
         self.collision_avoidance = StandardCollisionAvoidance(
             config=self.flight_cfg.collision_avoidance
         )
-        self.navigation_manager = NavigationManager(self.flight_manager)
+        self.navigation_manager = NavigationManager(self.flight_manager, self.state_store)
         self.mission_manager = MissionManager(
             self.navigation_manager, 
             network_node=self.network, 
@@ -138,8 +143,13 @@ class DroneOSApp:
             self.swarm_manager, 
             self.collision_avoidance,
             self.navigation_manager,
-            self.safety_module
+            self.safety_module,
+            self.state_store,
+            config=self.config
         )
+        
+        from DroneOS.core.flight_pipeline import FlightPipeline
+        self.flight_pipeline = FlightPipeline(self.state_store, self.flight_controller, self.flight_cfg)
         
         self.telemetry_publisher = TelemetryPublisher(
             self.node_id, 
@@ -441,6 +451,10 @@ class DroneOSApp:
             get_battery_level=lambda: self.flight_controller._telemetry.battery_level if self.flight_controller else None
         ))
         self._dispatch_task(self.gps_monitor.start(self.flight_controller.get_telemetry))
+        
+        # Start central flight pipeline
+        self._dispatch_task(self.flight_pipeline.run_pipeline_loop())
+        
         self._dispatch_task(self._autonomous_evaluation_loop())
         self._dispatch_task(self.terminal_controller.run_repl())
         

@@ -13,3 +13,11 @@ collision_avoidance:
   warning_distance: 6.0
   emergency_distance: 1.5
   neighbor_timeout_sec: 3.0
+safety_limits:
+  max_horizontal_velocity: 5.0
+  max_vertical_velocity: 3.0
+
+smart_rtl:
+  arrival_radius_m: 2.0
+  timeout_s: 60.0
+

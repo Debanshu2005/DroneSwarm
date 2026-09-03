@@ -1,12 +1,12 @@
 import math
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.core.flight_manager import FlightManager
-from DroneOS.shared.protocol.messages import TelemetryData
+from DroneOS2.shared.utils.logger import setup_logger
+from DroneOS2.shared.protocol.messages import TelemetryData
+from DroneOS2.core.flight_state import FlightStateStore
+from DroneOS2.core.intents import FlightIntent, IntentSource, IntentAction
 
 logger = setup_logger("NavigationManager")
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    # Earth radius in meters
     R = 6371000
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
@@ -30,16 +30,20 @@ def calculate_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> flo
 
 class NavigationManager:
     """
-    Converts high-level mission waypoints into concrete velocity and yaw vectors for the FlightManager.
-    Calculates bearing, distance, and implements a proportional controller for velocity.
+    Converts high-level mission waypoints into concrete velocity and yaw vectors.
+    Submits intents rather than commanding the flight manager directly.
     """
-    def __init__(self, flight_manager: FlightManager):
-        self.flight_manager = flight_manager
+    def __init__(self, flight_manager, state_store: FlightStateStore):
+        self.flight_manager = flight_manager  # Kept for compatibility if it has any other methods needed
+        self.state_store = state_store
         self.waypoint_tolerance: float = 2.0  # meters
 
     async def navigate_to_waypoint(self, current_telemetry: TelemetryData, target_lat: float, target_lon: float, target_alt: float, target_speed: float) -> bool:
         if current_telemetry.latitude is None or current_telemetry.longitude is None:
             logger.warning("Cannot navigate without GPS lock.")
+            # Emit HOVER intent to stop if GPS lost
+            intent = FlightIntent(IntentSource.MISSION, IntentAction.HOVER, ttl_seconds=1.0)
+            self.state_store.submit_intent(intent)
             return False
 
         dist = haversine_distance(current_telemetry.latitude, current_telemetry.longitude, target_lat, target_lon)
@@ -54,7 +58,6 @@ class NavigationManager:
         bearing = calculate_bearing(current_telemetry.latitude, current_telemetry.longitude, target_lat, target_lon)
         bearing_rad = math.radians(bearing)
         
-        # Simple proportional velocity cap
         speed = min(target_speed, dist * 0.5)
         if speed < 0.5:
             speed = 0.5
@@ -62,26 +65,25 @@ class NavigationManager:
         vx = speed * math.cos(bearing_rad)
         vy = speed * math.sin(bearing_rad)
         
-        # Vertical velocity
         vz = 0.0
         if current_telemetry.altitude is not None:
             vz_error = target_alt - current_telemetry.altitude
             vz = max(-2.0, min(2.0, vz_error * 0.5))
-            # Note: NED coordinate system has positive Z pointing DOWN
-            # If target_alt > current_alt, we need to go UP, which is negative Z velocity
             vz = -vz 
             
-        # Optional: Calculate Yaw rate to face the bearing
-        # For a holonomic drone, we can just move without yawing, but for realism we can point the nose
-        # AirSim uses yaw rate. Let's just issue a simple holonomic move for now.
         yaw_rate = 0.0 
 
-        await self.flight_manager.move({
-            "vx": vx,
-            "vy": vy,
-            "vz": vz,
-            "duration": 0.5,
-            "yaw_rate": yaw_rate
-        })
+        intent = FlightIntent(
+            IntentSource.MISSION,
+            IntentAction.MOVE_VELOCITY,
+            ttl_seconds=1.0,
+            params={
+                "vx": vx,
+                "vy": vy,
+                "vz": vz,
+                "yaw_rate": yaw_rate
+            }
+        )
+        self.state_store.submit_intent(intent)
         
-        return False # False means waypoint not reached yet
+        return False 

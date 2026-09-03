@@ -3,31 +3,31 @@ import time
 import sys
 from pathlib import Path
 
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.shared.communication.serializers import JsonSerializer
-from DroneOS.shared.communication.network_node import UdpNetworkAdapter
-from DroneOS.shared.protocol.messages import (
+from DroneOS2.shared.utils.logger import setup_logger
+from DroneOS2.shared.communication.serializers import JsonSerializer
+from DroneOS2.shared.communication.network_node import UdpNetworkAdapter
+from DroneOS2.shared.protocol.messages import (
     BaseMessage, MessageType, CommandAction
 )
 
-from DroneOS.adapters.factory import AdapterFactory
-from DroneOS.core.flight_manager import FlightManager
-from DroneOS.core.command_handler import CommandHandler
-from DroneOS.core.safety import SafetyModule
-from DroneOS.core.swarm_manager import SwarmMembership
-from DroneOS.sensors.health_monitor import HealthMonitor
-from DroneOS.sensors.battery_monitor import BatteryMonitor
-from DroneOS.sensors.gps_monitor import GpsMonitor
+from DroneOS2.adapters.factory import AdapterFactory
+from DroneOS2.core.flight_manager import FlightManager
+from DroneOS2.core.command_handler import CommandHandler
+from DroneOS2.core.safety import SafetyModule
+from DroneOS2.core.swarm_manager import SwarmMembership
+from DroneOS2.sensors.health_monitor import HealthMonitor
+from DroneOS2.sensors.battery_monitor import BatteryMonitor
+from DroneOS2.sensors.gps_monitor import GpsMonitor
 
-from DroneOS.core.mission_manager import MissionManager, MissionReceiver
-from DroneOS.core.collision_avoidance import StandardCollisionAvoidance
-from DroneOS.core.navigation_manager import NavigationManager
-from DroneOS.core.decision_engine import LocalDecisionEngine
-from DroneOS.core.telemetry_publisher import TelemetryPublisher
-from DroneOS.core.diagnostics import ConfigurationValidator, SystemHealthReporter
+from DroneOS2.core.mission_manager import MissionManager, MissionReceiver
+from DroneOS2.core.collision_avoidance import StandardCollisionAvoidance
+from DroneOS2.core.navigation_manager import NavigationManager
+from DroneOS2.core.decision_engine import LocalDecisionEngine
+from DroneOS2.core.telemetry_publisher import TelemetryPublisher
+from DroneOS2.core.diagnostics import ConfigurationValidator, SystemHealthReporter
 
-from DroneOS.shared.config.loader import load_yaml_config
-from DroneOS.shared.config.models import DroneConfig, NetworkConfig, FlightConfig
+from DroneOS2.shared.config.loader import load_yaml_config
+from DroneOS2.shared.config.models import DroneConfig, NetworkConfig, FlightConfig
 
 logger = setup_logger("DroneOS_Main")
 
@@ -49,7 +49,7 @@ class DroneOSApp:
         
         # We need MissionConfig to provide storage dir
         try:
-            from DroneOS.shared.config.models import MissionConfig
+            from DroneOS2.shared.config.models import MissionConfig
             self.mission_cfg = load_yaml_config(config_dir / "mission.yaml", MissionConfig)
             storage_dir = self.mission_cfg.mission_storage_dir
         except Exception as e:
@@ -59,7 +59,7 @@ class DroneOSApp:
         self.node_id = self.drone_cfg.drone_id
         
         # Configuration Validation
-        from DroneOS.shared.config.models import AppConfig
+        from DroneOS2.shared.config.models import AppConfig
         app_config = AppConfig(
             drone=self.drone_cfg,
             network=self.network_cfg,
@@ -72,7 +72,7 @@ class DroneOSApp:
             sys.exit(1)
         
         # Dependency Injection / Wiring
-        from DroneOS.core.error_learning import ErrorLearningSystem
+        from DroneOS2.core.error_learning import ErrorLearningSystem
         self.error_learning = ErrorLearningSystem()
         
         self.serializer = JsonSerializer()
@@ -90,9 +90,14 @@ class DroneOSApp:
             drone_cfg=self.drone_cfg, 
             flight_cfg=self.flight_cfg
         )
-        self.flight_manager = FlightManager(self.flight_controller)
+        
+        # New Single Pipeline Architecture State
+        from DroneOS2.core.flight_state import FlightStateStore
+        self.state_store = FlightStateStore()
+        
+        self.flight_manager = FlightManager(self.flight_controller, self.state_store)
         # Safety & Failsafe Module
-        self.safety_module = SafetyModule(self.flight_controller, config=self.flight_cfg)
+        self.safety_module = SafetyModule(self.flight_controller, self.state_store, config=self.flight_cfg)
         self.health_monitor = HealthMonitor(timeout_seconds=self.network_cfg.connection_timeout)
         self.battery_monitor = BatteryMonitor()
         self.gps_monitor = GpsMonitor()
@@ -120,7 +125,7 @@ class DroneOSApp:
         self.collision_avoidance = StandardCollisionAvoidance(
             config=self.flight_cfg.collision_avoidance
         )
-        self.navigation_manager = NavigationManager(self.flight_manager)
+        self.navigation_manager = NavigationManager(self.flight_manager, self.state_store)
         self.mission_manager = MissionManager(
             self.navigation_manager, 
             network_node=self.network, 
@@ -138,8 +143,13 @@ class DroneOSApp:
             self.swarm_manager, 
             self.collision_avoidance,
             self.navigation_manager,
-            self.safety_module
+            self.safety_module,
+            self.state_store,
+            config=self.config
         )
+        
+        from DroneOS2.core.flight_pipeline import FlightPipeline
+        self.flight_pipeline = FlightPipeline(self.state_store, self.flight_controller, self.flight_cfg)
         
         self.telemetry_publisher = TelemetryPublisher(
             self.node_id, 
@@ -330,7 +340,7 @@ class DroneOSApp:
             self._dispatch_task(self.terminal_controller.process_text(msg.text, msg.sender_id))
 
     async def _handle_param_request(self, msg: BaseMessage) -> None:
-        from DroneOS.shared.protocol.messages import ParamResponseMessage
+        from DroneOS2.shared.protocol.messages import ParamResponseMessage
         import time
         response = ParamResponseMessage(
             sender_id=self.node_id, 
@@ -396,7 +406,7 @@ class DroneOSApp:
                 report = self.diagnostics.get_full_report()
                 logger.debug(f"Diagnostics: {report}")
                 
-                from DroneOS.shared.protocol.messages import DiagnosticsMessage
+                from DroneOS2.shared.protocol.messages import DiagnosticsMessage
                 import time
                 diag_msg = DiagnosticsMessage(
                     sender_id=self.node_id,
@@ -441,6 +451,10 @@ class DroneOSApp:
             get_battery_level=lambda: self.flight_controller._telemetry.battery_level if self.flight_controller else None
         ))
         self._dispatch_task(self.gps_monitor.start(self.flight_controller.get_telemetry))
+        
+        # Start central flight pipeline
+        self._dispatch_task(self.flight_pipeline.run_pipeline_loop())
+        
         self._dispatch_task(self._autonomous_evaluation_loop())
         self._dispatch_task(self.terminal_controller.run_repl())
         
@@ -459,7 +473,7 @@ class DroneOSApp:
                 await self.shutdown()
 
     async def shutdown(self) -> None:
-        logger.info("Shutting down DroneOS...")
+        logger.info("Shutting down DroneOS2...")
         self._running = False
         
         for task in self._active_tasks:
@@ -479,7 +493,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(app.run())
     except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received. Shutting down DroneOS...")
+        logger.info("Keyboard interrupt received. Shutting down DroneOS2...")
     except asyncio.CancelledError:
         pass
     finally:
