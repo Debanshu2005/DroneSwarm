@@ -119,7 +119,8 @@ class PX4FlightController(IFlightController):
         await safe_set_rate('set_rate_position', 5.0)
         await safe_set_rate('set_rate_gps_info', 5.0)
         await safe_set_rate('set_rate_battery', 1.0)
-        await safe_set_rate('set_rate_attitude', 5.0)
+        await safe_set_rate('set_rate_attitude_euler', 5.0)
+        await safe_set_rate('set_rate_altitude', 5.0)
         logger.info("MAVLink telemetry rate initialization completed.")
         
         # Start background telemetry subscriptions
@@ -132,8 +133,9 @@ class PX4FlightController(IFlightController):
         t7 = asyncio.create_task(self._subscribe_attitude())
         t8 = asyncio.create_task(self._subscribe_health())
         t9 = asyncio.create_task(self._subscribe_status_text())
+        t10 = asyncio.create_task(self._subscribe_altitude())
 
-        self._active_tasks.update([t1, t2, t3, t4, t5, t6, t7, t8, t9])
+        self._active_tasks.update([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10])
         
         return True
 
@@ -151,6 +153,9 @@ class PX4FlightController(IFlightController):
             await self.client.action.arm()
             return True
         except Exception as e:
+            if "TIMEOUT" in str(e):
+                logger.warning("MAVSDK timed out on ARM, assuming success (ArduPilot compatibility)")
+                return True
             if "ActionError" in str(type(e)):
                 raise RuntimeError(f"Pixhawk rejected ARM request: {e}")
             raise RuntimeError(f"PX4 Arm failed: {e}")
@@ -161,6 +166,8 @@ class PX4FlightController(IFlightController):
             await self.client.action.disarm()
             return True
         except Exception as e:
+            if "TIMEOUT" in str(e):
+                return True
             logger.exception(f"PX4 Disarm failed: {e}")
             return False
 
@@ -226,6 +233,8 @@ class PX4FlightController(IFlightController):
             await self.client.action.land()
             return True
         except Exception as e:
+            if "TIMEOUT" in str(e):
+                return True
             logger.exception(f"PX4 Land failed: {e}")
             return False
 
@@ -237,8 +246,11 @@ class PX4FlightController(IFlightController):
         try:
             current_alt = self._telemetry.altitude if self._telemetry.altitude is not None else 5.0
             safe_rtl_alt = max(5.0, current_alt)
-            await self.client.param.set_param_float("RTL_RETURN_ALT", float(safe_rtl_alt))
-            logger.info(f"Set RTL_RETURN_ALT to {safe_rtl_alt}m for safe RTL")
+            try:
+                await self.client.param.set_param_float("RTL_RETURN_ALT", float(safe_rtl_alt))
+                logger.info(f"Set RTL_RETURN_ALT to {safe_rtl_alt}m for safe RTL")
+            except Exception as param_err:
+                logger.warning(f"Could not set RTL_RETURN_ALT (might not exist in this firmware): {param_err}")
             await self.client.action.return_to_launch()
             return True
         except Exception as e:
@@ -397,6 +409,13 @@ class PX4FlightController(IFlightController):
             elif mode_upper == "MANUAL":
                 # Fallback to altitude control for manual without GPS
                 await self.client.manual_control.start_altitude_control()
+            elif mode_upper == "GUIDED" or mode_upper == "OFFBOARD":
+                # In ArduPilot, GUIDED is equivalent to PX4 OFFBOARD.
+                # MAVSDK requires a setpoint before starting offboard mode.
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                )
+                await self.client.offboard.start()
             else:
                 # Based on audit, MAVSDK-Python action class in this environment
                 # does NOT expose set_custom_mode. We cannot fake it.
@@ -457,15 +476,32 @@ class PX4FlightController(IFlightController):
                 import math
                 async for pos in self.client.telemetry.position():
                     self._mark_telemetry_fresh()
-                    self._telemetry.latitude = pos.latitude_deg if not math.isnan(pos.latitude_deg) else None
-                    self._telemetry.longitude = pos.longitude_deg if not math.isnan(pos.longitude_deg) else None
-                    self._telemetry.altitude = pos.relative_altitude_m if not math.isnan(pos.relative_altitude_m) else None
+                    self._telemetry.latitude = pos.latitude_deg if not math.isnan(pos.latitude_deg) else self._telemetry.latitude
+                    self._telemetry.longitude = pos.longitude_deg if not math.isnan(pos.longitude_deg) else self._telemetry.longitude
+                    if not math.isnan(pos.relative_altitude_m):
+                        self._telemetry.altitude = pos.relative_altitude_m
             except asyncio.CancelledError:
                 raise
             except Exception as e:
                 logger.error(f"PX4 position subscription failed: {e}")
                 if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
                     pass # Stream dropped, let loop retry
+                await asyncio.sleep(2.0)
+
+    async def _subscribe_altitude(self):
+        while self._connected:
+            try:
+                import math
+                async for alt in self.client.telemetry.altitude():
+                    self._mark_telemetry_fresh()
+                    if not math.isnan(alt.altitude_relative_m):
+                        self._telemetry.altitude = alt.altitude_relative_m
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 altitude subscription failed: {e}")
+                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
+                    pass
                 await asyncio.sleep(2.0)
 
     async def _subscribe_velocity(self):

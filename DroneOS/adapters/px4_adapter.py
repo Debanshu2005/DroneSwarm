@@ -119,7 +119,8 @@ class PX4FlightController(IFlightController):
         await safe_set_rate('set_rate_position', 5.0)
         await safe_set_rate('set_rate_gps_info', 5.0)
         await safe_set_rate('set_rate_battery', 1.0)
-        await safe_set_rate('set_rate_attitude', 5.0)
+        await safe_set_rate('set_rate_attitude_euler', 5.0)
+        await safe_set_rate('set_rate_altitude', 5.0)
         logger.info("MAVLink telemetry rate initialization completed.")
         
         # Start background telemetry subscriptions
@@ -132,8 +133,9 @@ class PX4FlightController(IFlightController):
         t7 = asyncio.create_task(self._subscribe_attitude())
         t8 = asyncio.create_task(self._subscribe_health())
         t9 = asyncio.create_task(self._subscribe_status_text())
+        t10 = asyncio.create_task(self._subscribe_altitude())
 
-        self._active_tasks.update([t1, t2, t3, t4, t5, t6, t7, t8, t9])
+        self._active_tasks.update([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10])
         
         return True
 
@@ -474,15 +476,32 @@ class PX4FlightController(IFlightController):
                 import math
                 async for pos in self.client.telemetry.position():
                     self._mark_telemetry_fresh()
-                    self._telemetry.latitude = pos.latitude_deg if not math.isnan(pos.latitude_deg) else None
-                    self._telemetry.longitude = pos.longitude_deg if not math.isnan(pos.longitude_deg) else None
-                    self._telemetry.altitude = pos.relative_altitude_m if not math.isnan(pos.relative_altitude_m) else None
+                    self._telemetry.latitude = pos.latitude_deg if not math.isnan(pos.latitude_deg) else self._telemetry.latitude
+                    self._telemetry.longitude = pos.longitude_deg if not math.isnan(pos.longitude_deg) else self._telemetry.longitude
+                    if not math.isnan(pos.relative_altitude_m):
+                        self._telemetry.altitude = pos.relative_altitude_m
             except asyncio.CancelledError:
                 raise
             except Exception as e:
                 logger.error(f"PX4 position subscription failed: {e}")
                 if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
                     pass # Stream dropped, let loop retry
+                await asyncio.sleep(2.0)
+
+    async def _subscribe_altitude(self):
+        while self._connected:
+            try:
+                import math
+                async for alt in self.client.telemetry.altitude():
+                    self._mark_telemetry_fresh()
+                    if not math.isnan(alt.altitude_relative_m):
+                        self._telemetry.altitude = alt.altitude_relative_m
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 altitude subscription failed: {e}")
+                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
+                    pass
                 await asyncio.sleep(2.0)
 
     async def _subscribe_velocity(self):
