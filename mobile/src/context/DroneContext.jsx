@@ -105,13 +105,13 @@ export const DroneProvider = ({ children }) => {
         setDrones(prev => ({
           ...prev,
           "drone_test_01": {
-            id: "drone_test_01", status: "active", lastSeen: now,
+            id: "drone_test_01", status: "CONNECTED", lastSeen: now,
             telemetry: { armed_state: "DISARMED", flight_mode: "HOLD", battery_level: 85, gps_valid: true, altitude: 0.0, ground_speed: 0.0, satellites: 12, hdop: 0.8, latitude: 37.7749, longitude: -122.4194, heading: 90 },
             commandState: prev["drone_test_01"]?.commandState || { action: null, state: 'IDLE', cmd_id: null },
             missionState: prev["drone_test_01"]?.missionState || { status: 'none', count: 0 }
           },
           "drone_test_02": {
-            id: "drone_test_02", status: "active", lastSeen: now,
+            id: "drone_test_02", status: "CONNECTED", lastSeen: now,
             telemetry: { armed_state: "ARMED", flight_mode: "LOITER", battery_level: 45, gps_valid: true, altitude: 2.5, ground_speed: 1.2, satellites: 14, hdop: 0.7, latitude: 37.7750, longitude: -122.4180, heading: 45 },
             commandState: prev["drone_test_02"]?.commandState || { action: null, state: 'IDLE', cmd_id: null },
             missionState: prev["drone_test_02"]?.missionState || { status: 'running', count: 5 }
@@ -138,7 +138,7 @@ export const DroneProvider = ({ children }) => {
           let newStatus = drone.status;
           if (freshness === 'OFFLINE') newStatus = 'OFFLINE';
           else if (freshness === 'STALE') newStatus = 'DEGRADED';
-          else if (drone.status === 'active' || drone.status === 'standby' || drone.status === 'OFFLINE' || drone.status === 'DEGRADED') newStatus = 'CONNECTED';
+          else if (drone.status === 'OFFLINE' || drone.status === 'DEGRADED') newStatus = 'CONNECTED';
           
           if (newStatus !== drone.status || health !== drone.healthScore || freshness !== drone.freshness) {
             newDrones[id] = { ...drone, status: newStatus, healthScore: health, freshness };
@@ -193,7 +193,8 @@ export const DroneProvider = ({ children }) => {
             [msg.sender_id]: {
               ...(prev[msg.sender_id] || {}),
               id: msg.sender_id,
-              status: msg.status === "active" ? "active" : "standby",
+              status: "CONNECTED",
+              backendStatus: msg.status === "active" ? "active" : "standby",
               lastSeen: now,
               lastHeartbeat: now,
               connectTime: isNew ? now : (prev[msg.sender_id]?.connectTime || now),
