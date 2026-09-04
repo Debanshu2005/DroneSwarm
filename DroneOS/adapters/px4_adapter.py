@@ -398,18 +398,18 @@ class PX4FlightController(IFlightController):
         mode_upper = mode.upper()
         
         try:
-            if mode_upper == "RTL":
+            if mode_upper in ["RTL", "RETURN", "RETURN_TO_LAUNCH"]:
                 await self.client.action.return_to_launch()
             elif mode_upper == "LAND":
                 await self.client.action.land()
-            elif mode_upper == "LOITER" or mode_upper == "HOLD":
+            elif mode_upper in ["LOITER", "HOLD", "POSHOLD", "POSITION", "POSCTL"]:
                 await self.client.action.hold()
-            elif mode_upper == "ALTCTL":
+            elif mode_upper in ["ALTCTL", "ALT_HOLD", "ALTHOLD"]:
                 await self.client.manual_control.start_altitude_control()
-            elif mode_upper in ["MANUAL", "STABILIZED"]:
+            elif mode_upper in ["MANUAL", "STABILIZED", "ACRO"]:
                 # Fallback to altitude control for manual without GPS
                 await self.client.manual_control.start_altitude_control()
-            elif mode_upper == "GUIDED" or mode_upper == "OFFBOARD":
+            elif mode_upper in ["GUIDED", "OFFBOARD"]:
                 # In ArduPilot, GUIDED is equivalent to PX4 OFFBOARD.
                 # MAVSDK requires a setpoint before starting offboard mode.
                 await self.client.offboard.set_velocity_body(
