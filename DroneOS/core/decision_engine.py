@@ -64,11 +64,36 @@ class LocalDecisionEngine:
             state = self.swarm.registry.get_peer(peer_id)
             if state and state.is_active and state.telemetry:
                 peer_telemetry[peer_id] = state.telemetry
+
+        # 1.5 Filter formation peers from collision avoidance
+        filtered_peer_telemetry = peer_telemetry.copy()
+        if self.nav.flight_manager.formation_params and current_telemetry.gps_valid:
+            try:
+                expected_positions = self.formation_engine.get_expected_positions(
+                    current_telemetry, 
+                    self.nav.flight_manager.formation_params
+                )
+                repulsion_radius_m = float(self.nav.flight_manager.formation_params.get('repulsion_radius_m', 2.5))
+                tolerance = repulsion_radius_m * 1.5
+                
+                from DroneOS.core.formation_manager import global_offset_local_m
+                import math
+                
+                for peer_id, peer_tel in peer_telemetry.items():
+                    if peer_id in expected_positions and peer_tel.latitude is not None and peer_tel.longitude is not None:
+                        expected_lat, expected_lon = expected_positions[peer_id]
+                        err_n, err_e = global_offset_local_m(peer_tel.latitude, peer_tel.longitude, expected_lat, expected_lon)
+                        error_dist = math.sqrt(err_n**2 + err_e**2)
+                        
+                        if error_dist <= tolerance:
+                            del filtered_peer_telemetry[peer_id]
+            except Exception as e:
+                logger.error(f"Error filtering formation peers from collision avoidance: {e}")
                 
         # 2. Evaluate Collision Threats (Highest Priority)
         state, correction, threat_peer, dist = self.ca.evaluate_threats(
             current_telemetry, 
-            peer_telemetry
+            filtered_peer_telemetry
         )
         
         if state != "NORMAL":

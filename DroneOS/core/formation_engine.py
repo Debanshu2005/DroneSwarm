@@ -28,13 +28,84 @@ class FormationEngine:
         repulsion_radius_m = float(params.get('repulsion_radius_m', 2.5))
         self.form_mgr.set_formation(f_type, spacing)
         
+    def get_active_peers(self):
+        """Returns a sorted list of active peer IDs (including self) based on last_seen."""
+        now = time.time()
+        active_peers = [pid for pid, peer in self.swarm_manager.registry.peers.items() if (now - peer.last_seen) < 3.0]
+        my_node_id = self.swarm_manager.identity.drone_id
+        if my_node_id not in active_peers:
+            active_peers.append(my_node_id)
+        active_peers.sort()
+        return active_peers
+        
+    def get_expected_positions(self, current_telemetry, params) -> dict:
+        """
+        Returns a dictionary mapping peer_id to (expected_lat, expected_lon)
+        for all active peers in the formation based on current geometry.
+        """
+        f_type_str = params.get('type', 'V').upper()
+        try:
+            f_type = FormationType(f_type_str)
+        except ValueError:
+            return {}
+            
+        spacing = float(params.get('spacing', 2.0))
+        self.form_mgr.set_formation(f_type, spacing)
+        
+        active_peers = self.get_active_peers()
+        if not active_peers:
+            return {}
+            
+        anchor_id = active_peers[0]
+        total_drones = len(active_peers)
+        
+        anchor_peer = self.swarm_manager.registry.get_peer(anchor_id)
         my_node_id = self.swarm_manager.identity.drone_id
         
         now = time.time()
-        active_peers = [pid for pid, peer in self.swarm_manager.registry.peers.items() if (now - peer.last_seen) < 3.0]
-        if my_node_id not in active_peers:
-            active_peers.append(my_node_id)
-        active_peers.sort() 
+        
+        # Determine anchor position
+        if anchor_id == my_node_id:
+            if not current_telemetry.gps_valid or current_telemetry.latitude is None or current_telemetry.longitude is None:
+                return {}
+            anchor_lat = current_telemetry.latitude
+            anchor_lon = current_telemetry.longitude
+            anchor_alt = current_telemetry.altitude or 0.0
+        else:
+            if not (anchor_peer and anchor_peer.last_position_time is not None and 
+                   (now - anchor_peer.last_position_time) < 3.0 and
+                   anchor_peer.lat is not None and anchor_peer.lon is not None and anchor_peer.alt is not None):
+                return {}
+            anchor_lat = anchor_peer.lat
+            anchor_lon = anchor_peer.lon
+            anchor_alt = anchor_peer.alt
+            
+        expected_positions = {}
+        for i, peer_id in enumerate(active_peers):
+            dx_north, dy_east, dz_down = self.form_mgr.get_offset(i, total_drones)
+            target_lat, target_lon, target_alt = convert_local_offset_to_global(
+                anchor_lat, anchor_lon, anchor_alt, dx_north, dy_east
+            )
+            expected_positions[peer_id] = (target_lat, target_lon)
+            
+        return expected_positions
+
+    def compute_intent(self, current_telemetry, peer_telemetry, params) -> FlightIntent:
+        f_type_str = params.get('type', 'V').upper()
+        try:
+            f_type = FormationType(f_type_str)
+        except ValueError:
+            logger.error(f"Invalid formation type: {f_type_str}")
+            return None
+            
+        spacing = float(params.get('spacing', 2.0))
+        speed = float(params.get('speed', 0.5))
+        repulsion_radius_m = float(params.get('repulsion_radius_m', 2.5))
+        self.form_mgr.set_formation(f_type, spacing)
+        
+        my_node_id = self.swarm_manager.identity.drone_id
+        active_peers = self.get_active_peers()
+        now = time.time()
         
         my_index = active_peers.index(my_node_id)
         total_drones = len(active_peers)
