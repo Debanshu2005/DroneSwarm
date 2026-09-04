@@ -405,9 +405,11 @@ class PX4FlightController(IFlightController):
             elif mode_upper in ["LOITER", "HOLD", "POSHOLD", "POSITION", "POSCTL"]:
                 await self.client.action.hold()
             elif mode_upper in ["ALTCTL", "ALT_HOLD", "ALTHOLD"]:
+                await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
                 await self.client.manual_control.start_altitude_control()
             elif mode_upper in ["MANUAL", "STABILIZED", "ACRO"]:
                 # Fallback to altitude control for manual without GPS
+                await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
                 await self.client.manual_control.start_altitude_control()
             elif mode_upper in ["GUIDED", "OFFBOARD"]:
                 # In ArduPilot, GUIDED is equivalent to PX4 OFFBOARD.
