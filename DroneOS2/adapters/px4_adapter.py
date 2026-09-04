@@ -406,7 +406,7 @@ class PX4FlightController(IFlightController):
                 await self.client.action.hold()
             elif mode_upper == "ALTCTL":
                 await self.client.manual_control.start_altitude_control()
-            elif mode_upper == "MANUAL":
+            elif mode_upper in ["MANUAL", "STABILIZED"]:
                 # Fallback to altitude control for manual without GPS
                 await self.client.manual_control.start_altitude_control()
             elif mode_upper == "GUIDED" or mode_upper == "OFFBOARD":
