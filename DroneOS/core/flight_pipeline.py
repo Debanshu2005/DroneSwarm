@@ -85,6 +85,13 @@ class CommandWriter:
                 yaw_rate = intent.params.get('yaw_rate', 0.0)
                 await self.fc.move_velocity(vx, vy, vz, 0.1, yaw_rate)
                 
+            elif intent.action == IntentAction.MOVE_VELOCITY_NED:
+                north = intent.params.get('north', 0.0)
+                east = intent.params.get('east', 0.0)
+                down = intent.params.get('down', 0.0)
+                yaw_rate = intent.params.get('yaw_rate', 0.0)
+                await self.fc.move_velocity_ned(north, east, down, 0.1, yaw_rate)
+                
             elif intent.action == IntentAction.GOTO:
                 lat = intent.params.get('lat')
                 lon = intent.params.get('lon')
@@ -92,6 +99,13 @@ class CommandWriter:
                 yaw = intent.params.get('yaw', 0.0)
                 if lat is not None and lon is not None and alt is not None:
                     await self.fc.goto_location(lat, lon, alt, yaw=yaw)
+                    
+            elif intent.action == IntentAction.GOTO_NED:
+                north = intent.params.get('north', 0.0)
+                east = intent.params.get('east', 0.0)
+                down = intent.params.get('down', 0.0)
+                yaw = intent.params.get('yaw', 0.0)
+                await self.fc.goto_local_ned(north, east, down, yaw=yaw)
                     
             elif intent.action == IntentAction.TAKEOFF:
                 alt = intent.params.get('altitude', 5.0)

@@ -17,7 +17,7 @@ const MILITARY_ADVISORY_ZONES = [
   { id: 'VIAM', name: 'Ambala Air Force Station', lat: 30.37083, lng: 76.81778 },
   { id: 'VIDX', name: 'Hindan Air Force Station', lat: 28.70778, lng: 77.35833 },
   // Additional verified bases
-  { id: 'VAPO', name: 'Pune Air Force Station', lat: 18.5725, lng: 73.87833 },
+  { id: 'VAPO', name: 'Pune Air Force Station', lat: 18.58222, lng: 73.91972 },
   { id: 'VIGR', name: 'Gwalior Air Force Station', lat: 26.29333, lng: 78.22778 },
   { id: 'VIPK', name: 'Pathankot Air Force Station', lat: 32.23361, lng: 75.63444 },
   { id: 'VIAG', name: 'Agra Air Force Station', lat: 27.16194, lng: 77.97083 },

@@ -17,7 +17,9 @@ class IntentAction(str, Enum):
     LAND = "LAND"
     RTL = "RTL"
     MOVE_VELOCITY = "MOVE_VELOCITY"
+    MOVE_VELOCITY_NED = "MOVE_VELOCITY_NED"
     GOTO = "GOTO"
+    GOTO_NED = "GOTO_NED"
     TAKEOFF = "TAKEOFF"
     EMERGENCY_KILL = "EMERGENCY_KILL"
 

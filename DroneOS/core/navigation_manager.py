@@ -62,25 +62,25 @@ class NavigationManager:
         if speed < 0.5:
             speed = 0.5
             
-        vx = speed * math.cos(bearing_rad)
-        vy = speed * math.sin(bearing_rad)
+        north = speed * math.cos(bearing_rad)
+        east = speed * math.sin(bearing_rad)
         
-        vz = 0.0
+        down = 0.0
         if current_telemetry.altitude is not None:
             vz_error = target_alt - current_telemetry.altitude
             vz = max(-2.0, min(2.0, vz_error * 0.5))
-            vz = -vz 
+            down = -vz 
             
         yaw_rate = 0.0 
 
         intent = FlightIntent(
             IntentSource.MISSION,
-            IntentAction.MOVE_VELOCITY,
+            IntentAction.MOVE_VELOCITY_NED,
             ttl_seconds=1.0,
             params={
-                "vx": vx,
-                "vy": vy,
-                "vz": vz,
+                "north": north,
+                "east": east,
+                "down": down,
                 "yaw_rate": yaw_rate
             }
         )

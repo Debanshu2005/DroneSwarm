@@ -19,7 +19,7 @@ def mock_deps(state_store):
     wp = MagicMock()
     wp.delay = 5.0
     mission.get_current_waypoint.return_value = wp
-    mission.executor.execute_waypoint = AsyncMock(return_value=True) # WP Reached!
+    mission.executor.execute_waypoint = MagicMock(return_value=True) # WP Reached!
     
     swarm = MagicMock()
     swarm.registry.get_all_peers.return_value = []
@@ -61,14 +61,14 @@ async def test_non_blocking_waypoint_delay(mock_deps):
         m.setattr(real_time, 'monotonic', lambda: engine._waypoint_delay_start + 2.0)
         
         # Simulate a collision threat arriving
-        ca.evaluate_threats.return_value = ("AVOIDANCE", {"vx": 1.0, "vy": 0.0, "vz": 0.0, "yaw_rate": 0.0}, "drone2", 2.0)
+        ca.evaluate_threats.return_value = ("AVOIDANCE", {"north": 1.0, "east": 0.0, "down": 0.0, "yaw_rate": 0.0}, "drone2", 2.0)
         
         await engine.evaluate_tick(telemetry)
         
         # Collision intent should be submitted
         collision_intent = state_store.get_intents().get(IntentSource.COLLISION)
         assert collision_intent is not None
-        assert collision_intent.action == IntentAction.MOVE_VELOCITY
+        assert collision_intent.action == IntentAction.MOVE_VELOCITY_NED
         
         # Since Arbiter (outside this engine) selects the highest priority, 
         # Collision > Mission, so the drone will evade despite the mission delay.

@@ -99,9 +99,9 @@ class StandardCollisionAvoidance(ICollisionAvoidance):
                         # Opposite direction
                         escape_bearing = bearing + math.pi
                         
-                        vx = 2.0 * math.cos(escape_bearing)
-                        vy = 2.0 * math.sin(escape_bearing)
-                        vz = 0.0 
-                        best_correction = {"vx": vx, "vy": vy, "vz": vz, "duration": 1.0}
+                        north = 2.0 * math.cos(escape_bearing)
+                        east = 2.0 * math.sin(escape_bearing)
+                        down = 0.0 
+                        best_correction = {"north": north, "east": east, "down": down, "duration": 1.0}
 
         return worst_state, best_correction, threat_peer, min_dist_found

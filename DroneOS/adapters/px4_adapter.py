@@ -9,11 +9,12 @@ logger = setup_logger("PX4Adapter")
 
 try:
     from mavsdk import System
-    from mavsdk.offboard import VelocityBodyYawspeed
+    from mavsdk.offboard import VelocityBodyYawspeed, VelocityNedYaw
 except ImportError:
     logger.warning("MAVSDK module not found. Adapter will fail if instantiated without a mock.")
     System = None
     VelocityBodyYawspeed = None
+    VelocityNedYaw = None
 
 class PX4FlightController(IFlightController):
     """
@@ -333,6 +334,31 @@ class PX4FlightController(IFlightController):
                 return True
         except (OSError, RuntimeError) as e:
             logger.exception(f"PX4 Move failed: {e}")
+            return False
+
+    async def move_velocity_ned(self, north: float, east: float, down: float, duration: float, yaw_rate: float = 0.0) -> bool:
+        if not self._connected: return False
+        
+        telemetry = await self.get_telemetry()
+        mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
+        
+        use_manual = (not telemetry.gps_valid) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
+
+        try:
+            if use_manual:
+                logger.warning("move_velocity_ned is not supported in manual/stabilized modes without GPS.")
+                return False
+            else:
+                await self.client.offboard.set_velocity_ned(
+                    VelocityNedYaw(north, east, down, yaw_rate)
+                )
+                try:
+                    await self.client.offboard.start()
+                except Exception as e:
+                    logger.debug(f"Offboard start failed or already active: {e}")
+                return True
+        except (OSError, RuntimeError) as e:
+            logger.exception(f"PX4 Move NED failed: {e}")
             return False
 
     async def stop_movement(self) -> bool:

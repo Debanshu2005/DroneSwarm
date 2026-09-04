@@ -84,7 +84,7 @@ class LocalDecisionEngine:
             elif state == "AVOIDANCE":
                 logger.warning(log_str + " | action: EVASIVE_MOVE")
                 if correction:
-                    intent = FlightIntent(IntentSource.COLLISION, IntentAction.MOVE_VELOCITY, ttl_seconds=1.0, params=correction)
+                    intent = FlightIntent(IntentSource.COLLISION, IntentAction.MOVE_VELOCITY_NED, ttl_seconds=1.0, params=correction)
                     self.state_store.submit_intent(intent)
                 return
             elif state == "EMERGENCY":

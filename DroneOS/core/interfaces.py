@@ -90,8 +90,18 @@ class IFlightController(ABC):
     @abstractmethod
     async def move_velocity(self, vx: float, vy: float, vz: float, duration: float, yaw_rate: float = 0.0) -> bool:
         """
+        Commands velocity targets in the local body frame (forward, right, down).
+        Inputs: vx (forward), vy (right), vz (down) (m/s), duration (s), yaw_rate (deg/s)
+        Outputs: True if command accepted, False if rejected.
+        Failure Modes: Network delay, FC bounds exceeded.
+        """
+        pass
+
+    @abstractmethod
+    async def move_velocity_ned(self, north: float, east: float, down: float, duration: float, yaw_rate: float = 0.0) -> bool:
+        """
         Commands velocity targets in the local NED frame.
-        Inputs: vx, vy, vz (m/s), duration (s), yaw_rate (deg/s)
+        Inputs: north, east, down (m/s), duration (s), yaw_rate (deg/s)
         Outputs: True if command accepted, False if rejected.
         Failure Modes: Network delay, FC bounds exceeded.
         """

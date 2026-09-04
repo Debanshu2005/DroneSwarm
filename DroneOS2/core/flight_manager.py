@@ -142,8 +142,21 @@ class FlightManager:
         return True
 
     async def goto_local(self, params: Dict[str, Any]) -> bool:
-        # Simplification: we map goto_local to GOTO_NED intent (not fully implemented in command writer for brevity, but pattern is correct)
-        return False
+        self._active_navigation_frame = "LOCAL_NED"
+        north = params.get('north')
+        east = params.get('east')
+        down = params.get('down')
+        if north is None or east is None or down is None:
+            return False
+            
+        intent = FlightIntent(
+            IntentSource.MANUAL, 
+            IntentAction.GOTO_NED, 
+            ttl_seconds=5.0, 
+            params={"north": north, "east": east, "down": down, "yaw": params.get('yaw', 0.0)}
+        )
+        self.state_store.submit_intent(intent)
+        return True
 
     async def set_mode(self, params: Dict[str, Any]) -> bool:
         mode = params.get('mode')
