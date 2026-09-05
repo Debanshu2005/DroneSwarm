@@ -108,9 +108,9 @@ def main():
         old_init(self, *args, **kwargs)
     mavsdk.System.__init__ = patched_init
 
-    # Patch connect to do nothing, since the server is already connected via CLI args
+    # Patch connect to do nothing to the server, but still init the gRPC plugins!
     async def patched_connect(self, *args, **kwargs):
-        pass
+        await self._init_plugins(self._mavsdk_server_address, self._port)
     mavsdk.System.connect = patched_connect
     
     # 5. Run the DroneOS1 application
