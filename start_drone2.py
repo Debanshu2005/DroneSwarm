@@ -88,8 +88,8 @@ def main():
     
     mavsdk_proc = subprocess.Popen(
         [mavsdk_bin, "-p", str(server_port), resolved_conn],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stdout=sys.stdout,
+        stderr=sys.stderr
     )
     
     if not wait_for_port(server_port):
