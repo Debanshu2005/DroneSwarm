@@ -450,20 +450,23 @@ export default function DroneControlView({ setView }) {
                       <div style={{color: 'var(--text-muted)', fontSize: '10px', marginBottom: '12px', textAlign: 'center'}}>Mode: INDOOR TEST</div>
                       
                       <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
-                          <button className="command-btn btn-hold" style={{padding: '12px'}} onClick={() => console.log("TEST ARM Triggered")}>
-                             <div className="cmd-main"><Lock size={14}/> TEST ARM</div>
+                          <button className="command-btn btn-hold" style={{padding: '12px', background: '#0284c7'}} onClick={() => requestCommand(CommandAction.SET_MODE, { mode: 'MANUAL' })}>
+                             <div className="cmd-main"><Settings size={14}/> SET MANUAL MODE</div>
                           </button>
-                          <button className="command-btn btn-takeoff" style={{padding: '12px'}} onClick={() => console.log("TEST TAKEOFF Triggered")}>
-                             <div className="cmd-main"><ArrowUp size={14}/> TEST TAKEOFF</div>
+                          <button className="command-btn btn-hold" style={{padding: '12px', background: '#D32F2F'}} onClick={() => requestCommand(CommandAction.ARM, null, true)}>
+                             <div className="cmd-main"><Lock size={14}/> FORCE ARM</div>
                           </button>
-                          <button className="command-btn btn-hold" style={{padding: '12px', background: '#4B5563'}} onClick={() => console.log("TEST HOVER Triggered")}>
-                             <div className="cmd-main"><Square size={14}/> TEST HOVER</div>
+                          <button className="command-btn btn-hold" style={{padding: '12px', background: '#4B5563'}} onClick={() => requestCommand(CommandAction.DISARM, null, true)}>
+                             <div className="cmd-main"><Unlock size={14}/> DISARM</div>
                           </button>
-                          <button className="command-btn btn-land" style={{padding: '12px'}} onClick={() => console.log("TEST LAND Triggered")}>
-                             <div className="cmd-main"><ArrowDown size={14}/> TEST LAND</div>
+                          <button className="command-btn btn-takeoff" style={{padding: '12px'}} onClick={() => requestCommand(CommandAction.TAKEOFF, { altitude_m: targetAltitude }, true)}>
+                             <div className="cmd-main"><ArrowUp size={14}/> TAKEOFF</div>
+                          </button>
+                          <button className="command-btn btn-land" style={{padding: '12px'}} onClick={() => requestCommand(CommandAction.LAND)}>
+                             <div className="cmd-main"><ArrowDown size={14}/> LAND</div>
                           </button>
                           <div style={{marginTop: '8px', fontSize: '10px', color: 'var(--warning)', textAlign: 'center'}}>
-                              (Test controls are isolated from real MAVSDK handlers)
+                              (Warning: Indoor flights lack GPS stability)
                           </div>
                       </div>
                       
