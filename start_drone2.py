@@ -41,7 +41,7 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
         return f"serial://{device}:{baud}"
     return conn_str
 
-def wait_for_port(port: int, timeout: float = 10.0) -> bool:
+def wait_for_port(port: int, timeout: float = 30.0) -> bool:
     start = time.time()
     while time.time() - start < timeout:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
