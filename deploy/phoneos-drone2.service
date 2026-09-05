@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=csi
+User=root
 WorkingDirectory=/home/csi/DroneSwarm
 Environment="PYTHONPATH=/home/csi/DroneSwarm"
 
