@@ -34,13 +34,17 @@ async def test_broadcast_message_sends_to_both_ports():
     msg = HeartbeatMessage(sender_id="test_node", status="active", timestamp=12345.0)
     await adapter.broadcast_message(msg)
     
-    # Verify sendto was called exactly 3 times (Local, Discovery, External Relay)
-    assert adapter.transport.sendto.call_count == 3
+    # Verify sendto was called exactly twice
+    assert adapter.transport.sendto.call_count == 2
     
+    # Verify the destinations
     calls = adapter.transport.sendto.call_args_list
-    assert calls[0][0][1] == ("127.0.0.1", 14551)
-    assert calls[1][0][1] == ("255.255.255.255", 14550)
-    assert calls[2][0][1] == ("255.255.255.255", 14551)
+    
+    # First call should be the discovery broadcast (port 14550)
+    assert calls[0].args[1] == ("255.255.255.255", 14550)
+    
+    # Second call should be the relay forward broadcast (port 14551)
+    assert calls[1].args[1] == ("255.255.255.255", 14551)
 
 @pytest.mark.asyncio
 async def test_udp_hmac_signs_and_accepts_when_secret_set(monkeypatch):

@@ -8,11 +8,11 @@ import time
 from pathlib import Path
 import os
 
-# Add the project root to sys.path so DroneOS can be imported
+# Add the project root to sys.path so DroneOS2 can be imported
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from DroneOS.shared.config.loader import load_yaml_config
-from DroneOS.shared.config.models import DroneConfig, FlightConfig
+from DroneOS2.shared.config.loader import load_yaml_config
+from DroneOS2.shared.config.models import DroneConfig, FlightConfig
 
 def resolve_serial(vehicle_name: str, conn_str: str) -> str:
     if not conn_str.startswith("serial://auto:"):
@@ -51,7 +51,7 @@ def wait_for_port(port: int, timeout: float = 10.0) -> bool:
     return False
 
 def main():
-    config_dir = Path(__file__).resolve().parent / "DroneOS" / "configs"
+    config_dir = Path(__file__).resolve().parent / "DroneOS2" / "configs"
     drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
     flight_cfg = load_yaml_config(config_dir / "flight.yaml", FlightConfig)
     
@@ -61,7 +61,7 @@ def main():
     
     # 1. Kill any existing orphaned servers/relays forcefully on this Pi
     import psutil
-    server_port = 50051
+    server_port = 50052
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmdline = proc.info.get('cmdline', [])
@@ -69,7 +69,7 @@ def main():
                 if cmdline and any(str(server_port) in arg for arg in cmdline):
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
                     proc.kill()
-            elif cmdline and 'relay.py' in ' '.join(cmdline) and 'DroneOS' in ' '.join(cmdline):
+            elif cmdline and 'relay.py' in ' '.join(cmdline) and 'DroneOS2' in ' '.join(cmdline):
                 print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
                 proc.kill()
         except Exception:
@@ -89,10 +89,10 @@ def main():
     
 
     
-    # 5. Run the DroneOS application
-    from DroneOS.main import DroneOSApp
+    # 5. Run the DroneOS2 application
+    from DroneOS2.main import DroneOSApp
     
-    # Fake sys.argv so DroneOS uses its own config directory correctly
+    # Fake sys.argv so DroneOS2 uses its own config directory correctly
     sys.argv = [sys.argv[0], str(config_dir)]
     
     app = DroneOSApp()

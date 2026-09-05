@@ -60,27 +60,11 @@ class CommandWriter:
     def __init__(self, fc: IFlightController):
         self.fc = fc
         self.last_action_time = 0.0
-        self.last_action_type = None
 
     async def execute(self, intent: FlightIntent):
         self.last_action_time = time.time()
         
         try:
-            # Prevent spamming one-shot commands at 20Hz
-            is_oneshot = intent.action in [
-                IntentAction.HOVER, 
-                IntentAction.LAND, 
-                IntentAction.RTL, 
-                IntentAction.TAKEOFF, 
-                IntentAction.EMERGENCY_KILL,
-                IntentAction.GOTO,
-                IntentAction.GOTO_NED
-            ]
-            if is_oneshot and self.last_action_type == intent.action:
-                return
-                
-            self.last_action_type = intent.action
-
             if intent.action == IntentAction.EMERGENCY_KILL:
                 if hasattr(self.fc, 'kill'):
                     await self.fc.kill()
@@ -142,7 +126,7 @@ class FlightPipeline:
         self.command_writer = CommandWriter(fc)
         self.srtl_engine = SmartRtlEngine(config)
         self._running = False
-        self._hz = float(getattr(self.config, 'pipeline_hz', 20.0))
+        self._hz = 20.0
 
     async def run_pipeline_loop(self):
         self._running = True

@@ -80,7 +80,7 @@ class PX4FlightController(IFlightController):
                 logger.info("PX4 DEVICE NOT FOUND")
                 return False
         
-        # kill_orphaned_mavsdk(conn_str)
+        kill_orphaned_mavsdk(conn_str)
         # Recreate System to ensure it spawns a fresh mavsdk_server if it previously failed
         self.client = System()
 

@@ -3,9 +3,6 @@ import time
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "relay"))
-from relay import UdpWebsocketRelay
-
 from DroneOS.shared.utils.logger import setup_logger
 from DroneOS.shared.communication.serializers import JsonSerializer
 from DroneOS.shared.communication.network_node import UdpNetworkAdapter
@@ -78,7 +75,6 @@ class DroneOSApp:
         from DroneOS.core.error_learning import ErrorLearningSystem
         self.error_learning = ErrorLearningSystem()
         
-        self.relay = UdpWebsocketRelay()
         self.serializer = JsonSerializer()
         self.network = UdpNetworkAdapter(
             self.node_id, 
@@ -461,7 +457,6 @@ class DroneOSApp:
         
         # Start publisher loops
         self.telemetry_publisher.start()
-        self._dispatch_task(self.relay.start())
         
         logger.info("DroneOS is running. Press Ctrl+C to stop.")
         

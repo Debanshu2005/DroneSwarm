@@ -43,7 +43,6 @@ class FlightConfig(BaseModel):
     collision_avoidance: Optional[CollisionAvoidanceConfig] = None
     safety_limits: Optional[SafetyLimitsConfig] = None
     smart_rtl: Optional[SmartRtlConfig] = None
-    pipeline_hz: float = 20.0
 
 class SafetyConfig(BaseModel):
     low_battery_threshold: float = 20.0

@@ -151,22 +151,16 @@ class UdpNetworkAdapter(INetworkAdapter):
                 logger.debug(f"Packet sent (Configured Unicast) to {addr[0]}:{addr[1]}")
                 return
 
-            # 1. Deterministic Local Relay Delivery
-            if self.configured_peer_port:
-                local_relay = ("127.0.0.1", self.configured_peer_port)
-                self.transport.sendto(data, local_relay)
-                logger.debug(f"Packet sent (Local Relay Unicast) to {local_relay[0]}:{local_relay[1]}")
-
-            # 2. Discovery broadcast for swarm peers on this adapter's own port
+            # 1. Discovery broadcast on this adapter's own port
             discovery_addr = (self.broadcast_address, self.port)
             self.transport.sendto(data, discovery_addr)
             logger.debug(f"Packet sent (Discovery Broadcast) to {discovery_addr[0]}:{discovery_addr[1]}")
 
-            # 3. LAN broadcast for external relays (preserves backward compatibility)
+            # 2. Existing relay-forwarding broadcast
             if self.configured_peer_port:
                 relay_addr = (self.broadcast_address, self.configured_peer_port)
                 self.transport.sendto(data, relay_addr)
-                logger.debug(f"Packet sent (Relay Broadcast) to {relay_addr[0]}:{relay_addr[1]}")
+                logger.debug(f"Packet sent (Relay Forward) to {relay_addr[0]}:{relay_addr[1]}")
                 
         except OSError as e:
             logger.exception(f"Failed to transmit message: {e}")

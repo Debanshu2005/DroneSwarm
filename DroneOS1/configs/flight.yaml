@@ -1,7 +1,7 @@
 adapter_type: "px4"
 takeoff_altitude: 10.0
 max_velocity: 5.0
-px4_connection_string: "serial:///dev/serial0:57600"
+px4_connection_string: "serial:///dev/serial0:115200"
 airsim_host: "127.0.0.1"
 airsim_port: 41451
 airsim_timeout: 5.0
@@ -21,4 +21,3 @@ smart_rtl:
   arrival_radius_m: 2.0
   timeout_s: 60.0
 
-pipeline_hz: 5.0

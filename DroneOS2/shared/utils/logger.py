@@ -8,7 +8,6 @@ def setup_logger(name: str, log_file: str = None, level: int = logging.INFO) -> 
     """
     logger = logging.getLogger(name)
     logger.setLevel(level)
-    logger.propagate = False
 
     # Prevent duplicate logs if setup_logger is called multiple times
     if logger.hasHandlers():

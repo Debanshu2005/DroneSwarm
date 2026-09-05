@@ -41,7 +41,7 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
         return f"serial://{device}:{baud}"
     return conn_str
 
-def wait_for_port(port: int, timeout: float = 30.0) -> bool:
+def wait_for_port(port: int, timeout: float = 10.0) -> bool:
     start = time.time()
     while time.time() - start < timeout:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -50,11 +50,10 @@ def wait_for_port(port: int, timeout: float = 30.0) -> bool:
         time.sleep(0.1)
     return False
 
-
 def get_mavsdk_server_path():
     import mavsdk
-    import os
-    return os.path.join(os.path.dirname(mavsdk.__file__), "bin", "mavsdk_server")
+    from mavsdk.bin import get_mavsdk_server_filepath
+    return get_mavsdk_server_filepath()
 
 def main():
     config_dir = Path(__file__).resolve().parent / "DroneOS1" / "configs"
@@ -75,12 +74,13 @@ def main():
                 if cmdline and any(str(server_port) in arg for arg in cmdline):
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
                     proc.kill()
+            elif cmdline and 'relay.py' in ' '.join(cmdline) and 'DroneOS1' in ' '.join(cmdline):
+                print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
+                proc.kill()
         except Exception:
             pass
             
     time.sleep(1.0)
-    
-
     
     # 2. Spawn MAVSDK Server manually
     mavsdk_bin = get_mavsdk_server_path()
@@ -88,8 +88,8 @@ def main():
     
     mavsdk_proc = subprocess.Popen(
         [mavsdk_bin, "-p", str(server_port), resolved_conn],
-        stdout=sys.stdout,
-        stderr=sys.stderr
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
     )
     
     if not wait_for_port(server_port):
@@ -97,9 +97,17 @@ def main():
         mavsdk_proc.kill()
         sys.exit(1)
         
-    print(f"[{drone_cfg.drone_id}] MAVSDK server ready.")
+    print(f"[{drone_cfg.drone_id}] MAVSDK server ready. Starting Relay...")
     
-    # 4. Monkey-patch mavsdk.System
+    # 3. Spawn Relay manually
+    relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
+    relay_proc = subprocess.Popen(
+        [sys.executable, str(relay_script)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+    
+    # 4. Monkey-patch mavsdk.System so DroneOS1 connects cleanly
     import mavsdk
     old_init = mavsdk.System.__init__
     def patched_init(self, *args, **kwargs):
@@ -107,11 +115,6 @@ def main():
         kwargs['port'] = server_port
         old_init(self, *args, **kwargs)
     mavsdk.System.__init__ = patched_init
-
-    # Patch connect to do nothing to the server, but still init the gRPC plugins!
-    async def patched_connect(self, *args, **kwargs):
-        await self._init_plugins(self._mavsdk_server_address, self._port)
-    mavsdk.System.connect = patched_connect
     
     # 5. Run the DroneOS1 application
     from DroneOS1.main import DroneOSApp
@@ -120,20 +123,18 @@ def main():
     sys.argv = [sys.argv[0], str(config_dir)]
     
     app = DroneOSApp()
-    
-    try:
-        import uvloop
-        uvloop.install()
-    except ImportError:
-        import logging
-        logging.warning("uvloop not available, using default asyncio event loop")
-        
     try:
         asyncio.run(app.run())
     except KeyboardInterrupt:
         pass
     finally:
-
+        print(f"[{drone_cfg.drone_id}] Terminating managed Relay (PID {relay_proc.pid})...")
+        relay_proc.terminate()
+        try:
+            relay_proc.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+            relay_proc.kill()
+            
         print(f"[{drone_cfg.drone_id}] Terminating managed MAVSDK server (PID {mavsdk_proc.pid})...")
         mavsdk_proc.terminate()
         try:
