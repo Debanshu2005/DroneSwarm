@@ -25,6 +25,10 @@ class UdpWebsocketRelay:
         self.active_websockets = set()
         self.known_endpoints = {} # Target ID to address tuple
         
+        # Deduplication cache to prevent forwarding the same logical message twice
+        # from different UDP endpoints (e.g. localhost vs LAN broadcast)
+        self.seen_messages = {} # (sender_id, msg_type, timestamp) -> time_received
+        
         # We need a reference to the loop
         self.loop = None
         self.transport = None
@@ -115,6 +119,23 @@ class UdpWebsocketRelay:
             if not self._verify_message_dict(msg_dict, addr):
                 return
             sender_id = msg_dict.get('sender_id')
+            msg_type = msg_dict.get('msg_type')
+            timestamp = msg_dict.get('timestamp')
+            
+            # Deduplicate incoming packets
+            if sender_id and msg_type and timestamp:
+                import time
+                now = time.time()
+                msg_key = (sender_id, msg_type, timestamp)
+                if msg_key in self.seen_messages:
+                    # Drop duplicate
+                    return
+                self.seen_messages[msg_key] = now
+                
+                # Cleanup cache periodically
+                if len(self.seen_messages) > 1000:
+                    cutoff = now - 5.0
+                    self.seen_messages = {k: v for k, v in self.seen_messages.items() if v > cutoff}
             
             # Prevent WS loopback of our own ground station commands
             if sender_id and sender_id.startswith('gs'):
