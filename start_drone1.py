@@ -87,7 +87,7 @@ def main():
     print(f"[{drone_cfg.drone_id}] Starting {mavsdk_bin} on port {server_port}")
     
     mavsdk_proc = subprocess.Popen(
-        [mavsdk_bin, "-p", str(server_port), resolved_conn],
+        [mavsdk_bin, "-p", str(server_port)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
