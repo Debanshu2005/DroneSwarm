@@ -1,0 +1,27 @@
+[Unit]
+Description=PhoneOS Drone Unified Service (DroneOS2)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=csi
+WorkingDirectory=/home/csi/DroneSwarm
+Environment="PYTHONPATH=/home/csi/DroneSwarm"
+
+# Resource constraints for Pi 3B (1GB RAM)
+CPUQuota=80%
+MemoryMax=750M
+MemoryHigh=600M
+IOWeight=50
+OOMScoreAdjust=500
+Nice=5
+
+ExecStart=/home/csi/DroneSwarm/venv/bin/python start_drone.py
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

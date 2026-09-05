@@ -37,20 +37,7 @@ class PX4FlightController(IFlightController):
 
         import glob
         import os
-        import signal
-        import psutil
         import re
-        
-        def kill_orphaned_mavsdk(target_conn: str):
-            try:
-                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                    if proc.info['name'] and 'mavsdk_server' in proc.info['name']:
-                        cmdline = proc.info.get('cmdline', [])
-                        if cmdline and any(target_conn in arg for arg in cmdline):
-                            logger.info(f"Killing orphaned mavsdk_server (PID {proc.info['pid']}) for {target_conn}")
-                            proc.kill()
-            except Exception as e:
-                logger.warning(f"Failed to kill orphaned MAVSDK server: {e}")
 
         conn_str = self.config.px4_connection_string
 
@@ -77,33 +64,43 @@ class PX4FlightController(IFlightController):
             if device:
                 conn_str = f"serial://{device}:{baud}"
             else:
-                logger.info("PX4 DEVICE NOT FOUND")
+                logger.error("PX4_NOT_CONNECTED: Auto serial device not found")
                 return False
         
-        # kill_orphaned_mavsdk(conn_str)
-        # Recreate System to ensure it spawns a fresh mavsdk_server if it previously failed
+        logger.info(f"PX4 CONNECTING to {conn_str} (Delegating lifecycle to MAVSDK-Python)")
         self.client = System()
 
-        logger.info(f"PX4 CONNECTING to {conn_str}")
         try:
-            # Wrap connect in a timeout to prevent hanging forever
-            await asyncio.wait_for(self.client.connect(system_address=conn_str), timeout=10.0)
-            
+            # Connect automatically spawns the C++ mavsdk_server if system_address is provided.
+            # Timeout increased to 30s to allow Pi 3B time to discover the serial connection.
+            await asyncio.wait_for(self.client.connect(system_address=conn_str), timeout=30.0)
+        except asyncio.TimeoutError:
+            logger.error("SERVER_START_FAILED: Timed out waiting for MAVSDK server to start or bind.")
+            return False
+        except Exception as e:
+            logger.error(f"SERVER_START_FAILED: MAVSDK Server failed to initialize ({type(e).__name__}: {e})")
+            return False
+
+        logger.info("MAVSDK Server ready. Awaiting PX4 MAVLink heartbeat...")
+        try:
             async def wait_for_connection():
                 async for state in self.client.core.connection_state():
                     if state.is_connected:
                         return True
                 return False
             
-            # Wrap connection state in a timeout as well
-            is_connected = await asyncio.wait_for(wait_for_connection(), timeout=15.0)
+            is_connected = await asyncio.wait_for(wait_for_connection(), timeout=30.0)
             if is_connected:
-                logger.info("PX4 CONNECTED")
+                logger.info("PX4 CONNECTED: Autopilot discovered successfully.")
                 self._connected = True
             else:
+                logger.error("PX4_NOT_CONNECTED: Connection state ended without success.")
                 return False
-        except (asyncio.TimeoutError, Exception) as e:
-            logger.warning(f"Connection attempt failed ({type(e).__name__}).")
+        except asyncio.TimeoutError:
+            logger.error("PX4_NOT_CONNECTED: Timed out waiting for Pixhawk MAVLink heartbeat.")
+            return False
+        except Exception as e:
+            logger.error(f"PX4_NOT_CONNECTED: Connection stream failed ({type(e).__name__}: {e})")
             return False
         
         # Request required MAVLink telemetry streams safely
