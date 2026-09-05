@@ -17,6 +17,7 @@ def mock_deps():
     fc.hover = AsyncMock()
     
     config = MagicMock()
+    config.pipeline_hz = 5.0
     
     decision_engine = MagicMock()
     # Mock evaluate_tick to simulate a fast non-blocking operation
@@ -31,22 +32,22 @@ async def test_pipeline_timing_non_blocking(mock_deps):
     # We want to prove that the pipeline ticks at approximately 20 Hz
     pipeline = FlightPipeline(state_store, fc, config, decision_engine)
     
-    # Let's run it for a short duration (0.25 seconds = 5 ticks)
+    # Let's run it for a duration that yields ~5 ticks based on actual configured hz
+    duration = 5.0 / config.pipeline_hz
     task = asyncio.create_task(pipeline.run_pipeline_loop())
     
     start = time.monotonic()
-    await asyncio.sleep(0.25)
+    await asyncio.sleep(duration)
     pipeline.stop()
     await task
     end = time.monotonic()
     
-    duration = end - start
-    
     # Check that fc.get_telemetry and decision_engine.evaluate_tick were called multiple times
     call_count = fc.get_telemetry.call_count
     
-    # At 20 Hz, 0.25 seconds should yield approximately 5 ticks.
+    # At pipeline_hz, duration should yield approximately 5 ticks.
     # We check for a reasonable bounds to account for async overhead
-    assert 4 <= call_count <= 6, f"Pipeline blocked or ran too fast! Ticks: {call_count}"
+    expected_ticks = int(duration * config.pipeline_hz)
+    assert expected_ticks - 1 <= call_count <= expected_ticks + 1, f"Pipeline blocked or ran too fast! Ticks: {call_count}"
     assert decision_engine.evaluate_tick.call_count == call_count, "Decision engine not evaluated every tick!"
 

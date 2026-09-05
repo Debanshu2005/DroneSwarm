@@ -211,9 +211,15 @@ class UdpWebsocketRelay:
         logger.info(f"Relay listening for UDP on {self.udp_bind_host}:{self.udp_bind_port}")
 
         # Setup WebSocket Server
-        async with websockets.serve(self.ws_handler, self.ws_host, self.ws_port):
-            logger.info(f"Relay WebSocket server listening on ws://{self.ws_host}:{self.ws_port}")
-            await asyncio.Future()  # run forever
+        try:
+            async with websockets.serve(self.ws_handler, self.ws_host, self.ws_port):
+                logger.info(f"Relay WebSocket server listening on ws://{self.ws_host}:{self.ws_port}")
+                await asyncio.Future()  # run forever
+        except asyncio.CancelledError:
+            logger.info("Relay start() cancelled, shutting down UDP socket and WebSocket server.")
+            if self.transport:
+                self.transport.close()
+            raise
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PhoneOS WebSocket-to-UDP Relay")

@@ -21,3 +21,4 @@ smart_rtl:
   arrival_radius_m: 2.0
   timeout_s: 60.0
 
+pipeline_hz: 20.0

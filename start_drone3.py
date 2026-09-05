@@ -69,23 +69,10 @@ def main():
                 if cmdline and any(str(server_port) in arg for arg in cmdline):
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
                     proc.kill()
-            elif cmdline and 'relay.py' in ' '.join(cmdline) and 'DroneOS2' in ' '.join(cmdline):
-                print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
-                proc.kill()
         except Exception:
             pass
             
     time.sleep(1.0)
-    
-    print(f"[{drone_cfg.drone_id}] Starting Relay...")
-    
-    # 3. Spawn Relay manually
-    relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
-    relay_proc = subprocess.Popen(
-        [sys.executable, str(relay_script)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
     
 
     
@@ -96,18 +83,19 @@ def main():
     sys.argv = [sys.argv[0], str(config_dir)]
     
     app = DroneOSApp()
+    
+    try:
+        import uvloop
+        uvloop.install()
+    except ImportError:
+        import logging
+        logging.warning("uvloop not available, using default asyncio event loop")
+        
     try:
         asyncio.run(app.run())
     except KeyboardInterrupt:
         pass
     finally:
-        print(f"[{drone_cfg.drone_id}] Terminating managed Relay (PID {relay_proc.pid})...")
-        relay_proc.terminate()
-        try:
-            relay_proc.wait(timeout=5.0)
-        except subprocess.TimeoutExpired:
-            relay_proc.kill()
-            
         print(f"[{drone_cfg.drone_id}] Lifecycle Manager exit.")
 
 if __name__ == "__main__":
