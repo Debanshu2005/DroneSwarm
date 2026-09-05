@@ -5,9 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi2
-WorkingDirectory=/home/pi2/Projects/PhoneOS
-Environment="PYTHONPATH=/home/pi2/Projects/PhoneOS"
+User=csi
+WorkingDirectory=/home/csi/DroneSwarm
+Environment="PYTHONPATH=/home/csi/DroneSwarm"
 
 # Resource constraints to prevent SSH lockout
 CPUQuota=70%
@@ -16,7 +16,7 @@ MemoryHigh=1200M
 IOWeight=50
 OOMScoreAdjust=500
 Nice=5
-ExecStart=/home/pi2/Projects/PhoneOS/venv/bin/python start_drone2.py
+ExecStart=/home/csi/DroneSwarm/venv/bin/python start_drone2.py
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal
