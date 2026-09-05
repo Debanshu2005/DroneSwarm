@@ -88,8 +88,8 @@ def main():
     
     mavsdk_proc = subprocess.Popen(
         [mavsdk_bin, "-p", str(server_port), resolved_conn],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stdout=sys.stdout,
+        stderr=sys.stderr
     )
     
     if not wait_for_port(server_port):
@@ -107,6 +107,11 @@ def main():
         kwargs['port'] = server_port
         old_init(self, *args, **kwargs)
     mavsdk.System.__init__ = patched_init
+
+    # Patch connect to do nothing, since the server is already connected via CLI args
+    async def patched_connect(self, *args, **kwargs):
+        pass
+    mavsdk.System.connect = patched_connect
     
     # 5. Run the DroneOS2 application
     from DroneOS2.main import DroneOSApp
