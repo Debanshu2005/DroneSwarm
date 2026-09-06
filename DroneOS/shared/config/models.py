@@ -35,6 +35,7 @@ class FlightConfig(BaseModel):
     adapter_type: str
     takeoff_altitude: float
     max_velocity: float
+    pipeline_hz: float = 20.0
     px4_connection_string: str
     airsim_host: str
     airsim_port: int

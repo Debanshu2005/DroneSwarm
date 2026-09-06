@@ -6,7 +6,20 @@ from unittest.mock import AsyncMock, MagicMock
 from DroneOS1.core.flight_pipeline import FlightPipeline
 from DroneOS1.core.flight_state import FlightStateStore
 from DroneOS1.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS1.shared.config.models import FlightConfig
 from DroneOS1.shared.protocol.messages import TelemetryData
+
+def make_flight_config(**overrides):
+    data = {
+        "adapter_type": "px4",
+        "takeoff_altitude": 10.0,
+        "max_velocity": 5.0,
+        "px4_connection_string": "udp://:14540",
+        "airsim_host": "127.0.0.1",
+        "airsim_port": 41451,
+    }
+    data.update(overrides)
+    return FlightConfig.model_validate(data)
 
 @pytest.fixture
 def mock_deps():
@@ -16,13 +29,30 @@ def mock_deps():
     fc.get_telemetry = AsyncMock(return_value=TelemetryData(flight_mode="GUIDED", gps_valid=True))
     fc.hover = AsyncMock()
     
-    config = MagicMock()
+    config = make_flight_config()
     
     decision_engine = MagicMock()
     # Mock evaluate_tick to simulate a fast non-blocking operation
     decision_engine.evaluate_tick = AsyncMock()
     
     return state_store, fc, config, decision_engine
+
+def test_pipeline_uses_default_pipeline_hz_when_config_omits_override(mock_deps):
+    state_store, fc, _, decision_engine = mock_deps
+    config = make_flight_config()
+
+    pipeline = FlightPipeline(state_store, fc, config, decision_engine)
+
+    assert config.pipeline_hz == 20.0
+    assert pipeline._hz == 20.0
+
+def test_pipeline_uses_configured_pipeline_hz(mock_deps):
+    state_store, fc, _, decision_engine = mock_deps
+    config = make_flight_config(pipeline_hz=12.5)
+
+    pipeline = FlightPipeline(state_store, fc, config, decision_engine)
+
+    assert pipeline._hz == 12.5
 
 @pytest.mark.asyncio
 async def test_pipeline_timing_non_blocking(mock_deps):

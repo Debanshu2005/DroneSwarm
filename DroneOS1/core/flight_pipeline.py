@@ -126,7 +126,7 @@ class FlightPipeline:
         self.command_writer = CommandWriter(fc)
         self.srtl_engine = SmartRtlEngine(config)
         self._running = False
-        self._hz = 20.0
+        self._hz = config.pipeline_hz
 
     async def run_pipeline_loop(self):
         self._running = True

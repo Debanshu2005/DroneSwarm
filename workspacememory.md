@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-09-04T10:45:40.427Z
+Generated: 2026-09-06T05:28:52.739Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -18,14 +18,14 @@ Structured manifest: workspace.json
 - Graphify graph: not available yet
 - Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: DroneOS2/core/decision_engine.py
+- Active file in focus: start_drone1.py
 - Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
-- Suggested starting points: DroneOS2/core/decision_engine.py, DroneOS/tests/test_terminal_controller.py, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md
+- Suggested starting points: start_drone1.py, DroneOS/tests/test_terminal_controller.py, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md
 ## Current Workspace
-- Active file: DroneOS2/core/decision_engine.py
-- Tracked files in snapshot: 2187
-- Top-level areas: venv (1780), mobile (139), DroneOS (71), DroneOS1 (71), DroneOS2 (71), [root] (22), deploy (19), tests (6)
-- Primary file types: .py (1676), [no extension] (198), .txt (53), .typed (29), .png (26), .jsx (24), .js (20), .yaml (15)
+- Active file: start_drone1.py
+- Tracked files in snapshot: 2193
+- Top-level areas: venv (1780), mobile (139), DroneOS (72), DroneOS2 (72), DroneOS1 (71), [root] (25), deploy (20), tests (6)
+- Primary file types: .py (1681), [no extension] (198), .txt (53), .typed (29), .png (26), .jsx (24), .js (20), .yaml (15)
 - Key files: .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md, mobile/.gitignore, mobile/README.md, mobile/android/.gitignore, mobile/android/app/.gitignore
 ## Package Snapshot
 - Package metadata unavailable: package.json was not found.
@@ -51,7 +51,7 @@ Structured manifest: workspace.json
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-09-04 df1371c feat: implement drone flight control pipeline, decision engines, and associated test suites for dual-architecture swarm deployment
+- HEAD: 2026-09-05 50e3296 reverted
 - Working tree summary: clean
 - Working tree: clean
 
@@ -61,8 +61,8 @@ Visibility: public | Default branch: main
 Stars: 0 | Forks: 0 | Open issues: 0
 
 Latest commit on main:
-- df1371c by Debanshu2005 on 2026-09-04
-  feat: implement drone flight control pipeline, decision engines, and associated test suites for dual-architecture swarm deployment
+- 50e3296 by Debanshu2005 on 2026-09-05
+  reverted
 
 URL: https://github.com/Debanshu2005/DroneSwarm
 
