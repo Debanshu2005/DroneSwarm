@@ -56,10 +56,7 @@ export default function SettingsView() {
                </div>
                <button className="primary-btn" onClick={() => {
                   if (!newIp || !newPort || !wsManager) return;
-                  const url = wsManager.normalizeConnectionUrl(newIp, parseInt(newPort));
-                  if (!url) return;
-                  setWsUrl(url);
-                  wsManager.addConnection(url);
+                  wsManager.addConnection(newIp, parseInt(newPort));
                }}>+ ADD DRONE</button>
             </div>
 
