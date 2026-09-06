@@ -1,7 +1,7 @@
 import json
 from pydantic import ValidationError
 
-from DroneOS.shared.protocol.messages import (
+from DroneOS1.shared.protocol.messages import (
     BaseMessage, MessageType, HeartbeatMessage, TelemetryMessage,
     ControlMessage, StatusMessage, ErrorMessage, EmergencyMessage,
     MissionMessage, MissionProgressMessage, MissionStatusMessage,
@@ -14,7 +14,7 @@ from DroneOS.shared.protocol.messages import (
     PeerStateMessage, DroneIdentityMessage, SwarmHeartbeatMessage,
     TaskBidMessage, TerminalCommandMessage
 )
-from DroneOS.shared.communication.interfaces import IMessageSerializer
+from DroneOS1.shared.communication.interfaces import IMessageSerializer
 
 class JsonSerializer(IMessageSerializer):
     def __init__(self):
