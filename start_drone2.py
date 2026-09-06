@@ -78,7 +78,7 @@ def main():
                 if cmdline and any(str(server_port) in arg for arg in cmdline):
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
                     proc.kill()
-            elif cmdline and 'relay.py' in ' '.join(cmdline) and 'DroneOS1' in ' '.join(cmdline):
+            elif cmdline and 'relay.py' in ' '.join(cmdline) and '8080' in ' '.join(cmdline):
                 print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
                 proc.kill()
         except Exception:

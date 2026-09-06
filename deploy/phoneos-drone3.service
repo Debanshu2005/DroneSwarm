@@ -1,5 +1,4 @@
 [Unit]
-[Unit]
 Description=PhoneOS Drone3 Unified Service
 After=network-online.target
 Wants=network-online.target
