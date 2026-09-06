@@ -40,7 +40,10 @@ def main():
     print(f"[{drone_cfg.drone_id}] Starting Relay...")
     relay_script = project_root / "relay" / "relay.py"
     relay_proc = subprocess.Popen(
-        [sys.executable, str(relay_script)],
+        [sys.executable, str(relay_script),
+         "--ws-port", "8082",
+         "--udp-bind-port", "14553",
+         "--udp-target-port", "14552"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
