@@ -51,9 +51,13 @@ def wait_for_port(port: int, timeout: float = 10.0) -> bool:
     return False
 
 def get_mavsdk_server_path():
-    import mavsdk
-    from mavsdk.bin import get_mavsdk_server_filepath
-    return get_mavsdk_server_filepath()
+    import os
+    import sys
+    from importlib.resources import files
+    import mavsdk.bin
+
+    exec_name = "mavsdk_server.exe" if sys.platform.startswith("win") else "mavsdk_server"
+    return os.fspath(files(mavsdk.bin).joinpath(exec_name))
 
 def main():
     config_dir = Path(__file__).resolve().parent / "DroneOS1" / "configs"
