@@ -3,7 +3,7 @@ import { useDroneContext } from '../context/DroneContext';
 import { Settings, RefreshCw, Network, Trash, Play, Activity } from 'lucide-react';
 
 export default function SettingsView() {
-  const { testMode, setTestMode, indoorMode, setIndoorMode, relayAuthToken, setRelayAuthToken, isConnected, connectionError, wsManager, drones } = useDroneContext();
+  const { testMode, setTestMode, indoorMode, setIndoorMode, relayAuthToken, setRelayAuthToken, isConnected, connectionError, wsManager, setWsUrl, drones } = useDroneContext();
   const [newId, setNewId] = useState("drone1");
   const [newIp, setNewIp] = useState("192.168.1.100");
   const [newPort, setNewPort] = useState("8080");
@@ -54,7 +54,13 @@ export default function SettingsView() {
                   <input type="text" placeholder="IP ADDRESS" value={newIp} onChange={e => setNewIp(e.target.value)} style={{flex: 2, padding: '10px', borderRadius: '6px', border: '1px solid var(--border)'}} />
                   <input type="text" placeholder="PORT" value={newPort} onChange={e => setNewPort(e.target.value)} style={{flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid var(--border)'}} />
                </div>
-               <button className="primary-btn" onClick={() => { if(newIp && newPort && wsManager) wsManager.addConnection(newIp, parseInt(newPort)); }}>+ ADD DRONE</button>
+               <button className="primary-btn" onClick={() => {
+                  if (!newIp || !newPort || !wsManager) return;
+                  const url = wsManager.normalizeConnectionUrl(newIp, parseInt(newPort));
+                  if (!url) return;
+                  setWsUrl(url);
+                  wsManager.addConnection(url);
+               }}>+ ADD DRONE</button>
             </div>
 
             <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>

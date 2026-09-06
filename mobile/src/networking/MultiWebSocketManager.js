@@ -16,8 +16,29 @@ export class MultiWebSocketManager {
         });
     }
 
+    normalizeConnectionUrl(ipOrUrl, port = 8080) {
+        const raw = String(ipOrUrl || "").trim();
+        if (!raw) return null;
+
+        const withScheme = raw.includes("://") ? raw : `ws://${raw}`;
+        try {
+            const parsed = new URL(withScheme);
+            parsed.protocol = parsed.protocol === "wss:" ? "wss:" : "ws:";
+            if (!parsed.port) parsed.port = String(port || 8080);
+            parsed.pathname = "";
+            parsed.search = "";
+            parsed.hash = "";
+            return parsed.toString().replace(/\/$/, "");
+        } catch (e) {
+            const host = raw.replace(/^wss?:\/\//, "").split("/")[0].split(":")[0];
+            if (!host) return null;
+            return `ws://${host}:${port || 8080}`;
+        }
+    }
+
     addConnection(ip, port = 8080) {
-        const url = `ws://${ip}:${port}`;
+        const url = this.normalizeConnectionUrl(ip, port);
+        if (!url) return;
         if (this.connections[url]) return; // Already exists
 
         const wsManager = new WebSocketManager(url, this.authToken);
@@ -80,8 +101,7 @@ export class MultiWebSocketManager {
             const saved = JSON.parse(raw);
             if (Array.isArray(saved)) {
                 saved.forEach(url => {
-                    const [ip, portStr] = url.replace('ws://', '').split(':');
-                    this.addConnection(ip, portStr ? parseInt(portStr) : 8080);
+                    this.addConnection(url);
                 });
             }
         } catch (e) {
