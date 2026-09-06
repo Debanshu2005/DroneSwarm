@@ -2,14 +2,13 @@ adapter_type: "px4"
 takeoff_altitude: 10.0
 max_velocity: 5.0
 pipeline_hz: 10.0
-px4_connection_string: "serial:///dev/serial0:57600"
+px4_connection_string: "serial:///dev/serial0:115200"
 px4_connection_candidates:
   - "serial:///dev/serial0:57600"
   - "serial:///dev/serial0:115200"
   - "serial:///dev/serial0:921600"
 airsim_host: "127.0.0.1"
 airsim_port: 41451
-airsim_timeout: 5.0
 airsim_retry_count: 3
 collision_avoidance:
   enabled: true
