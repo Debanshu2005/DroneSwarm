@@ -61,8 +61,10 @@ export default function DashboardView() {
   const armedDrones = Object.values(drones).filter(d => d.telemetry?.armed_state === 'ARMED').length;
   const warningDrones = Object.values(drones).filter(d => d.status === 'DEGRADED' || d.healthScore === 'WARNING' || d.healthScore === 'CRITICAL').length;
 
-  // For the dashboard, we look at the first selected drone, or the first available drone
-  const activeDroneId = selectedDrones.size > 0 ? Array.from(selectedDrones)[0] : Object.keys(drones)[0];
+  // For the dashboard, we look at the first selected drone, or the first available connected drone
+  const activeDroneId = selectedDrones.size > 0 
+    ? Array.from(selectedDrones)[0] 
+    : (Object.keys(drones).find(id => drones[id]?.status === 'CONNECTED' || drones[id]?.status === 'DEGRADED') || Object.keys(drones)[0]);
   const drone = drones[activeDroneId];
   const tel = drone?.telemetry || {};
   const safety = validateDroneSafety(drone);
