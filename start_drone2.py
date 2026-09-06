@@ -91,9 +91,7 @@ def main():
     print(f"[{drone_cfg.drone_id}] Starting {mavsdk_bin} on port {server_port}")
     
     mavsdk_proc = subprocess.Popen(
-        [mavsdk_bin, "-p", str(server_port), resolved_conn],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        [mavsdk_bin, "-p", str(server_port), resolved_conn]
     )
     
     if not wait_for_port(server_port):
@@ -106,9 +104,7 @@ def main():
     # 3. Spawn Relay manually
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
     relay_proc = subprocess.Popen(
-        [sys.executable, str(relay_script)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        [sys.executable, str(relay_script)]
     )
     
     # 4. Monkey-patch mavsdk.System so DroneOS1 connects cleanly
