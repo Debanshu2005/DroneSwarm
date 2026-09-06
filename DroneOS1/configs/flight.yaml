@@ -2,7 +2,7 @@ adapter_type: "px4"
 takeoff_altitude: 10.0
 max_velocity: 5.0
 pipeline_hz: 10.0
-px4_connection_string: "serial:///dev/serial0:57600"
+px4_connection_string: "serial:///dev/serial0:115200"
 px4_connection_candidates:
   - "serial:///dev/serial0:57600"
   - "serial:///dev/serial0:115200"
