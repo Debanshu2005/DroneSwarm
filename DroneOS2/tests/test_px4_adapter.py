@@ -3,7 +3,8 @@ import asyncio
 from unittest.mock import MagicMock, patch
 
 from DroneOS2.adapters.px4_adapter import PX4FlightController
-from DroneOS.shared.config.models import FlightConfig
+from DroneOS2.shared.config.models import FlightConfig
+from DroneOS2.shared.protocol.messages import TelemetryData
 
 @pytest.fixture
 def base_config():
@@ -31,6 +32,8 @@ async def test_explicit_serial_configuration(base_config, monkeypatch):
     
     # Also mock wait_for to prevent actual sleeping
     async def mock_wait_for(coro, timeout):
+        if asyncio.iscoroutine(coro):
+            coro.close()
         return True
     monkeypatch.setattr(asyncio, "wait_for", mock_wait_for)
     
@@ -57,6 +60,8 @@ async def test_auto_serial_fallback_preserved(base_config, monkeypatch):
     mock_system = MagicMock()
     
     async def mock_wait_for(coro, timeout):
+        if asyncio.iscoroutine(coro):
+            coro.close()
         return True
     monkeypatch.setattr(asyncio, "wait_for", mock_wait_for)
     
@@ -70,3 +75,33 @@ async def test_auto_serial_fallback_preserved(base_config, monkeypatch):
         mock_system.connect.assert_called_once_with(system_address="serial:///dev/ttyUSB0:115200")
         
         await fc.disconnect()
+
+@pytest.mark.asyncio
+async def test_arm_rejection_includes_prearm_context(base_config):
+    class FakeActionError(Exception):
+        pass
+
+    fc = PX4FlightController("drone3", base_config)
+    fc._connected = True
+    fc._telemetry = TelemetryData(
+        flight_mode="HOLD",
+        status_text="PreArm: GPS fix required",
+        is_armable=False,
+        gps_valid=False,
+        local_pos_valid=True,
+        global_pos_valid=False,
+        home_valid=False,
+        battery_level=92.0,
+        armed_state="DISARMED",
+    )
+    fc.client = MagicMock()
+    fc.client.action.arm.side_effect = FakeActionError("FAILED")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await fc.arm()
+
+    message = str(exc_info.value)
+    assert "Pixhawk rejected ARM request" in message
+    assert "PreArm: GPS fix required" in message
+    assert "is_armable=False" in message
+    assert "gps_valid=False" in message

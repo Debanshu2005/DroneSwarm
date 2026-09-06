@@ -1,9 +1,9 @@
 import asyncio
 from typing import Optional, Tuple
-from DroneOS.core.interfaces import IFlightController
-from DroneOS.shared.config.models import FlightConfig
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.shared.protocol.messages import TelemetryData
+from DroneOS2.core.interfaces import IFlightController
+from DroneOS2.shared.config.models import FlightConfig
+from DroneOS2.shared.utils.logger import setup_logger
+from DroneOS2.shared.protocol.messages import TelemetryData
 
 logger = setup_logger("PX4Adapter")
 
@@ -182,8 +182,31 @@ class PX4FlightController(IFlightController):
                 logger.warning("MAVSDK timed out on ARM, assuming success (ArduPilot compatibility)")
                 return True
             if "ActionError" in str(type(e)):
-                raise RuntimeError(f"Pixhawk rejected ARM request: {e}")
+                raise RuntimeError(f"Pixhawk rejected ARM request: {e}; {self._arm_rejection_context()}")
             raise RuntimeError(f"PX4 Arm failed: {e}")
+
+    def _arm_rejection_context(self) -> str:
+        t = self._telemetry
+        fields = [
+            ("status_text", t.status_text),
+            ("is_armable", t.is_armable),
+            ("health_all_ok", t.health_all_ok),
+            ("gps_valid", t.gps_valid),
+            ("local_pos_valid", t.local_pos_valid),
+            ("global_pos_valid", t.global_pos_valid),
+            ("home_valid", t.home_valid),
+            ("gyro_calibrated", t.gyro_calibrated),
+            ("accel_calibrated", t.accel_calibrated),
+            ("mag_calibrated", t.mag_calibrated),
+            ("battery_level", t.battery_level),
+            ("voltage", t.voltage),
+            ("flight_mode", t.flight_mode),
+            ("armed_state", t.armed_state),
+        ]
+        details = ", ".join(
+            f"{name}={value}" for name, value in fields if value is not None and value != ""
+        )
+        return f"last telemetry: {details}" if details else "no telemetry snapshot available"
 
     async def disarm(self) -> bool:
         if not self._connected: return False

@@ -7,18 +7,20 @@ import argparse
 import hashlib
 import hmac
 import os
+import time
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("PhoneOS_Relay")
 
 class UdpWebsocketRelay:
-    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14551, udp_target_port=14550, udp_broadcast_addr="255.255.255.255"):
+    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14551, udp_target_port=14550, udp_broadcast_addr="255.255.255.255", gs_heartbeat_interval=1.0):
         self.ws_host = ws_host
         self.ws_port = ws_port
         self.udp_bind_host = udp_bind_host
         self.udp_bind_port = udp_bind_port
         self.udp_target_port = udp_target_port
         self.udp_broadcast_addr = udp_broadcast_addr
+        self.gs_heartbeat_interval = gs_heartbeat_interval
         self.auth_token = os.getenv("RELAY_AUTH_TOKEN")
         self.net_secret = os.getenv("DRONE_NET_SECRET")
         
@@ -29,6 +31,7 @@ class UdpWebsocketRelay:
         self.loop = None
         self.transport = None
         self.protocol = None
+        self._heartbeat_task = None
 
     def _signature_payload(self, msg_dict: dict) -> bytes:
         payload = dict(msg_dict)
@@ -191,6 +194,31 @@ class UdpWebsocketRelay:
         except Exception as e:
             logger.error(f"Error forwarding WS to UDP: {e}")
 
+    async def _send_relay_groundstation_heartbeat(self) -> bool:
+        if not self.transport or not self.active_websockets:
+            return False
+
+        msg = {
+            "msg_type": "heartbeat",
+            "sender_id": "gs_relay",
+            "timestamp": time.time(),
+            "target_id": None,
+            "status": "active",
+        }
+        data = json.dumps(self._sign_message_dict(msg)).encode("utf-8")
+        self.transport.sendto(data, (self.udp_broadcast_addr, self.udp_target_port))
+        return True
+
+    async def _relay_groundstation_heartbeat_loop(self):
+        while True:
+            try:
+                await self._send_relay_groundstation_heartbeat()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning(f"Error publishing relay ground-station heartbeat: {e}")
+            await asyncio.sleep(self.gs_heartbeat_interval)
+
     async def start(self):
         self.loop = asyncio.get_running_loop()
         
@@ -209,11 +237,16 @@ class UdpWebsocketRelay:
             sock=sock
         )
         logger.info(f"Relay listening for UDP on {self.udp_bind_host}:{self.udp_bind_port}")
+        self._heartbeat_task = asyncio.create_task(self._relay_groundstation_heartbeat_loop())
 
         # Setup WebSocket Server
-        async with websockets.serve(self.ws_handler, self.ws_host, self.ws_port):
-            logger.info(f"Relay WebSocket server listening on ws://{self.ws_host}:{self.ws_port}")
-            await asyncio.Future()  # run forever
+        try:
+            async with websockets.serve(self.ws_handler, self.ws_host, self.ws_port):
+                logger.info(f"Relay WebSocket server listening on ws://{self.ws_host}:{self.ws_port}")
+                await asyncio.Future()  # run forever
+        finally:
+            if self._heartbeat_task:
+                self._heartbeat_task.cancel()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PhoneOS WebSocket-to-UDP Relay")
@@ -221,9 +254,16 @@ if __name__ == "__main__":
     parser.add_argument("--ws-port", type=int, default=8080, help="WebSocket port to listen on")
     parser.add_argument("--udp-bind-port", type=int, default=14551, help="UDP port to bind for listening")
     parser.add_argument("--udp-target-port", type=int, default=14550, help="UDP port of DroneOS to broadcast to")
+    parser.add_argument("--gs-heartbeat-interval", type=float, default=1.0, help="Seconds between relay ground-station heartbeats while a WebSocket client is connected")
     args = parser.parse_args()
 
-    relay = UdpWebsocketRelay(ws_host=args.ws_host, ws_port=args.ws_port, udp_bind_port=args.udp_bind_port, udp_target_port=args.udp_target_port)
+    relay = UdpWebsocketRelay(
+        ws_host=args.ws_host,
+        ws_port=args.ws_port,
+        udp_bind_port=args.udp_bind_port,
+        udp_target_port=args.udp_target_port,
+        gs_heartbeat_interval=args.gs_heartbeat_interval
+    )
     try:
         asyncio.run(relay.start())
     except KeyboardInterrupt:

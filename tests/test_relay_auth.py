@@ -77,3 +77,34 @@ async def test_relay_drops_unsigned_udp_when_secret_set(monkeypatch):
     await relay.forward_udp_to_ws(data, ("127.0.0.1", 14550))
 
     assert relay.known_endpoints == {}
+
+@pytest.mark.asyncio
+async def test_relay_groundstation_heartbeat_requires_connected_websocket(monkeypatch):
+    relay = UdpWebsocketRelay(udp_broadcast_addr="127.0.0.1")
+    relay.transport = MagicMock()
+
+    assert await relay._send_relay_groundstation_heartbeat() is False
+    relay.transport.sendto.assert_not_called()
+
+    relay.active_websockets.add(AsyncMock())
+    assert await relay._send_relay_groundstation_heartbeat() is True
+
+    data, addr = relay.transport.sendto.call_args.args
+    sent = json.loads(data.decode("utf-8"))
+    assert addr == ("127.0.0.1", 14550)
+    assert sent["msg_type"] == "heartbeat"
+    assert sent["sender_id"] == "gs_relay"
+    assert sent["status"] == "active"
+
+@pytest.mark.asyncio
+async def test_relay_groundstation_heartbeat_is_signed_when_secret_set(monkeypatch):
+    monkeypatch.setenv("DRONE_NET_SECRET", "shared-secret")
+    relay = UdpWebsocketRelay(udp_broadcast_addr="127.0.0.1")
+    relay.transport = MagicMock()
+    relay.active_websockets.add(AsyncMock())
+
+    await relay._send_relay_groundstation_heartbeat()
+
+    sent = json.loads(relay.transport.sendto.call_args.args[0].decode("utf-8"))
+    assert sent["hmac_sig"]
+    assert relay._verify_message_dict(sent, ("127.0.0.1", 14550)) is True
