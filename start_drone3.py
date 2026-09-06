@@ -108,9 +108,7 @@ def main():
         [sys.executable, str(relay_script),
          "--ws-port", "8082",
          "--udp-bind-port", "14553",
-         "--udp-target-port", "14552"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+         "--udp-target-port", "14552"]
     )
 
     # 4. Monkey-patch mavsdk.System so DroneOS2 connects to the already-running
