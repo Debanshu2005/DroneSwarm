@@ -534,8 +534,7 @@ class PX4FlightController(IFlightController):
                 raise
             except Exception as e:
                 logger.error(f"PX4 position subscription failed: {e}")
-                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
-                    pass # Stream dropped, let loop retry
+                self._connected = False
                 await asyncio.sleep(2.0)
 
     async def _subscribe_altitude(self):
@@ -550,8 +549,7 @@ class PX4FlightController(IFlightController):
                 raise
             except Exception as e:
                 logger.error(f"PX4 altitude subscription failed: {e}")
-                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
-                    pass
+                self._connected = False
                 await asyncio.sleep(2.0)
 
     async def _subscribe_velocity(self):
@@ -572,8 +570,7 @@ class PX4FlightController(IFlightController):
                 raise
             except Exception as e:
                 logger.error(f"PX4 velocity_ned subscription failed: {e}")
-                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
-                    pass # Stream dropped, let loop retry
+                self._connected = False
                 await asyncio.sleep(2.0)
 
     async def _subscribe_attitude(self):
@@ -593,8 +590,7 @@ class PX4FlightController(IFlightController):
                 raise
             except Exception as e:
                 logger.error(f"PX4 attitude_euler subscription failed: {e}")
-                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
-                    pass # Stream dropped, let loop retry
+                self._connected = False
                 await asyncio.sleep(2.0)
 
     async def _subscribe_battery(self):
@@ -615,8 +611,7 @@ class PX4FlightController(IFlightController):
                 raise
             except Exception as e:
                 logger.error(f"PX4 battery subscription failed: {e}")
-                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
-                    pass # Stream dropped, let loop retry
+                self._connected = False
                 await asyncio.sleep(2.0)
 
     async def _subscribe_flight_mode(self):
@@ -629,8 +624,7 @@ class PX4FlightController(IFlightController):
                 raise
             except Exception as e:
                 logger.error(f"PX4 flight_mode subscription failed: {e}")
-                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
-                    pass # Stream dropped, let loop retry
+                self._connected = False
                 await asyncio.sleep(2.0)
 
     async def _subscribe_gps_info(self):
@@ -643,8 +637,7 @@ class PX4FlightController(IFlightController):
                 raise
             except Exception as e:
                 logger.error(f"PX4 gps_info subscription failed: {e}")
-                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
-                    pass # Stream dropped, let loop retry
+                self._connected = False
                 await asyncio.sleep(2.0)
 
     async def _subscribe_armed(self):
@@ -657,8 +650,7 @@ class PX4FlightController(IFlightController):
                 raise
             except Exception as e:
                 logger.error(f"PX4 armed subscription failed: {e}")
-                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
-                    pass # Stream dropped, let loop retry
+                self._connected = False
                 await asyncio.sleep(2.0)
 
     async def _subscribe_health(self):
@@ -684,8 +676,7 @@ class PX4FlightController(IFlightController):
                 raise
             except Exception as e:
                 logger.error(f"PX4 health subscription failed: {e}")
-                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
-                    pass # Stream dropped, let loop retry
+                self._connected = False
                 await asyncio.sleep(2.0)
 
     async def _subscribe_status_text(self):
@@ -699,8 +690,7 @@ class PX4FlightController(IFlightController):
                 raise
             except Exception as e:
                 logger.error(f"PX4 status_text subscription failed: {e}")
-                if "AioRpcError" in str(type(e)) and ("UNAVAILABLE" in str(e) or "Stream removed" in str(e)):
-                    pass # Stream dropped, let loop retry
+                self._connected = False
                 await asyncio.sleep(2.0)
 
     def _empty_telemetry(self) -> TelemetryData:

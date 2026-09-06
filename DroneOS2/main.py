@@ -249,12 +249,12 @@ class DroneOSApp:
 
     async def _on_message_received(self, msg: BaseMessage) -> None:
         if msg.msg_type == MessageType.HEARTBEAT:
-            # If from GroundStation, record health heartbeat
-            if msg.sender_id.startswith("gs"):
-                self.health_monitor.record_heartbeat()
             # If from another drone, update swarm manager
-            elif msg.sender_id.startswith("drone"):
+            if msg.sender_id.startswith("drone"):
                 self.swarm_manager.heartbeat_mgr.handle_heartbeat(msg)
+            # If from any non-drone sender (GCS, relay, phone app), record health heartbeat
+            else:
+                self.health_monitor.record_heartbeat()
                 
         elif msg.msg_type == MessageType.TELEMETRY:
             if msg.sender_id.startswith("drone"):

@@ -195,7 +195,7 @@ class UdpWebsocketRelay:
             logger.error(f"Error forwarding WS to UDP: {e}")
 
     async def _send_relay_groundstation_heartbeat(self) -> bool:
-        if not self.transport or not self.active_websockets:
+        if not self.transport:
             return False
 
         msg = {
