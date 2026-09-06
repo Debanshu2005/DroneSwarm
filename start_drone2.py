@@ -119,6 +119,10 @@ def main():
         kwargs['port'] = server_port
         old_init(self, *args, **kwargs)
     mavsdk.System.__init__ = patched_init
+
+    # Tell px4_adapter not to kill the pre-spawned mavsdk_server
+    import os
+    os.environ['MAVSDK_SERVER_PORT'] = str(server_port)
     
     # 5. Run the DroneOS1 application
     from DroneOS1.main import DroneOSApp

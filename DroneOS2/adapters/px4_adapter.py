@@ -42,10 +42,14 @@ class PX4FlightController(IFlightController):
         import re
         
         def kill_orphaned_mavsdk(target_conn: str):
+            # If a lifecycle manager pre-spawned a server on a specific port, don't kill it
+            managed_port = os.getenv('MAVSDK_SERVER_PORT')
             try:
                 for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                     if proc.info['name'] and 'mavsdk_server' in proc.info['name']:
                         cmdline = proc.info.get('cmdline', [])
+                        if managed_port and any(managed_port in arg for arg in cmdline):
+                            continue  # skip our own pre-spawned server
                         if cmdline and any(target_conn in arg for arg in cmdline):
                             logger.info(f"Killing orphaned mavsdk_server (PID {proc.info['pid']}) for {target_conn}")
                             proc.kill()

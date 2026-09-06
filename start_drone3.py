@@ -113,7 +113,8 @@ def main():
         stderr=subprocess.DEVNULL
     )
 
-    # 4. Monkey-patch mavsdk.System so DroneOS2 connects to its own MAVSDK server
+    # 4. Monkey-patch mavsdk.System so DroneOS2 connects to the already-running
+    #    mavsdk_server on server_port WITHOUT spawning a new one.
     import mavsdk
     old_init = mavsdk.System.__init__
     def patched_init(self, *args, **kwargs):
@@ -121,6 +122,10 @@ def main():
         kwargs['port'] = server_port
         old_init(self, *args, **kwargs)
     mavsdk.System.__init__ = patched_init
+
+    # Tell px4_adapter not to kill the pre-spawned mavsdk_server
+    import os
+    os.environ['MAVSDK_SERVER_PORT'] = str(server_port)
 
     # 5. Run the DroneOS2 application
     from DroneOS2.main import DroneOSApp
