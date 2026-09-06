@@ -61,7 +61,7 @@ def main():
     
     # 1. Kill any existing orphaned servers/relays forcefully on this Pi
     import psutil
-    server_port = 50052
+    server_port = 50051
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmdline = proc.info.get('cmdline', [])
