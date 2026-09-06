@@ -1,7 +1,7 @@
 import asyncio
 import time
 from typing import Callable, Coroutine, Any, Optional
-from DroneOS.shared.utils.logger import setup_logger
+from DroneOS1.shared.utils.logger import setup_logger
 
 logger = setup_logger("BatteryMonitor")
 

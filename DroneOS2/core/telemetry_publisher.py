@@ -1,7 +1,7 @@
 import time
 import asyncio
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.shared.protocol.messages import HeartbeatMessage, TelemetryMessage
+from DroneOS2.shared.utils.logger import setup_logger
+from DroneOS2.shared.protocol.messages import HeartbeatMessage, TelemetryMessage
 
 logger = setup_logger("TelemetryPublisher")
 

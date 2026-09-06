@@ -1,6 +1,6 @@
 import pytest
-from DroneOS.shared.config.models import DroneConfig, NetworkConfig, FlightConfig, SafetyConfig, LoggingConfig
-from DroneOS.shared.config.loader import load_yaml_config
+from DroneOS1.shared.config.models import DroneConfig, NetworkConfig, FlightConfig, SafetyConfig, LoggingConfig
+from DroneOS1.shared.config.loader import load_yaml_config
 
 def test_config_loader():
     # Load Drone config

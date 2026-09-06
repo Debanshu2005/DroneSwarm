@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
-from DroneOS.shared.protocol.messages import TelemetryData
+from DroneOS2.shared.protocol.messages import TelemetryData
 
 class IFlightController(ABC):
     """

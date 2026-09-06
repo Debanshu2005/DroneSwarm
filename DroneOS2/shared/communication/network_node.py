@@ -7,9 +7,9 @@ import socket
 from pydantic import ValidationError
 from typing import Callable, Coroutine, Any, List, Optional
 
-from DroneOS.shared.communication.interfaces import INetworkAdapter, IMessageSerializer
-from DroneOS.shared.protocol.messages import BaseMessage
-from DroneOS.shared.utils.logger import setup_logger
+from DroneOS2.shared.communication.interfaces import INetworkAdapter, IMessageSerializer
+from DroneOS2.shared.protocol.messages import BaseMessage
+from DroneOS2.shared.utils.logger import setup_logger
 
 logger = setup_logger("UdpNetworkNode")
 

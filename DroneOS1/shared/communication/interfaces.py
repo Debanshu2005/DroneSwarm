@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Any, Coroutine
-from DroneOS.shared.protocol.messages import BaseMessage
+from DroneOS1.shared.protocol.messages import BaseMessage
 
 class IMessageSerializer(ABC):
     @abstractmethod

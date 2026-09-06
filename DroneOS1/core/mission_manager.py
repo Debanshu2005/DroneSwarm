@@ -4,12 +4,12 @@ import os
 from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, ValidationError
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.shared.protocol.messages import (
+from DroneOS1.shared.utils.logger import setup_logger
+from DroneOS1.shared.protocol.messages import (
     MissionUploadMessage, MissionProgressMessage, MissionStatusMessage,
     MissionAbortMessage, MissionPauseMessage, MissionResumeMessage
 )
-from DroneOS.core.navigation_manager import NavigationManager
+from DroneOS1.core.navigation_manager import NavigationManager
 
 logger = setup_logger("MissionSystem")
 
@@ -283,7 +283,7 @@ class MissionReceiver:
                     if wp.altitude > max_alt or wp.altitude < min_alt:
                         logger.error(f"Mission rejected: altitude {wp.altitude} out of bounds ({min_alt} - {max_alt})")
                         if self.manager.network:
-                            from DroneOS.shared.protocol.messages import ErrorMessage
+                            from DroneOS1.shared.protocol.messages import ErrorMessage
                             feedback = ErrorMessage(
                                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                                 timestamp=time.time(), target_id=msg.sender_id,
@@ -296,7 +296,7 @@ class MissionReceiver:
             self.manager._initialize_mission(msg.mission_id, waypoints)
             logger.info(f"Successfully validated and stored uploaded mission {msg.mission_id}")
             if self.manager.network:
-                from DroneOS.shared.protocol.messages import StatusMessage
+                from DroneOS1.shared.protocol.messages import StatusMessage
                 feedback = StatusMessage(
                     sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                     timestamp=time.time(), target_id=msg.sender_id,
@@ -306,7 +306,7 @@ class MissionReceiver:
         else:
             logger.error(f"Failed to validate uploaded mission {msg.mission_id}")
             if self.manager.network:
-                from DroneOS.shared.protocol.messages import ErrorMessage
+                from DroneOS1.shared.protocol.messages import ErrorMessage
                 feedback = ErrorMessage(
                     sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                     timestamp=time.time(), target_id=msg.sender_id,
@@ -317,7 +317,7 @@ class MissionReceiver:
     def handle_pause(self, msg: MissionPauseMessage):
         self.manager.pause_mission()
         if self.manager.network:
-            from DroneOS.shared.protocol.messages import StatusMessage
+            from DroneOS1.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                 timestamp=time.time(), target_id=msg.sender_id,
@@ -330,7 +330,7 @@ class MissionReceiver:
         if rejection_reason:
             logger.warning(rejection_reason)
             if self.manager.network:
-                from DroneOS.shared.protocol.messages import ErrorMessage
+                from DroneOS1.shared.protocol.messages import ErrorMessage
                 feedback = ErrorMessage(
                     sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                     timestamp=time.time(), target_id=msg.sender_id,
@@ -341,7 +341,7 @@ class MissionReceiver:
             
         self.manager.start_mission()
         if self.manager.network:
-            from DroneOS.shared.protocol.messages import StatusMessage
+            from DroneOS1.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                 timestamp=time.time(), target_id=msg.sender_id,
@@ -355,7 +355,7 @@ class MissionReceiver:
     def handle_abort(self, msg: MissionAbortMessage):
         self.manager.abort_mission()
         if self.manager.network:
-            from DroneOS.shared.protocol.messages import StatusMessage
+            from DroneOS1.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                 timestamp=time.time(), target_id=msg.sender_id,
@@ -368,7 +368,7 @@ class MissionReceiver:
         if rejection_reason:
             logger.warning(rejection_reason)
             if self.manager.network:
-                from DroneOS.shared.protocol.messages import ErrorMessage
+                from DroneOS1.shared.protocol.messages import ErrorMessage
                 feedback = ErrorMessage(
                     sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                     timestamp=time.time(), target_id=msg.sender_id,
@@ -379,7 +379,7 @@ class MissionReceiver:
             
         self.manager.start_mission()
         if self.manager.network:
-            from DroneOS.shared.protocol.messages import StatusMessage
+            from DroneOS1.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                 timestamp=time.time(), target_id=msg.sender_id,
@@ -393,7 +393,7 @@ class MissionReceiver:
     def handle_stop(self, msg):
         self.manager.abort_mission()
         if self.manager.network:
-            from DroneOS.shared.protocol.messages import StatusMessage
+            from DroneOS1.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                 timestamp=time.time(), target_id=msg.sender_id,
@@ -403,7 +403,7 @@ class MissionReceiver:
 
     def handle_delete(self, msg):
         if self.manager.network:
-            from DroneOS.shared.protocol.messages import StatusMessage
+            from DroneOS1.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                 timestamp=time.time(), target_id=msg.sender_id,
@@ -413,7 +413,7 @@ class MissionReceiver:
 
     def handle_duplicate(self, msg):
         if self.manager.network:
-            from DroneOS.shared.protocol.messages import StatusMessage
+            from DroneOS1.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                 timestamp=time.time(), target_id=msg.sender_id,
@@ -425,7 +425,7 @@ class MissionReceiver:
         self.manager.status.update_state(MissionState.IDLE)
         self.manager._emit_status()
         if self.manager.network:
-            from DroneOS.shared.protocol.messages import StatusMessage
+            from DroneOS1.shared.protocol.messages import StatusMessage
             feedback = StatusMessage(
                 sender_id=getattr(self.manager.network, 'node_id', "DroneOS"),
                 timestamp=time.time(), target_id=msg.sender_id,

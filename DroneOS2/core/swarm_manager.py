@@ -1,7 +1,7 @@
 import time
 from typing import Dict, Optional, List, Any
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.shared.protocol.messages import (
+from DroneOS2.shared.utils.logger import setup_logger
+from DroneOS2.shared.protocol.messages import (
     SwarmHeartbeatMessage, HeartbeatMessage, DroneJoinMessage, DroneLeaveMessage,
     SwarmStateMessage, PeerStateMessage, DroneIdentityMessage, TelemetryMessage, TelemetryData
 )

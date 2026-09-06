@@ -1,12 +1,12 @@
 import asyncio
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.core.collision_avoidance import ICollisionAvoidance
-from DroneOS.core.mission_manager import MissionManager
-from DroneOS.core.swarm_manager import SwarmMembership
-from DroneOS.core.navigation_manager import NavigationManager
-from DroneOS.core.flight_state import FlightStateStore
-from DroneOS.core.intents import FlightIntent, IntentSource, IntentAction
-from DroneOS.shared.protocol.messages import TelemetryData
+from DroneOS1.shared.utils.logger import setup_logger
+from DroneOS1.core.collision_avoidance import ICollisionAvoidance
+from DroneOS1.core.mission_manager import MissionManager
+from DroneOS1.core.swarm_manager import SwarmMembership
+from DroneOS1.core.navigation_manager import NavigationManager
+from DroneOS1.core.flight_state import FlightStateStore
+from DroneOS1.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS1.shared.protocol.messages import TelemetryData
 
 logger = setup_logger("DecisionEngine")
 
@@ -37,7 +37,7 @@ class LocalDecisionEngine:
         self.active_bids = {}
         
         # Pull formation engine into tick evaluation
-        from DroneOS.core.formation_engine import FormationEngine
+        from DroneOS1.core.formation_engine import FormationEngine
         self.formation_engine = FormationEngine(swarm_manager, state_store, config=config)
 
     def calculate_bid(self, my_telemetry: TelemetryData, target_lat: float, target_lon: float) -> float:
@@ -76,7 +76,7 @@ class LocalDecisionEngine:
                 repulsion_radius_m = float(self.nav.flight_manager.formation_params.get('repulsion_radius_m', 2.5))
                 tolerance = repulsion_radius_m * 1.5
                 
-                from DroneOS.core.formation_manager import global_offset_local_m
+                from DroneOS1.core.formation_manager import global_offset_local_m
                 import math
                 
                 for peer_id, peer_tel in peer_telemetry.items():

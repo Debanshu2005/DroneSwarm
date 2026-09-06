@@ -1,9 +1,9 @@
 import asyncio
 from typing import Optional, Tuple
-from DroneOS.core.interfaces import IFlightController
-from DroneOS.shared.config.models import FlightConfig
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.shared.protocol.messages import TelemetryData
+from DroneOS1.core.interfaces import IFlightController
+from DroneOS1.shared.config.models import FlightConfig
+from DroneOS1.shared.utils.logger import setup_logger
+from DroneOS1.shared.protocol.messages import TelemetryData
 
 logger = setup_logger("PX4Adapter")
 

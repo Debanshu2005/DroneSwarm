@@ -1,9 +1,9 @@
 import time
 import math
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.core.formation_manager import FormationManager, FormationType, convert_local_offset_to_global, global_offset_local_m
-from DroneOS.core.repulsion_field import compute_repulsion
-from DroneOS.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS1.shared.utils.logger import setup_logger
+from DroneOS1.core.formation_manager import FormationManager, FormationType, convert_local_offset_to_global, global_offset_local_m
+from DroneOS1.core.repulsion_field import compute_repulsion
+from DroneOS1.core.intents import FlightIntent, IntentSource, IntentAction
 
 logger = setup_logger("FormationEngine")
 
