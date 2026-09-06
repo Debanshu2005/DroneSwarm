@@ -1,22 +1,22 @@
 [Unit]
+[Unit]
 Description=PhoneOS Drone3 Unified Service
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi3
-WorkingDirectory=/home/pi3/Projects/PhoneOS
-Environment="PYTHONPATH=/home/pi3/Projects/PhoneOS"
+User=pi4
+WorkingDirectory=/home/pi4/Projects/PhoneOS
+Environment="PYTHONPATH=/home/pi4/Projects/PhoneOS"
 
 # Resource constraints for Pi 3B (1GB RAM)
 CPUQuota=80%
 MemoryMax=750M
 MemoryHigh=600M
-IOWeight=50
 OOMScoreAdjust=500
 Nice=5
-ExecStart=/home/pi3/Projects/PhoneOS/venv/bin/python start_drone3.py
+ExecStart=/home/pi4/Projects/PhoneOS/venv/bin/python start_drone3.py
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal
