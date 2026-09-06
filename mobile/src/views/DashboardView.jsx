@@ -269,11 +269,14 @@ export default function DashboardView() {
                   <ArrowDown size={16}/> LAND
                </button>
                
-               <button className="action-btn" onClick={() => sendCommand(CommandAction.RTL)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+               <button className="action-btn" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'RTL'})} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <Navigation size={16}/> RTL
                </button>
                <button className="action-btn" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'HOLD'})} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
                   <Activity size={16}/> HOLD
+               </button>
+               <button className="action-btn" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'ALTITUDE'})} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+                  <Activity size={16}/> ALTITUDE
                </button>
             </div>
           </div>
