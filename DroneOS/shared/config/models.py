@@ -37,6 +37,7 @@ class FlightConfig(BaseModel):
     max_velocity: float
     pipeline_hz: float = 20.0
     px4_connection_string: str
+    px4_connection_candidates: Optional[List[str]] = None
     airsim_host: str
     airsim_port: int
     airsim_timeout: float = 5.0
