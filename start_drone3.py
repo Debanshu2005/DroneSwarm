@@ -27,7 +27,7 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
     ama_paths = sorted(glob.glob("/dev/ttyAMA*"))
 
     match = re.search(r'\d+', vehicle_name)
-    idx = (int(match.group()) - 1) if match else 0
+    idx = 0  # Changed: Each Pi only has 1 device connected, so always use the first one
 
     if by_id_paths and len(by_id_paths) > idx:
         device = by_id_paths[idx]
@@ -44,7 +44,7 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
         return f"serial://{device}:{baud}"
     return conn_str
 
-def wait_for_port(port: int, timeout: float = 10.0) -> bool:
+def wait_for_port(port: int, timeout: float = 30.0) -> bool:
     start = time.time()
     while time.time() - start < timeout:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
