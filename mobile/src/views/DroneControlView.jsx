@@ -49,10 +49,7 @@ function RecenterAutomatically({ center }) {
 }
 
 export default function DroneControlView({ setView }) {
-  const { drones, nowMs, sendCommand, isConnected, indoorMode, setIndoorMode } = useDroneContext();
-
-  const [targetMode, setTargetMode] = useState('ALL'); // 'ALL' or droneId
-  const [targetDroneId, setTargetDroneId] = useState(null);
+  const { drones, nowMs, sendCommand, isConnected, indoorMode, setIndoorMode, selectedDrones, selectAll, selectOnly } = useDroneContext();
 
   const [mapStyle, setMapStyle] = useState('satellite');
   const [centerMode, setCenterMode] = useState('DRONE');
@@ -85,26 +82,29 @@ export default function DroneControlView({ setView }) {
   const moveIntervalRef = useRef(null);
   const [activeMoveParams, setActiveMoveParams] = useState(null);
 
-  // Determine active drone context for telemetry display
-  // If 'ALL', we show aggregate or just pick the first healthy drone as reference.
   const droneIds = Object.keys(drones || {});
-  const activeId = targetMode === 'ALL' ? (droneIds[0] || null) : targetDroneId;
+  
+  const targetMode = selectedDrones.size === 0 || selectedDrones.size === droneIds.length ? 'ALL' : 'SINGLE';
+  const targetDroneId = targetMode === 'SINGLE' ? Array.from(selectedDrones)[0] : null;
+
+  const activeId = selectedDrones.size > 0 
+    ? Array.from(selectedDrones)[0] 
+    : (Object.keys(drones).find(id => drones[id]?.status === 'CONNECTED' || drones[id]?.status === 'DEGRADED') || droneIds[0]);
+    
   const activeDrone = drones[activeId];
   const tel = activeDrone?.telemetry || {};
 
   const handleTargetChange = (e) => {
     const val = e.target.value;
     if (val === 'ALL') {
-      setTargetMode('ALL');
-      setTargetDroneId(null);
+      selectAll();
     } else {
-      setTargetMode('SINGLE');
-      setTargetDroneId(val);
+      selectOnly(val);
     }
   };
 
   const getTargetArray = () => {
-    return targetMode === 'ALL' ? droneIds : (targetDroneId ? [targetDroneId] : []);
+    return targetMode === 'ALL' ? droneIds : Array.from(selectedDrones);
   };
 
   const executeCommand = (action, params = null) => {

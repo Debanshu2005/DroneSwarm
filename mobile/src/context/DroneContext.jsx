@@ -489,11 +489,12 @@ export const DroneProvider = ({ children }) => {
   
   const selectAll = () => setSelectedDrones(new Set(Object.keys(drones)));
   const selectNone = () => setSelectedDrones(new Set());
+  const selectOnly = (id) => setSelectedDrones(new Set([id]));
 
   const value = {
     wsManager, isConnected, drones, selectedDrones,
     wsUrl, setWsUrl, relayAuthToken, setRelayAuthToken, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs, connectionError,
-    sendCommand, sendTerminalCommand, sendParamRequest, toggleSelect, selectAll, selectNone, addLog,
+    sendCommand, sendTerminalCommand, sendParamRequest, toggleSelect, selectAll, selectNone, selectOnly, addLog,
     testOverrides, setTestOverride, clearTestOverrides, injectFailure, testSessionLog, clearTestSessionLog
   };
 
