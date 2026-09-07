@@ -1,0 +1,27 @@
+[Unit]
+Description=PhoneOS Drone4 Unified Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/Projects/PhoneOS
+Environment="PYTHONPATH=/home/pi/Projects/PhoneOS"
+
+# Resource constraints to prevent SSH lockout
+CPUQuota=70%
+MemoryMax=1500M
+MemoryHigh=1200M
+IOWeight=50
+OOMScoreAdjust=500
+Nice=5
+
+ExecStart=/home/pi/Projects/PhoneOS/venv/bin/python start_drone4.py
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
