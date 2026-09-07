@@ -8,11 +8,11 @@ import time
 from pathlib import Path
 import os
 
-# Add the project root to sys.path so DroneOS2 can be imported
+# Add the project root to sys.path so DroneOS3 can be imported
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from DroneOS2.shared.config.loader import load_yaml_config
-from DroneOS2.shared.config.models import DroneConfig, FlightConfig
+from DroneOS3.shared.config.loader import load_yaml_config
+from DroneOS3.shared.config.models import DroneConfig, FlightConfig
 
 def resolve_serial(vehicle_name: str, conn_str: str) -> str:
     if not conn_str.startswith("serial://auto:"):
@@ -60,7 +60,7 @@ def get_mavsdk_server_path():
     return os.fspath(files(mavsdk.bin).joinpath(exec_name))
 
 def main():
-    config_dir = Path(__file__).resolve().parent / "DroneOS2" / "configs"
+    config_dir = Path(__file__).resolve().parent / "DroneOS3" / "configs"
     drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
     flight_cfg = load_yaml_config(config_dir / "flight.yaml", FlightConfig)
 
@@ -70,7 +70,7 @@ def main():
 
     # 1. Kill any existing orphaned servers/relays
     import psutil
-    server_port = 50052  # unique port for drone3, drone2 uses 50051
+    server_port = 50053  # unique port for drone4, drone3 uses 50052
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmdline = proc.info.get('cmdline', [])
@@ -78,7 +78,7 @@ def main():
                 if cmdline and any(str(server_port) in arg for arg in cmdline):
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
                     proc.kill()
-            elif cmdline and 'relay.py' in ' '.join(cmdline) and '8082' in ' '.join(cmdline):
+            elif cmdline and 'relay.py' in ' '.join(cmdline) and '8083' in ' '.join(cmdline):
                 print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
                 proc.kill()
         except Exception:
@@ -106,15 +106,16 @@ def main():
     # 3. Spawn Relay on unique ports for drone3
     #    drone2: ws=8080, udp-bind=14551, udp-target=14550
     #    drone3: ws=8082, udp-bind=14553, udp-target=14552
+    #    drone4: ws=8083, udp-bind=14555, udp-target=14554
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
     relay_proc = subprocess.Popen(
         [sys.executable, str(relay_script),
-         "--ws-port", "8082",
-         "--udp-bind-port", "14553",
-         "--udp-target-port", "14552"]
+         "--ws-port", "8083",
+         "--udp-bind-port", "14555",
+         "--udp-target-port", "14554"]
     )
 
-    # 4. Monkey-patch mavsdk.System so DroneOS2 connects to the already-running
+    # 4. Monkey-patch mavsdk.System so DroneOS3 connects to the already-running
     #    mavsdk_server on server_port WITHOUT spawning a new one.
     import mavsdk
     old_init = mavsdk.System.__init__
@@ -128,8 +129,8 @@ def main():
     import os
     os.environ['MAVSDK_SERVER_PORT'] = str(server_port)
 
-    # 5. Run the DroneOS2 application
-    from DroneOS2.main import DroneOSApp
+    # 5. Run the DroneOS3 application
+    from DroneOS3.main import DroneOSApp
 
     sys.argv = [sys.argv[0], str(config_dir)]
 

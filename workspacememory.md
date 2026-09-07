@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-09-06T10:06:54.054Z
+Generated: 2026-09-07T04:46:41.425Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -16,41 +16,55 @@ Structured manifest: workspace.json
 - Audience: any AI agent working in this repository can treat this file as the current handoff ledger.
 - Graphify report: not available yet
 - Graphify graph: not available yet
-- Last activity: no tracked activity yet
+- Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: No active file detected
-- Hottest files right now: none yet
-- Suggested starting points: .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md, mobile/.gitignore, mobile/README.md
+- Active file in focus: start_drone2.py
+- Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
+- Suggested starting points: start_drone2.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
 ## Current Workspace
-- Active file: No active file detected
-- Tracked files in snapshot: 2194
-- Top-level areas: venv (1780), mobile (139), DroneOS (72), DroneOS2 (72), DroneOS1 (71), [root] (25), deploy (20), tests (6)
-- Primary file types: .py (1681), [no extension] (199), .txt (53), .typed (29), .png (26), .jsx (24), .js (20), .yaml (15)
-- Key files: .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md, mobile/.gitignore, mobile/README.md, mobile/android/.gitignore, mobile/android/app/.gitignore
+- Active file: start_drone2.py
+- Tracked files in snapshot: 2198
+- Top-level areas: venv (1780), mobile (139), DroneOS (72), DroneOS2 (72), DroneOS1 (71), [root] (26), deploy (20), tests (6)
+- Primary file types: .py (1681), [no extension] (200), .txt (53), .typed (29), .png (26), .jsx (24), .js (20), .yaml (15)
+- Key files: .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md, mobile/.gitignore, mobile/README.md, mobile/android/.gitignore
 ## Package Snapshot
 - Package metadata unavailable: package.json was not found.
 ## Current Stack
-- Logged change events: 0
-- Change mix: none yet
-- Remembered file snapshots: 0
-- Working tree summary: clean
+- Logged change events: 1
+- Change mix: save (1)
+- Remembered file snapshots: 1
+- Working tree summary: 1 untracked
 ## Tracked Snapshots
-- No remembered file snapshots yet.
+- DroneOS/tests/test_terminal_controller.py | 246 lines | 8805 chars | hash be871eb34242
+  Last snapshot: 2026-08-29T12:17:18.957Z
+  Preview: "import pytest / from unittest.mock import AsyncMock, MagicMock, patch, call / import asyncio / import math / from DroneOS.core.terminal_controller import TerminalController / from DroneOS.core.interfaces import IFligh..."
 
 ## Recent Changes
-- No tracked changes recorded in this session yet.
+### 2026-08-29T12:17:18.957Z | saved | DroneOS/tests/test_terminal_controller.py
+- Summary: Saved without a textual diff.
+- Before: 246 lines | 8,805 chars | hash be871eb34242 | preview: "import pytest / from unittest.mock import AsyncMock, MagicMock, patch, call / import asyncio / import math / from DroneOS.core.terminal_controller import TerminalController / from DroneOS.core.interfaces import IFligh..."
+- After: 246 lines | 8,805 chars | hash be871eb34242 | preview: "import pytest / from unittest.mock import AsyncMock, MagicMock, patch, call / import asyncio / import math / from DroneOS.core.terminal_controller import TerminalController / from DroneOS.core.interfaces import IFligh..."
+
 
 ## Hot Files
-- No hotspots yet.
+- DroneOS/tests/test_terminal_controller.py (1 tracked changes)
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-09-06 a357968 fixes pt2 droneOs2
-- Working tree summary: clean
-- Working tree: clean
+- HEAD: 2026-09-06 c4c4350 fix: correct baud rate for Drone 2 to 115200
+- Working tree summary: 1 untracked
+- ?? app-debug.apk
 
 ## GitHub Snapshot
-GitHub context unavailable: GitHub API request failed with 404. Not Found Configure codeJanitor.github.apiToken or GITHUB_TOKEN if the repository is private or rate-limited.
+GitHub Repository: Debanshu2005/DroneSwarm
+Visibility: public | Default branch: main
+Stars: 0 | Forks: 0 | Open issues: 0
+
+Latest commit on main:
+- c4c4350 by Debanshu2005 on 2026-09-06
+  fix: correct baud rate for Drone 2 to 115200
+
+URL: https://github.com/Debanshu2005/DroneSwarm
 
 ## Graphify Snapshot
 Graphify report not found. Generate Graphify output if you want architecture-aware memory excerpts here.

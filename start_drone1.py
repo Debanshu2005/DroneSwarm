@@ -24,6 +24,7 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
     by_id_paths = sorted(glob.glob("/dev/serial/by-id/*"))
     acm_paths = sorted(glob.glob("/dev/ttyACM*"))
     usb_paths = sorted(glob.glob("/dev/ttyUSB*"))
+    ama_paths = sorted(glob.glob("/dev/ttyAMA*"))
     
     match = re.search(r'\d+', vehicle_name)
     idx = (int(match.group()) - 1) if match else 0
@@ -34,6 +35,8 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
         device = acm_paths[idx]
     elif usb_paths and len(usb_paths) > idx:
         device = usb_paths[idx]
+    elif ama_paths and len(ama_paths) > idx:
+        device = ama_paths[idx]
     elif by_id_paths:
         device = by_id_paths[-1]
         

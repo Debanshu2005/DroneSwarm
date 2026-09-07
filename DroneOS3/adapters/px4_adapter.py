@@ -1,0 +1,741 @@
+import asyncio
+from typing import Optional, Tuple
+from DroneOS2.core.interfaces import IFlightController
+from DroneOS2.shared.config.models import FlightConfig
+from DroneOS2.shared.utils.logger import setup_logger
+from DroneOS2.shared.protocol.messages import TelemetryData
+
+logger = setup_logger("PX4Adapter")
+
+try:
+    from mavsdk import System
+    from mavsdk.offboard import VelocityBodyYawspeed, VelocityNedYaw
+except ImportError:
+    logger.warning("MAVSDK module not found. Adapter will fail if instantiated without a mock.")
+    System = None
+    VelocityBodyYawspeed = None
+    VelocityNedYaw = None
+
+class PX4FlightController(IFlightController):
+    """
+    Implements IFlightController using MAVSDK for PX4 / Real Drone compatibility.
+    This replaces AirSim seamlessly because it adheres to the IFlightController interface.
+    """
+    def __init__(self, vehicle_name: str, config: FlightConfig):
+        self.vehicle_name = vehicle_name
+        self.config = config
+        self.client: Optional['System'] = None
+        self._connected = False
+        self._telemetry = self._empty_telemetry()
+        self._active_tasks = set()
+        self._injections = {}  # Store active TEST_INJECT states
+
+    async def connect(self) -> bool:
+        if not System:
+            logger.error("Cannot connect to PX4: MAVSDK is not installed.")
+            return False
+
+        import glob
+        import os
+        import signal
+        import psutil
+        import re
+        
+        def kill_orphaned_mavsdk(target_conn: str):
+            # If a lifecycle manager pre-spawned a server on a specific port, don't kill it
+            managed_port = os.getenv('MAVSDK_SERVER_PORT')
+            try:
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    if proc.info['name'] and 'mavsdk_server' in proc.info['name']:
+                        cmdline = proc.info.get('cmdline', [])
+                        if managed_port and any(managed_port in arg for arg in cmdline):
+                            continue  # skip our own pre-spawned server
+                        if cmdline and any(target_conn in arg for arg in cmdline):
+                            logger.info(f"Killing orphaned mavsdk_server (PID {proc.info['pid']}) for {target_conn}")
+                            proc.kill()
+            except Exception as e:
+                logger.warning(f"Failed to kill orphaned MAVSDK server: {e}")
+
+        def resolve_connection(conn_str: str) -> Optional[str]:
+            if not conn_str.startswith("serial://auto:"):
+                return conn_str
+
+            baud = conn_str.split(":")[-1]
+            device = None
+            
+            by_id_paths = sorted(glob.glob("/dev/serial/by-id/*"))
+            acm_paths = sorted(glob.glob("/dev/ttyACM*"))
+            usb_paths = sorted(glob.glob("/dev/ttyUSB*"))
+            
+            match = re.search(r'\d+', self.vehicle_name)
+            idx = (int(match.group()) - 1) if match else 0
+            
+            if by_id_paths and len(by_id_paths) > idx:
+                device = by_id_paths[idx]
+            elif acm_paths and len(acm_paths) > idx:
+                device = acm_paths[idx]
+            elif usb_paths and len(usb_paths) > idx:
+                device = usb_paths[idx]
+            elif by_id_paths:
+                device = by_id_paths[-1] # Fallback
+                
+            if device:
+                return f"serial://{device}:{baud}"
+
+            logger.info("PX4 DEVICE NOT FOUND")
+            return None
+
+        def stop_current_mavsdk():
+            try:
+                stop_server = getattr(self.client, "_stop_mavsdk_server", None)
+                if callable(stop_server):
+                    stop_server()
+            except Exception as e:
+                logger.warning(f"Failed to stop MAVSDK server after connection failure: {e}")
+            self.client = None
+
+        raw_candidates = getattr(self.config, "px4_connection_candidates", None) or [self.config.px4_connection_string]
+        candidates = []
+        for raw_conn in raw_candidates:
+            conn_str = resolve_connection(raw_conn)
+            if conn_str and conn_str not in candidates:
+                candidates.append(conn_str)
+
+        if not candidates:
+            return False
+
+        for attempt, conn_str in enumerate(candidates, start=1):
+            kill_orphaned_mavsdk(conn_str)
+            # Recreate System to ensure it spawns a fresh mavsdk_server if it previously failed
+            self.client = System()
+
+            logger.info(f"PX4 CONNECTING to {conn_str} ({attempt}/{len(candidates)})")
+            try:
+                # Wrap connect in a timeout to prevent hanging forever
+                await asyncio.wait_for(self.client.connect(system_address=conn_str), timeout=10.0)
+                
+                async def wait_for_connection():
+                    async for state in self.client.core.connection_state():
+                        if state.is_connected:
+                            return True
+                    return False
+                
+                # Wrap connection state in a timeout as well
+                is_connected = await asyncio.wait_for(wait_for_connection(), timeout=15.0)
+                if is_connected:
+                    logger.info(f"PX4 CONNECTED via {conn_str}")
+                    self._connected = True
+                    break
+
+                logger.warning(f"PX4 connection state never became connected for {conn_str}.")
+            except (asyncio.TimeoutError, Exception) as e:
+                logger.warning(f"Connection attempt failed ({type(e).__name__}) for {conn_str}.")
+            stop_current_mavsdk()
+        else:
+            logger.error("PX4 connection failed for all configured serial candidates.")
+            return False
+        
+        # Request required MAVLink telemetry streams safely
+        async def safe_set_rate(method_name, rate):
+            if hasattr(self.client.telemetry, method_name):
+                try:
+                    await getattr(self.client.telemetry, method_name)(rate)
+                except Exception as e:
+                    logger.warning(f"Optional telemetry rate {method_name} failed: {e}")
+            else:
+                logger.warning(f"Telemetry API {method_name} not supported by this MAVSDK version.")
+
+        await safe_set_rate('set_rate_position', 5.0)
+        await safe_set_rate('set_rate_gps_info', 5.0)
+        await safe_set_rate('set_rate_battery', 1.0)
+        await safe_set_rate('set_rate_attitude_euler', 5.0)
+        await safe_set_rate('set_rate_altitude', 5.0)
+        logger.info("MAVLink telemetry rate initialization completed.")
+        
+        # Start background telemetry subscriptions
+        t1 = asyncio.create_task(self._subscribe_position())
+        t2 = asyncio.create_task(self._subscribe_velocity())
+        t3 = asyncio.create_task(self._subscribe_battery())
+        t4 = asyncio.create_task(self._subscribe_flight_mode())
+        t5 = asyncio.create_task(self._subscribe_gps_info())
+        t6 = asyncio.create_task(self._subscribe_armed())
+        t7 = asyncio.create_task(self._subscribe_attitude())
+        t8 = asyncio.create_task(self._subscribe_health())
+        t9 = asyncio.create_task(self._subscribe_status_text())
+        t10 = asyncio.create_task(self._subscribe_altitude())
+
+        self._active_tasks.update([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10])
+        
+        return True
+
+    async def disconnect(self) -> None:
+        self._connected = False
+        for task in self._active_tasks:
+            task.cancel()
+        self._active_tasks.clear()
+        self.client = None
+        logger.info("PX4 DISCONNECTED")
+
+    async def arm(self) -> bool:
+        if not self._connected: return False
+        try:
+            await self.client.action.arm()
+            return True
+        except Exception as e:
+            if "TIMEOUT" in str(e):
+                logger.warning("MAVSDK timed out on ARM, assuming success (ArduPilot compatibility)")
+                return True
+            if "ActionError" in str(type(e)):
+                raise RuntimeError(f"Pixhawk rejected ARM request: {e}; {self._arm_rejection_context()}")
+            raise RuntimeError(f"PX4 Arm failed: {e}")
+
+    def _arm_rejection_context(self) -> str:
+        t = self._telemetry
+        fields = [
+            ("status_text", t.status_text),
+            ("is_armable", t.is_armable),
+            ("health_all_ok", t.health_all_ok),
+            ("gps_valid", t.gps_valid),
+            ("local_pos_valid", t.local_pos_valid),
+            ("global_pos_valid", t.global_pos_valid),
+            ("home_valid", t.home_valid),
+            ("gyro_calibrated", t.gyro_calibrated),
+            ("accel_calibrated", t.accel_calibrated),
+            ("mag_calibrated", t.mag_calibrated),
+            ("battery_level", t.battery_level),
+            ("voltage", t.voltage),
+            ("flight_mode", t.flight_mode),
+            ("armed_state", t.armed_state),
+        ]
+        details = ", ".join(
+            f"{name}={value}" for name, value in fields if value is not None and value != ""
+        )
+        return f"last telemetry: {details}" if details else "no telemetry snapshot available"
+
+    async def disarm(self) -> bool:
+        if not self._connected: return False
+        try:
+            await self.client.action.disarm()
+            return True
+        except Exception as e:
+            if "TIMEOUT" in str(e):
+                return True
+            logger.exception(f"PX4 Disarm failed: {e}")
+            return False
+
+    async def takeoff(self, altitude: float = 10.0) -> bool:
+        if not self._connected: return False
+        
+        telemetry = await self.get_telemetry()
+        
+        if telemetry.gps_valid:
+            try:
+                await self.client.action.set_takeoff_altitude(altitude)
+                await self.client.action.takeoff()
+                return True
+            except Exception as e:
+                if "ActionError" in str(type(e)):
+                    raise RuntimeError(f"Pixhawk rejected TAKEOFF request: {e}")
+                raise RuntimeError(f"PX4 Takeoff failed: {e}")
+        elif telemetry.local_pos_valid:
+            logger.info("No GPS lock. Using Offboard mode for Optical Flow takeoff.")
+            try:
+                # Need to use offboard mode to take off without GPS
+                # Start offboard with 0 velocity
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                )
+                await self.client.offboard.start()
+                
+                # Command upward velocity (-Z in NED frame)
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0.0, 0.0, -1.0, 0.0)
+                )
+                
+                # Wait until we reach the approximate altitude
+                import asyncio
+                start_alt = telemetry.altitude if telemetry.altitude is not None else 0.0
+                target_alt = start_alt + altitude
+                
+                for _ in range(150): # timeout after 15s
+                    await asyncio.sleep(0.1)
+                    current_telemetry = await self.get_telemetry()
+                    current_alt = current_telemetry.altitude if current_telemetry.altitude is not None else 0.0
+                    if current_alt >= target_alt - 0.2:
+                        break
+                        
+                # Hover in place
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                )
+                return True
+            except Exception as e:
+                logger.error(f"Offboard takeoff failed: {e}")
+                try:
+                    await self.client.offboard.stop()
+                except:
+                    pass
+                raise RuntimeError(f"Offboard Optical Flow Takeoff failed: {e}")
+        else:
+            raise RuntimeError("Cannot takeoff: Neither GPS nor Local Position (Optical Flow) is valid.")
+
+    async def land(self) -> bool:
+        if not self._connected: return False
+        try:
+            await self.client.action.land()
+            return True
+        except Exception as e:
+            if "TIMEOUT" in str(e):
+                return True
+            logger.exception(f"PX4 Land failed: {e}")
+            return False
+
+    async def rtl(self) -> bool:
+        if not self._connected: return False
+        if not self._telemetry.home_valid:
+            logger.warning("PX4 RTL rejected: Home position invalid")
+            return False
+        try:
+            current_alt = self._telemetry.altitude if self._telemetry.altitude is not None else 5.0
+            safe_rtl_alt = max(5.0, current_alt)
+            try:
+                await self.client.param.set_param_float("RTL_RETURN_ALT", float(safe_rtl_alt))
+                logger.info(f"Set RTL_RETURN_ALT to {safe_rtl_alt}m for safe RTL")
+            except Exception as param_err:
+                logger.warning(f"Could not set RTL_RETURN_ALT (might not exist in this firmware): {param_err}")
+            await self.client.action.return_to_launch()
+            return True
+        except Exception as e:
+            if "ActionError" in str(type(e)):
+                raise RuntimeError(f"Pixhawk rejected RTL request: {e}")
+            logger.exception(f"PX4 RTL failed: {e}")
+            return False
+
+    async def hover(self) -> bool:
+        if not self._connected: return False
+        try:
+            await self.client.action.hold()
+            return True
+        except (OSError, RuntimeError) as e:
+            logger.exception(f"PX4 Hover failed: {e}")
+            return False
+            
+    async def kill(self) -> bool:
+        if not self._connected: return False
+        try:
+            await self.client.action.kill()
+            return True
+        except Exception as e:
+            logger.exception(f"PX4 Kill failed: {e}")
+            return False
+
+    async def goto_location(self, lat: float, lon: float, alt: float, yaw: float = 0.0) -> bool:
+        if not self._connected: return False
+        try:
+            # alt is passed as relative altitude. MAVSDK expects absolute altitude (AMSL).
+            home_abs_alt = 0.0
+            async for terrain_info in self.client.telemetry.home():
+                home_abs_alt = terrain_info.absolute_altitude_m
+                break
+            
+            target_abs_alt = home_abs_alt + alt
+            logger.info(f"PX4 Goto: lat={lat}, lon={lon}, rel_alt={alt}, abs_alt={target_abs_alt}")
+            await self.client.action.goto_location(lat, lon, target_abs_alt, yaw)
+            return True
+        except Exception as e:
+            logger.exception(f"PX4 Goto Location failed: {e}")
+            return False
+
+    async def goto_local_ned(self, north: float, east: float, down: float, yaw: float = 0.0) -> bool:
+        if not self._connected: return False
+        try:
+            from mavsdk.offboard import PositionNedYaw
+            await self.client.offboard.set_position_ned(PositionNedYaw(north, east, down, yaw))
+            try:
+                await self.client.offboard.start()
+            except Exception as e:
+                logger.debug(f"Offboard start failed or already active: {e}")
+            return True
+        except Exception as e:
+            logger.exception(f"PX4 Goto Local NED failed: {e}")
+            return False
+
+    async def move_velocity(self, vx: float, vy: float, vz: float, duration: float, yaw_rate: float = 0.0) -> bool:
+        if not self._connected: return False
+        
+        telemetry = await self.get_telemetry()
+        mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
+        
+        use_manual = (not telemetry.gps_valid) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
+
+        try:
+            if use_manual:
+                pitch = max(-1.0, min(1.0, vx / 5.0))
+                roll = max(-1.0, min(1.0, vy / 5.0))
+                throttle = max(0.0, min(1.0, 0.5 - (vz / 6.0)))
+                yaw = max(-1.0, min(1.0, yaw_rate / 90.0))
+                
+                await self.client.manual_control.set_manual_control_input(pitch, roll, throttle, yaw)
+                return True
+            else:
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(vx, vy, vz, yaw_rate)
+                )
+                try:
+                    await self.client.offboard.start()
+                except Exception as e:
+                    logger.debug(f"Offboard start failed or already active: {e}")
+                return True
+        except (OSError, RuntimeError) as e:
+            logger.exception(f"PX4 Move failed: {e}")
+            return False
+
+    async def move_velocity_ned(self, north: float, east: float, down: float, duration: float, yaw_rate: float = 0.0) -> bool:
+        if not self._connected: return False
+        
+        telemetry = await self.get_telemetry()
+        mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
+        
+        use_manual = (not telemetry.gps_valid) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
+
+        try:
+            if use_manual:
+                logger.warning("move_velocity_ned is not supported in manual/stabilized modes without GPS.")
+                return False
+            else:
+                await self.client.offboard.set_velocity_ned(
+                    VelocityNedYaw(north, east, down, yaw_rate)
+                )
+                try:
+                    await self.client.offboard.start()
+                except Exception as e:
+                    logger.debug(f"Offboard start failed or already active: {e}")
+                return True
+        except (OSError, RuntimeError) as e:
+            logger.exception(f"PX4 Move NED failed: {e}")
+            return False
+
+    async def stop_movement(self) -> bool:
+        if not self._connected: return False
+        try:
+            telemetry = await self.get_telemetry()
+            mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
+            use_manual = (not telemetry.gps_valid) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
+            
+            if use_manual:
+                await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
+            else:
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                )
+                await self.client.offboard.stop()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to stop movement cleanly: {e}")
+            return False
+
+    async def get_home_position(self) -> Optional[Tuple[float, float, float]]:
+        if not self._connected or not self._telemetry.home_valid:
+            return None
+        try:
+            async for terrain_info in self.client.telemetry.home():
+                return (terrain_info.latitude_deg, terrain_info.longitude_deg, terrain_info.absolute_altitude_m)
+        except Exception as e:
+            logger.error(f"Failed to read home position: {e}")
+        return None
+
+    async def set_mode(self, mode: str) -> bool:
+        if not self._connected:
+            raise RuntimeError("Not connected")
+        mode_upper = mode.upper()
+        
+        try:
+            if mode_upper in ["RTL", "RETURN", "RETURN_TO_LAUNCH"]:
+                await self.client.action.return_to_launch()
+            elif mode_upper == "LAND":
+                await self.client.action.land()
+            elif mode_upper in ["LOITER", "HOLD", "POSHOLD", "POSITION", "POSCTL"]:
+                await self.client.action.hold()
+            elif mode_upper in ["ALTCTL", "ALT_HOLD", "ALTHOLD"]:
+                await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
+                await self.client.manual_control.start_altitude_control()
+            elif mode_upper in ["MANUAL", "STABILIZED", "ACRO"]:
+                # Fallback to altitude control for manual without GPS
+                await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
+                await self.client.manual_control.start_altitude_control()
+            elif mode_upper in ["GUIDED", "OFFBOARD"]:
+                # In ArduPilot, GUIDED is equivalent to PX4 OFFBOARD.
+                # MAVSDK requires a setpoint before starting offboard mode.
+                await self.client.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                )
+                await self.client.offboard.start()
+            else:
+                # Based on audit, MAVSDK-Python action class in this environment
+                # does NOT expose set_custom_mode. We cannot fake it.
+                raise RuntimeError(f"Mode {mode} is not supported by the current flight-control interface.")
+            
+            # Verify mode change via telemetry
+            for _ in range(10):
+                import asyncio
+                await asyncio.sleep(0.1)
+                t = await self.get_telemetry()
+                if t.flight_mode and mode_upper in t.flight_mode.upper():
+                    return True
+                    
+            logger.warning(f"Mode command sent, but telemetry didn't confirm {mode} within 1 second.")
+            return True # Command didn't error, just UI might not show it yet.
+            
+        except Exception as e:
+            if isinstance(e, RuntimeError):
+                raise e
+            raise RuntimeError(f"PX4 Set Mode failed: {e}")
+
+    def set_test_injection(self, injection_type: str, active: bool):
+        self._injections[injection_type] = active
+        if active:
+            logger.warning(f"TEST INJECTION ACTIVE: {injection_type}")
+
+    async def get_telemetry(self) -> TelemetryData:
+        # Create a deep copy of telemetry so we don't permanently corrupt internal state
+        import copy
+        t = copy.deepcopy(self._telemetry)
+        
+        # Track which injections are active so UI can explicitly distinguish fake data
+        t.active_injections = [k for k, v in self._injections.items() if v]
+
+        # Apply active injections
+        if self._injections.get("GPS_LOST"):
+            t.gps_valid = False
+            t.latitude = None
+            t.longitude = None
+        if self._injections.get("BATTERY_LOW"):
+            t.battery_level = 15.0
+        if self._injections.get("BATTERY_CRITICAL"):
+            t.battery_level = 5.0
+        if self._injections.get("TELEMETRY_STALE"):
+            # push timestamp back by 10 seconds to simulate stall
+            if t.timestamp:
+                t.timestamp -= 10.0
+                
+        return t
+
+    def _mark_telemetry_fresh(self):
+        import time
+        self._telemetry.timestamp = time.time()
+
+    async def _subscribe_position(self):
+        while self._connected:
+            try:
+                import math
+                async for pos in self.client.telemetry.position():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.latitude = pos.latitude_deg if not math.isnan(pos.latitude_deg) else self._telemetry.latitude
+                    self._telemetry.longitude = pos.longitude_deg if not math.isnan(pos.longitude_deg) else self._telemetry.longitude
+                    if not math.isnan(pos.relative_altitude_m):
+                        self._telemetry.altitude = pos.relative_altitude_m
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 position subscription failed: {e}")
+                self._connected = False
+                await asyncio.sleep(2.0)
+
+    async def _subscribe_altitude(self):
+        while self._connected:
+            try:
+                import math
+                async for alt in self.client.telemetry.altitude():
+                    self._mark_telemetry_fresh()
+                    if not math.isnan(alt.altitude_relative_m):
+                        self._telemetry.altitude = alt.altitude_relative_m
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 altitude subscription failed: {e}")
+                self._connected = False
+                await asyncio.sleep(2.0)
+
+    async def _subscribe_velocity(self):
+        while self._connected:
+            try:
+                import math
+                async for vel in self.client.telemetry.velocity_ned():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.velocity_x = vel.north_m_s if not math.isnan(vel.north_m_s) else None
+                    self._telemetry.velocity_y = vel.east_m_s if not math.isnan(vel.east_m_s) else None
+                    self._telemetry.velocity_z = vel.down_m_s if not math.isnan(vel.down_m_s) else None
+                    # calculate ground speed
+                    if self._telemetry.velocity_x is not None and self._telemetry.velocity_y is not None:
+                        self._telemetry.ground_speed = math.sqrt(vel.north_m_s**2 + vel.east_m_s**2)
+                    else:
+                        self._telemetry.ground_speed = None
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 velocity_ned subscription failed: {e}")
+                self._connected = False
+                await asyncio.sleep(2.0)
+
+    async def _subscribe_attitude(self):
+        while self._connected:
+            try:
+                async for attitude in self.client.telemetry.attitude_euler():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.roll = attitude.roll_deg
+                    self._telemetry.pitch = attitude.pitch_deg
+                    self._telemetry.yaw = attitude.yaw_deg
+                    # normalize yaw to heading (0-360)
+                    heading = attitude.yaw_deg
+                    if heading < 0:
+                        heading += 360.0
+                    self._telemetry.heading = heading
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 attitude_euler subscription failed: {e}")
+                self._connected = False
+                await asyncio.sleep(2.0)
+
+    async def _subscribe_battery(self):
+        while self._connected:
+            try:
+                import math
+                async for battery in self.client.telemetry.battery():
+                    self._mark_telemetry_fresh()
+                    val = battery.remaining_percent
+                    if val < 0 or math.isnan(val):
+                        self._telemetry.battery_level = None
+                    else:
+                        # Some MAVSDK versions report 0-1, others 0-100.
+                        pct = val if val > 1.0 else val * 100.0
+                        self._telemetry.battery_level = max(0.0, min(100.0, pct))
+                    self._telemetry.voltage = battery.voltage_v
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 battery subscription failed: {e}")
+                self._connected = False
+                await asyncio.sleep(2.0)
+
+    async def _subscribe_flight_mode(self):
+        while self._connected:
+            try:
+                async for mode in self.client.telemetry.flight_mode():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.flight_mode = str(mode)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 flight_mode subscription failed: {e}")
+                self._connected = False
+                await asyncio.sleep(2.0)
+
+    async def _subscribe_gps_info(self):
+        while self._connected:
+            try:
+                async for gps_info in self.client.telemetry.gps_info():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.gps_valid = gps_info.fix_type.name in ["FIX_2D", "FIX_3D", "FIX_DGPS", "RTK_FLOAT", "RTK_FIXED"]
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 gps_info subscription failed: {e}")
+                self._connected = False
+                await asyncio.sleep(2.0)
+
+    async def _subscribe_armed(self):
+        while self._connected:
+            try:
+                async for is_armed in self.client.telemetry.armed():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.armed_state = "ARMED" if is_armed else "DISARMED"
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 armed subscription failed: {e}")
+                self._connected = False
+                await asyncio.sleep(2.0)
+
+    async def _subscribe_health(self):
+        while self._connected:
+            try:
+                async for health in self.client.telemetry.health():
+                    self._mark_telemetry_fresh()
+                    self._telemetry.health_all_ok = (
+                        health.is_gyrometer_calibration_ok and
+                        health.is_accelerometer_calibration_ok and
+                        health.is_magnetometer_calibration_ok and
+                        health.is_local_position_ok and
+                        health.is_global_position_ok
+                    )
+                    self._telemetry.gyro_calibrated = health.is_gyrometer_calibration_ok
+                    self._telemetry.accel_calibrated = health.is_accelerometer_calibration_ok
+                    self._telemetry.mag_calibrated = health.is_magnetometer_calibration_ok
+                    self._telemetry.local_pos_valid = health.is_local_position_ok
+                    self._telemetry.global_pos_valid = health.is_global_position_ok
+                    self._telemetry.is_armable = health.is_armable
+                    self._telemetry.home_valid = health.is_home_position_ok
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 health subscription failed: {e}")
+                self._connected = False
+                await asyncio.sleep(2.0)
+
+    async def _subscribe_status_text(self):
+        while self._connected:
+            try:
+                async for status in self.client.telemetry.status_text():
+                    self._mark_telemetry_fresh()
+                    if status.type.name in ["WARNING", "ERROR", "CRITICAL", "EMERGENCY", "INFO"]:
+                        self._telemetry.status_text = status.text
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"PX4 status_text subscription failed: {e}")
+                self._connected = False
+                await asyncio.sleep(2.0)
+
+    def _empty_telemetry(self) -> TelemetryData:
+        return TelemetryData(
+            battery_level=None, altitude=None, latitude=None, longitude=None,
+            velocity_x=None, velocity_y=None, velocity_z=None, flight_mode="disconnected"
+        )
+
+    async def get_all_params(self) -> dict:
+        if not self._connected: return {}
+        try:
+            params = await self.client.param.get_all_params()
+            res = {}
+            for p in params.int_params:
+                res[p.name] = p.value
+            for p in params.float_params:
+                res[p.name] = p.value
+            return res
+        except Exception as e:
+            logger.error(f"Failed to get all parameters: {e}")
+            return {}
+
+    async def get_param(self, name: str, param_type: str = "float"):
+        if not self._connected: return None
+        try:
+            if param_type == "int":
+                return await self.client.param.get_param_int(name)
+            else:
+                return await self.client.param.get_param_float(name)
+        except Exception as e:
+            logger.error(f"Failed to get parameter {name}: {e}")
+            return None
+
+    async def set_param(self, name: str, value, param_type: str = "float") -> bool:
+        if not self._connected: return False
+        try:
+            if param_type == "int":
+                await self.client.param.set_param_int(name, int(value))
+            else:
+                await self.client.param.set_param_float(name, float(value))
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set parameter {name}: {e}")
+            return False
