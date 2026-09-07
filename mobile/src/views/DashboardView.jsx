@@ -61,16 +61,23 @@ export default function DashboardView() {
   const armedDrones = Object.values(drones).filter(d => d.telemetry?.armed_state === 'ARMED').length;
   const warningDrones = Object.values(drones).filter(d => d.status === 'DEGRADED' || d.healthScore === 'WARNING' || d.healthScore === 'CRITICAL').length;
 
-  // For the dashboard, we look at the first selected drone, or the first available connected drone
-  const activeDroneId = selectedDrones.size > 0 
-    ? Array.from(selectedDrones)[0] 
-    : (Object.keys(drones).find(id => drones[id]?.status === 'CONNECTED' || drones[id]?.status === 'DEGRADED') || Object.keys(drones)[0]);
-  const drone = drones[activeDroneId];
-  const tel = drone?.telemetry || {};
-  const safety = validateDroneSafety(drone);
+  const displayDrones = selectedDrones.size > 0 
+    ? Array.from(selectedDrones).map(id => drones[id]).filter(Boolean)
+    : Object.values(drones).filter(d => d?.status === 'CONNECTED' || d?.status === 'DEGRADED');
+
+  const primaryDrone = displayDrones[0];
+  const primaryTel = primaryDrone?.telemetry || {};
+  const primarySafety = primaryDrone ? validateDroneSafety(primaryDrone) : {};
+
+  const executeCommand = (action, params = null) => {
+     const targets = displayDrones.map(d => d.id);
+     if (targets.length > 0) sendCommand(action, params, targets);
+  };
 
   const renderModals = () => {
-    if (!drone) return null;
+    if (!primaryDrone) return null;
+    const drone = primaryDrone;
+    const safety = primarySafety;
     return (
       <>
         {/* ARM MODAL */}
@@ -90,9 +97,9 @@ export default function DashboardView() {
                          <h3 className="good" style={{marginBottom: '10px'}}>READY TO ARM</h3>
                          <button 
                             className="action-btn action-arm press-hold" style={{width: '100%'}}
-                            onMouseDown={() => startHold(() => {setShowArmModal(false); sendCommand(CommandAction.ARM);})}
+                            onMouseDown={() => startHold(() => {setShowArmModal(false); executeCommand(CommandAction.ARM);})}
                             onMouseUp={cancelHold} onMouseLeave={cancelHold}
-                            onTouchStart={(e) => { e.preventDefault(); startHold(() => {setShowArmModal(false); sendCommand(CommandAction.ARM);});}}
+                            onTouchStart={(e) => { e.preventDefault(); startHold(() => {setShowArmModal(false); executeCommand(CommandAction.ARM);});}}
                             onTouchEnd={(e) => { e.preventDefault(); cancelHold();}}
                          >
                             <div className="progress-bg" style={{width: `${holdProgress}%`}}></div>
@@ -131,9 +138,9 @@ export default function DashboardView() {
                          <h3 className="good" style={{marginBottom: '10px'}}>READY FOR TAKEOFF</h3>
                          <button 
                             className="action-btn action-arm press-hold" style={{width: '100%', borderColor: 'var(--primary)', color: '#fff', background: 'var(--primary)'}}
-                            onMouseDown={() => startHold(() => {setShowTakeoffModal(false); sendCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude });})}
+                            onMouseDown={() => startHold(() => {setShowTakeoffModal(false); executeCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude });})}
                             onMouseUp={cancelHold} onMouseLeave={cancelHold}
-                            onTouchStart={(e) => { e.preventDefault(); startHold(() => {setShowTakeoffModal(false); sendCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude });});}}
+                            onTouchStart={(e) => { e.preventDefault(); startHold(() => {setShowTakeoffModal(false); executeCommand(CommandAction.TAKEOFF, { altitude_m: takeoffAltitude });});}}
                             onTouchEnd={(e) => { e.preventDefault(); cancelHold();}}
                          >
                             <div className="progress-bg" style={{width: `${holdProgress}%`}}></div>
@@ -178,76 +185,83 @@ export default function DashboardView() {
         </div>
       </div>
 
-      {!drone ? (
+      {!primaryDrone ? (
         <div className="glass-panel" style={{textAlign: 'center', padding: '40px'}}>
            <h3 style={{color: 'var(--text-muted)'}}>NO DRONES CONNECTED</h3>
            <p style={{marginTop: '10px', color: 'var(--text-muted)'}}>Waiting for heartbeat...</p>
         </div>
       ) : (
         <>
-          {/* Selected Drone Status */}
-          <div className="glass-panel" style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-               <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                 <h2 style={{fontSize: '20px'}}>{drone.id}</h2>
-                 <span className={`status-badge badge-${drone.healthScore === 'HEALTHY' ? 'good' : drone.healthScore === 'WARNING' ? 'warning' : drone.healthScore === 'CRITICAL' ? 'danger' : 'neutral'}`}>
-                   ● {drone.healthScore || 'UNKNOWN'}
-                 </span>
-                 <span className={`status-badge badge-${drone.freshness === 'LIVE' ? 'good' : drone.freshness === 'STALE' ? 'warning' : 'danger'}`}>
-                   <Signal size={12} style={{marginRight: 4}}/> {drone.freshness || 'OFFLINE'}
-                 </span>
-                 <span className={`status-badge badge-${drone.status === 'CONNECTED' ? 'good' : drone.status === 'DEGRADED' ? 'warning' : 'danger'}`}>
-                   ● {(drone.status || 'UNKNOWN').toUpperCase()}
-                 </span>
-               </div>
-               {drone.commandState && drone.commandState.state !== 'IDLE' && (
-                 <span className="text-small" style={{fontWeight: 600, color: 'var(--warning)'}}>
-                   CMD: {drone.commandState.action} ({drone.commandState.state})
-                 </span>
-               )}
-            </div>
+          {/* Swarm Status Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '16px' }}>
+            {displayDrones.map(drone => {
+               const tel = drone?.telemetry || {};
+               return (
+                 <div key={drone.id} className="glass-panel" style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
+                   <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                      <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                        <h2 style={{fontSize: '20px'}}>{drone.id}</h2>
+                        <span className={`status-badge badge-${drone.healthScore === 'HEALTHY' ? 'good' : drone.healthScore === 'WARNING' ? 'warning' : drone.healthScore === 'CRITICAL' ? 'danger' : 'neutral'}`}>
+                          ● {drone.healthScore || 'UNKNOWN'}
+                        </span>
+                        <span className={`status-badge badge-${drone.freshness === 'LIVE' ? 'good' : drone.freshness === 'STALE' ? 'warning' : 'danger'}`}>
+                          <Signal size={12} style={{marginRight: 4}}/> {drone.freshness || 'OFFLINE'}
+                        </span>
+                        <span className={`status-badge badge-${drone.status === 'CONNECTED' ? 'good' : drone.status === 'DEGRADED' ? 'warning' : 'danger'}`}>
+                          ● {(drone.status || 'UNKNOWN').toUpperCase()}
+                        </span>
+                      </div>
+                      {drone.commandState && drone.commandState.state !== 'IDLE' && (
+                        <span className="text-small" style={{fontWeight: 600, color: 'var(--warning)'}}>
+                          CMD: {drone.commandState.action} ({drone.commandState.state})
+                        </span>
+                      )}
+                   </div>
 
-            <div style={{display: 'flex', gap: '16px', flexWrap: 'wrap'}}>
-              <div style={{flex: '1 1 300px'}}>
-                <AttitudeIndicator 
-                   roll={tel.roll} 
-                   pitch={tel.pitch} 
-                   heading={tel.heading} 
-                />
-              </div>
-              
-              <div style={{flex: '1 1 200px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', alignContent: 'center'}}>
-                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                    <span className="metric-label">Mode</span>
-                    <span className="metric-value" style={{fontSize: '16px'}}>{tel.flight_mode || 'UNK'}</span>
+                   <div style={{display: 'flex', gap: '16px', flexWrap: 'wrap'}}>
+                     <div style={{flex: '1 1 120px', minWidth: '120px'}}>
+                       <AttitudeIndicator 
+                          roll={tel.roll} 
+                          pitch={tel.pitch} 
+                          heading={tel.heading} 
+                       />
+                     </div>
+                     
+                     <div style={{flex: '1 1 200px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', alignContent: 'center'}}>
+                        <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                           <span className="metric-label">Mode</span>
+                           <span className="metric-value" style={{fontSize: '14px'}}>{tel.flight_mode || 'UNK'}</span>
+                        </div>
+                        <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                           <span className="metric-label">Armed</span>
+                           <span className={`metric-value ${tel.armed_state === 'ARMED' ? 'danger' : 'good'}`} style={{fontSize: '14px'}}>{tel.armed_state || 'DISARMED'}</span>
+                        </div>
+                        <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                           <span className="metric-label">Battery</span>
+                           <span className="metric-value" style={{fontSize: '14px'}}>{tel.battery_level ?? '--'}%</span>
+                        </div>
+                        <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                           <span className="metric-label">GPS</span>
+                           <span className="metric-value" style={{fontSize: '14px'}}>{tel.gps_valid ? '3D FIX' : 'NO FIX'}</span>
+                        </div>
+                        <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                           <span className="metric-label">Alt</span>
+                           <span className="metric-value" style={{fontSize: '14px'}}>{tel.altitude != null ? tel.altitude.toFixed(1) : '--'}m</span>
+                        </div>
+                        <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
+                           <span className="metric-label">Speed</span>
+                           <span className="metric-value" style={{fontSize: '14px'}}>{tel.ground_speed != null ? tel.ground_speed.toFixed(1) : '--'}m/s</span>
+                        </div>
+                     </div>
+                   </div>
                  </div>
-                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                    <span className="metric-label">Armed</span>
-                    <span className={`metric-value ${tel.armed_state === 'ARMED' ? 'danger' : 'good'}`} style={{fontSize: '16px'}}>{tel.armed_state || 'DISARMED'}</span>
-                 </div>
-                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                    <span className="metric-label">Battery</span>
-                    <span className="metric-value" style={{fontSize: '16px'}}>{tel.battery_level ?? '--'}%</span>
-                 </div>
-                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                    <span className="metric-label">GPS</span>
-                    <span className="metric-value" style={{fontSize: '16px'}}>{tel.gps_valid ? '3D FIX' : 'NO FIX'}</span>
-                 </div>
-                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                    <span className="metric-label">Alt</span>
-                    <span className="metric-value" style={{fontSize: '16px'}}>{tel.altitude != null ? tel.altitude.toFixed(1) : '--'}m</span>
-                 </div>
-                 <div className="metric-card" style={{padding: '8px', background: 'var(--bg-color)', border: 'none'}}>
-                    <span className="metric-label">Speed</span>
-                    <span className="metric-value" style={{fontSize: '16px'}}>{tel.ground_speed != null ? tel.ground_speed.toFixed(1) : '--'}m/s</span>
-                 </div>
-              </div>
-            </div>
+               );
+            })}
           </div>
 
-          {/* Quick Actions */}
+          {/* Quick Actions (Acts on targeted drones) */}
           <div className="glass-panel">
-            <h3 style={{marginBottom: '16px'}}>QUICK ACTIONS</h3>
+            <h3 style={{marginBottom: '16px'}}>QUICK ACTIONS {displayDrones.length > 1 ? '(SWARM)' : ''}</h3>
             
             <div style={{display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center'}}>
                <span style={{fontSize: '13px', fontWeight: 600}}>Alt: {takeoffAltitude.toFixed(1)}m</span>
@@ -255,65 +269,67 @@ export default function DashboardView() {
             </div>
 
             <div className="quick-actions">
-               <button className="action-btn action-arm" onClick={() => setShowArmModal(true)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+               <button className="action-btn action-arm" onClick={() => setShowArmModal(true)} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
                   <ShieldAlert size={16}/> ARM
                </button>
-               <button className="action-btn action-disarm" onClick={() => sendCommand(CommandAction.DISARM)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+               <button className="action-btn action-disarm" onClick={() => executeCommand(CommandAction.DISARM)} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
                   <ShieldCheck size={16}/> DISARM
                </button>
                
-               <button className="action-btn" onClick={() => setShowTakeoffModal(true)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+               <button className="action-btn" onClick={() => setShowTakeoffModal(true)} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
                   <ArrowUp size={16}/> TAKEOFF
                </button>
-               <button className="action-btn" onClick={() => sendCommand(CommandAction.LAND)} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+               <button className="action-btn" onClick={() => executeCommand(CommandAction.LAND)} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
                   <ArrowDown size={16}/> LAND
                </button>
                
-               <button className="action-btn" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'RTL'})} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+               <button className="action-btn" onClick={() => executeCommand(CommandAction.SET_MODE, {mode: 'RTL'})} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
                   <Navigation size={16}/> RTL
                </button>
-               <button className="action-btn" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'HOLD'})} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+               <button className="action-btn" onClick={() => executeCommand(CommandAction.SET_MODE, {mode: 'HOLD'})} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
                   <Activity size={16}/> HOLD
                </button>
-               <button className="action-btn" onClick={() => sendCommand(CommandAction.SET_MODE, {mode: 'ALTITUDE'})} disabled={drone.status !== 'CONNECTED' && drone.status !== 'DEGRADED'}>
+               <button className="action-btn" onClick={() => executeCommand(CommandAction.SET_MODE, {mode: 'ALTITUDE'})} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
                   <Activity size={16}/> ALTITUDE
                </button>
             </div>
           </div>
 
-          {/* Telemetry & Health Container */}
-          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px'}}>
-             <div className="glass-panel">
-                <h3 style={{marginBottom: '16px'}}>TELEMETRY</h3>
-                <div className="kv-list">
-                   <div className="kv-row"><span className="kv-label">Altitude</span><span className="kv-value">{tel.altitude != null ? `${tel.altitude.toFixed(1)} m` : '--'}</span></div>
-                   <div className="kv-row"><span className="kv-label">Rel Alt</span><span className="kv-value">--</span></div>
-                   <div className="kv-row"><span className="kv-label">Gnd Speed</span><span className="kv-value">{tel.ground_speed != null ? `${tel.ground_speed.toFixed(1)} m/s` : '--'}</span></div>
-                   <div className="kv-row"><span className="kv-label">V-Speed</span><span className="kv-value">{tel.vertical_speed != null ? `${tel.vertical_speed.toFixed(1)} m/s` : '--'}</span></div>
-                   <div className="kv-row"><span className="kv-label">Heading</span><span className="kv-value">{tel.heading != null ? `${tel.heading.toFixed(1)}°` : '--'}</span></div>
-                   <div className="kv-row"><span className="kv-label">Air Speed</span><span className="kv-value">{tel.air_speed != null ? `${tel.air_speed.toFixed(1)} m/s` : '--'}</span></div>
-                   <div className="kv-row" style={{gridColumn: '1 / -1', height: '8px', border: 'none'}}></div>
-                   <div className="kv-row"><span className="kv-label">Battery</span><span className="kv-value">{tel.battery_level ?? '--'}%</span></div>
-                   <div className="kv-row"><span className="kv-label">Voltage</span><span className="kv-value">{tel.battery_voltage != null ? `${tel.battery_voltage.toFixed(1)} V` : '--'}</span></div>
-                   <div className="kv-row"><span className="kv-label">Current</span><span className="kv-value">{tel.battery_current != null ? `${tel.battery_current.toFixed(1)} A` : '--'}</span></div>
-                   <div className="kv-row"><span className="kv-label">Satellites</span><span className="kv-value">{tel.satellites ?? '--'}</span></div>
-                   <div className="kv-row"><span className="kv-label">HDOP</span><span className="kv-value">{tel.hdop ?? '--'}</span></div>
-                   <div className="kv-row"><span className="kv-label">VDOP</span><span className="kv-value">{tel.vdop ?? '--'}</span></div>
+          {/* Detailed Telemetry & Health - Render ONLY if a SINGLE drone is targeted */}
+          {displayDrones.length === 1 && (
+             <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px'}}>
+                <div className="glass-panel">
+                   <h3 style={{marginBottom: '16px'}}>DETAILED TELEMETRY</h3>
+                   <div className="kv-list">
+                      <div className="kv-row"><span className="kv-label">Altitude</span><span className="kv-value">{primaryTel.altitude != null ? `${primaryTel.altitude.toFixed(1)} m` : '--'}</span></div>
+                      <div className="kv-row"><span className="kv-label">Rel Alt</span><span className="kv-value">--</span></div>
+                      <div className="kv-row"><span className="kv-label">Gnd Speed</span><span className="kv-value">{primaryTel.ground_speed != null ? `${primaryTel.ground_speed.toFixed(1)} m/s` : '--'}</span></div>
+                      <div className="kv-row"><span className="kv-label">V-Speed</span><span className="kv-value">{primaryTel.vertical_speed != null ? `${primaryTel.vertical_speed.toFixed(1)} m/s` : '--'}</span></div>
+                      <div className="kv-row"><span className="kv-label">Heading</span><span className="kv-value">{primaryTel.heading != null ? `${primaryTel.heading.toFixed(1)}°` : '--'}</span></div>
+                      <div className="kv-row"><span className="kv-label">Air Speed</span><span className="kv-value">{primaryTel.air_speed != null ? `${primaryTel.air_speed.toFixed(1)} m/s` : '--'}</span></div>
+                      <div className="kv-row" style={{gridColumn: '1 / -1', height: '8px', border: 'none'}}></div>
+                      <div className="kv-row"><span className="kv-label">Battery</span><span className="kv-value">{primaryTel.battery_level ?? '--'}%</span></div>
+                      <div className="kv-row"><span className="kv-label">Voltage</span><span className="kv-value">{primaryTel.battery_voltage != null ? `${primaryTel.battery_voltage.toFixed(1)} V` : '--'}</span></div>
+                      <div className="kv-row"><span className="kv-label">Current</span><span className="kv-value">{primaryTel.battery_current != null ? `${primaryTel.battery_current.toFixed(1)} A` : '--'}</span></div>
+                      <div className="kv-row"><span className="kv-label">Satellites</span><span className="kv-value">{primaryTel.satellites ?? '--'}</span></div>
+                      <div className="kv-row"><span className="kv-label">HDOP</span><span className="kv-value">{primaryTel.hdop ?? '--'}</span></div>
+                      <div className="kv-row"><span className="kv-label">VDOP</span><span className="kv-value">{primaryTel.vdop ?? '--'}</span></div>
+                   </div>
                 </div>
-             </div>
 
-             <div className="glass-panel">
-                <h3 style={{marginBottom: '16px'}}>SYSTEM STATUS</h3>
-                <div className="kv-list" style={{display: 'flex', flexDirection: 'column'}}>
-                   <div className="kv-row"><span className="kv-label">FCU Health</span><span className={`kv-value ${tel.system_health === 'OK' ? 'good' : 'danger'}`}>{tel.system_health || 'UNK'}</span></div>
-                   <div className="kv-row"><span className="kv-label">Estimator</span><span className="kv-value">{tel.estimator_status || 'UNK'}</span></div>
-                   <div className="kv-row"><span className="kv-label">GPS Fix</span><span className={`kv-value ${tel.gps_valid ? 'good' : 'danger'}`}>{tel.gps_valid ? '3D FIX' : 'NO FIX'}</span></div>
-                   <div className="kv-row"><span className="kv-label">RC Link</span><span className="kv-value">{tel.rc_status || 'UNK'}</span></div>
-                   <div className="kv-row"><span className="kv-label">Failsafe</span><span className={`kv-value ${drone.status === 'failsafe' ? 'danger' : 'good'}`}>{drone.status === 'failsafe' ? 'ACTIVE' : 'NONE'}</span></div>
-                   <div className="kv-row"><span className="kv-label">Link Age</span><span className={`kv-value ${safety.reason === 'LINK DOWN' ? 'danger' : 'good'}`}>{((nowMs - drone.lastSeen)/1000).toFixed(1)}s</span></div>
+                <div className="glass-panel">
+                   <h3 style={{marginBottom: '16px'}}>SYSTEM STATUS</h3>
+                   <div className="kv-list" style={{display: 'flex', flexDirection: 'column'}}>
+                      <div className="kv-row"><span className="kv-label">FCU Health</span><span className={`kv-value ${primaryTel.system_health === 'OK' ? 'good' : 'danger'}`}>{primaryTel.system_health || 'UNK'}</span></div>
+                      <div className="kv-row"><span className="kv-label">Estimator</span><span className="kv-value">{primaryTel.estimator_status || 'UNK'}</span></div>
+                      <div className="kv-row"><span className="kv-label">GPS Fix</span><span className={`kv-value ${primaryTel.gps_valid ? 'good' : 'danger'}`}>{primaryTel.gps_valid ? '3D FIX' : 'NO FIX'}</span></div>
+                      <div className="kv-row"><span className="kv-label">RC Link</span><span className="kv-value">{primaryTel.rc_status || 'UNK'}</span></div>
+                      <div className="kv-row"><span className="kv-label">Failsafe</span><span className={`kv-value ${primaryDrone.status === 'failsafe' ? 'danger' : 'good'}`}>{primaryDrone.status === 'failsafe' ? 'ACTIVE' : 'NONE'}</span></div>
+                      <div className="kv-row"><span className="kv-label">Link Age</span><span className={`kv-value ${primarySafety.reason === 'LINK DOWN' ? 'danger' : 'good'}`}>{((nowMs - primaryDrone.lastSeen)/1000).toFixed(1)}s</span></div>
+                   </div>
                 </div>
              </div>
-          </div>
+          )}
         </>
       )}
       
