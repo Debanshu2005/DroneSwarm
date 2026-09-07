@@ -70,7 +70,7 @@ def main():
 
     # 1. Kill any existing orphaned servers/relays
     import psutil
-    server_port = 50052  # unique port for drone3, drone2 uses 50051
+    server_port = 50051
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmdline = proc.info.get('cmdline', [])
@@ -78,7 +78,7 @@ def main():
                 if cmdline and any(str(server_port) in arg for arg in cmdline):
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
                     proc.kill()
-            elif cmdline and 'relay.py' in ' '.join(cmdline) and '8082' in ' '.join(cmdline):
+            elif cmdline and 'relay.py' in ' '.join(cmdline) and '8080' in ' '.join(cmdline):
                 print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
                 proc.kill()
         except Exception:
@@ -103,15 +103,10 @@ def main():
 
     print(f"[{drone_cfg.drone_id}] MAVSDK server ready. Starting Relay...")
 
-    # 3. Spawn Relay on unique ports for drone3
-    #    drone2: ws=8080, udp-bind=14551, udp-target=14550
-    #    drone3: ws=8082, udp-bind=14553, udp-target=14552
+    # 3. Spawn Relay on default ports (WS 8080, UDP 14550/14551)
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
     relay_proc = subprocess.Popen(
-        [sys.executable, str(relay_script),
-         "--ws-port", "8082",
-         "--udp-bind-port", "14553",
-         "--udp-target-port", "14552"]
+        [sys.executable, str(relay_script)]
     )
 
     # 4. Monkey-patch mavsdk.System so DroneOS2 connects to the already-running
