@@ -219,7 +219,7 @@ export default function DashboardView() {
                    </div>
 
                    <div style={{display: 'flex', gap: '16px', flexWrap: 'wrap'}}>
-                     <div style={{flex: '1 1 120px', minWidth: '120px'}}>
+                     <div style={{flex: '1 1 240px', minWidth: '240px', display: 'flex', justifyContent: 'center'}}>
                        <AttitudeIndicator 
                           roll={tel.roll} 
                           pitch={tel.pitch} 
