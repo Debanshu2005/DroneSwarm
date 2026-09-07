@@ -47,10 +47,10 @@ The mobile web UI connects to the swarm via WebSockets.
 ### Connecting to Drones
 1. Open the Ground Station app.
 2. Navigate to **Settings (Professional Settings)**.
-3. Under **MULTI-DRONE CONNECTIONS**, input the IP address of your drone(s) and port `8080` (default relay port).
+3. Under **MULTI-DRONE CONNECTIONS**, input the IP address of your drone(s) and port `8080`.
 4. Click **+ ADD DRONE** and then **CONNECT ALL**. 
 
-*Note: The Ground Station stores its default WebSocket URL in local storage (`ws://swarmos-pi.local:8080`).*
+*Note: For a physical swarm deployment, all drones **must** use WebSocket port `8080` and UDP port `14550`/`14551`. The unique IP address of each Raspberry Pi prevents conflicts. The unified UDP port allows the drones to hear each other's P2P Swarm broadcasts over the Wi-Fi network.*
 
 ### Targeting
 In the HUD top bar, you can choose a **TARGET**.
