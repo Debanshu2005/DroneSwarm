@@ -4,7 +4,7 @@ import {
   ShieldCheck, Navigation, ArrowUp, ArrowDown,
   ArrowLeft, Square, RotateCcw, RotateCw, ArrowRight, Menu,
   Battery, Compass, Gauge, AlertTriangle, Lock, Unlock,
-  Plus, Minus, Settings, X, LocateFixed, Radar
+  Plus, Minus, Settings, X, LocateFixed, Radar, Crosshair
 } from 'lucide-react';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
@@ -30,10 +30,34 @@ try {
 }
 
 
-const createDroneIcon = (color, heading) => {
+const createDroneIcon = (color, heading, isArmed) => {
   const rotation = heading != null && !isNaN(heading) ? `transform: rotate(${heading}deg);` : '';
+  const spinStyle = isArmed ? `<style>
+    @keyframes prop-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .spin { animation: prop-spin 0.2s linear infinite; }
+  </style>` : '';
   const svg = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="${rotation} transform-origin: center;">
-      <path d="M12 2L22 20L12 16L2 20L12 2Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+      ${spinStyle}
+      <circle cx="12" cy="12" r="3" fill="${color}" stroke="white" stroke-width="1.5"/>
+      <line x1="7" y1="7" x2="17" y2="17" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+      <line x1="7" y1="17" x2="17" y2="7" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+      <g style="transform-origin: 7px 7px;" class="${isArmed ? 'spin' : ''}">
+         <circle cx="7" cy="7" r="2.5" fill="none" stroke="${color}" stroke-width="0.5"/>
+         <line x1="4.5" y1="7" x2="9.5" y2="7" stroke="${color}" stroke-width="1.5"/>
+      </g>
+      <g style="transform-origin: 17px 7px;" class="${isArmed ? 'spin' : ''}">
+         <circle cx="17" cy="7" r="2.5" fill="none" stroke="${color}" stroke-width="0.5"/>
+         <line x1="14.5" y1="7" x2="19.5" y2="7" stroke="${color}" stroke-width="1.5"/>
+      </g>
+      <g style="transform-origin: 7px 17px;" class="${isArmed ? 'spin' : ''}">
+         <circle cx="7" cy="17" r="2.5" fill="none" stroke="${color}" stroke-width="0.5"/>
+         <line x1="4.5" y1="17" x2="9.5" y2="17" stroke="${color}" stroke-width="1.5"/>
+      </g>
+      <g style="transform-origin: 17px 17px;" class="${isArmed ? 'spin' : ''}">
+         <circle cx="17" cy="17" r="2.5" fill="none" stroke="${color}" stroke-width="0.5"/>
+         <line x1="14.5" y1="17" x2="19.5" y2="17" stroke="${color}" stroke-width="1.5"/>
+      </g>
+      <polygon points="12,2 14,6 10,6" fill="white" />
     </svg>`;
   return L.divIcon({ html: svg, className: 'custom-drone-icon', iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -16] });
 };
@@ -53,6 +77,7 @@ export default function DroneControlView({ setView }) {
 
   const [mapStyle, setMapStyle] = useState('satellite');
   const [centerMode, setCenterMode] = useState('DRONE');
+  const [centerTarget, setCenterTarget] = useState(null);
   
   const tiles = {
      street: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -201,6 +226,13 @@ export default function DroneControlView({ setView }) {
         ? 'Requesting pilot GPS...'
         : location.error || 'Pilot GPS unavailable';
 
+  const handleCenter = () => {
+     if (mapCenter) {
+        setCenterTarget([...mapCenter]);
+        setTimeout(() => setCenterTarget(null), 100);
+     }
+  };
+
   return (
     <div className="drone-control-view">
       {/* BACKGROUND MAP LAYER */}
@@ -213,7 +245,7 @@ export default function DroneControlView({ setView }) {
          }>
              <MapContainer center={mapCenter} zoom={18} style={{ height: '100%', width: '100%' }} zoomControl={false}>
             <TileLayer url={tiles[mapStyle]} attribution="" />
-            <RecenterAutomatically center={mapCenter} />
+            <RecenterAutomatically center={centerTarget || mapCenter} />
             
             {droneIds.map(id => {
                const d = drones[id];
@@ -222,7 +254,7 @@ export default function DroneControlView({ setView }) {
                
                const isTargeted = targetMode === 'ALL' || targetDroneId === id;
                const color = isTargeted ? '#10B981' : '#3B82F6';
-               const icon = createDroneIcon(color, t.heading);
+               const icon = createDroneIcon(color, t.heading, t.armed_state === 'ARMED');
                
                return (
                   <React.Fragment key={id}>
@@ -295,6 +327,10 @@ export default function DroneControlView({ setView }) {
                  <button className="hud-btn hud-gps-btn" onClick={location.requestLocation}>
                     <LocateFixed size={14}/> PILOT GPS
                  </button>
+
+                 <button className="hud-btn" onClick={handleCenter}>
+                    <Crosshair size={14}/> RECENTER
+                 </button>
              </div>
              
              <div className="hud-top-right">
@@ -313,9 +349,36 @@ export default function DroneControlView({ setView }) {
                 <div className={`hud-status-text ${tel.armed_state === 'ARMED' ? 'danger-text' : 'good-text'}`}>
                    {tel.armed_state || 'DISARMED'}
                 </div>
-                <div className="hud-status-text muted">
-                   {tel.flight_mode || '---'}
-                </div>
+                 <div className="hud-status-text muted" style={{ display: 'flex', alignItems: 'center' }}>
+                    <select
+                        value={tel.flight_mode || ''}
+                        onChange={(e) => requestCommand(CommandAction.SET_MODE, { mode: e.target.value })}
+                        style={{
+                            background: 'transparent',
+                            color: 'inherit',
+                            border: '1px solid var(--border)',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 'bold',
+                            outline: 'none',
+                            padding: '2px 4px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        {!tel.flight_mode && <option value="" disabled>---</option>}
+                        <option value="STABILIZE">STABILIZE</option>
+                        <option value="LOITER">LOITER</option>
+                        <option value="ALT_HOLD">ALT_HOLD</option>
+                        <option value="GUIDED">GUIDED</option>
+                        <option value="AUTO">AUTO</option>
+                        <option value="RTL">RTL</option>
+                        <option value="LAND">LAND</option>
+                        <option value="ACRO">ACRO</option>
+                        {tel.flight_mode && !["STABILIZE", "LOITER", "ALT_HOLD", "GUIDED", "AUTO", "RTL", "LAND", "ACRO"].includes(tel.flight_mode) &&
+                            <option value={tel.flight_mode}>{tel.flight_mode}</option>
+                        }
+                    </select>
+                 </div>
                 <div className={`hud-mode-pill ${indoorMode ? 'warning-bg' : 'primary-bg'}`}>
                    {indoorMode ? 'INDOOR' : 'OUTDOOR'}
                 </div>

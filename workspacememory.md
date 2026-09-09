@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-09-07T04:46:41.425Z
+Generated: 2026-09-09T05:25:15.461Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -18,14 +18,14 @@ Structured manifest: workspace.json
 - Graphify graph: not available yet
 - Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: start_drone2.py
+- Active file in focus: mobile/.gitignore
 - Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
-- Suggested starting points: start_drone2.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
+- Suggested starting points: mobile/.gitignore, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
 ## Current Workspace
-- Active file: start_drone2.py
-- Tracked files in snapshot: 2198
-- Top-level areas: venv (1780), mobile (139), DroneOS (72), DroneOS2 (72), DroneOS1 (71), [root] (26), deploy (20), tests (6)
-- Primary file types: .py (1681), [no extension] (200), .txt (53), .typed (29), .png (26), .jsx (24), .js (20), .yaml (15)
+- Active file: mobile/.gitignore
+- Tracked files in snapshot: 2273
+- Top-level areas: venv (1780), mobile (139), DroneOS (72), DroneOS2 (72), DroneOS3 (72), DroneOS1 (71), [root] (28), deploy (21)
+- Primary file types: .py (1748), [no extension] (200), .txt (54), .typed (29), .png (26), .jsx (24), .js (20), .yaml (20)
 - Key files: .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md, mobile/.gitignore, mobile/README.md, mobile/android/.gitignore
 ## Package Snapshot
 - Package metadata unavailable: package.json was not found.
@@ -33,7 +33,7 @@ Structured manifest: workspace.json
 - Logged change events: 1
 - Change mix: save (1)
 - Remembered file snapshots: 1
-- Working tree summary: 1 untracked
+- Working tree summary: 1 modified
 ## Tracked Snapshots
 - DroneOS/tests/test_terminal_controller.py | 246 lines | 8805 chars | hash be871eb34242
   Last snapshot: 2026-08-29T12:17:18.957Z
@@ -51,9 +51,9 @@ Structured manifest: workspace.json
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-09-06 c4c4350 fix: correct baud rate for Drone 2 to 115200
-- Working tree summary: 1 untracked
-- ?? app-debug.apk
+- HEAD: 2026-09-07 f08a3f8 Docs: Update USER_GUIDE with physical swarm port requirements
+- Working tree summary: 1 modified
+- M workspacememory.md
 
 ## GitHub Snapshot
 GitHub Repository: Debanshu2005/DroneSwarm
@@ -61,8 +61,8 @@ Visibility: public | Default branch: main
 Stars: 0 | Forks: 0 | Open issues: 0
 
 Latest commit on main:
-- c4c4350 by Debanshu2005 on 2026-09-06
-  fix: correct baud rate for Drone 2 to 115200
+- f08a3f8 by Debanshu2005 on 2026-09-07
+  Docs: Update USER_GUIDE with physical swarm port requirements
 
 URL: https://github.com/Debanshu2005/DroneSwarm
 

@@ -15,10 +15,34 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-const createDroneIcon = (color, heading) => {
+const createDroneIcon = (color, heading, isArmed) => {
   const rotation = heading !== undefined && heading !== null && !isNaN(heading) ? `transform: rotate(${heading}deg);` : '';
+  const spinStyle = isArmed ? `<style>
+    @keyframes prop-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .spin { animation: prop-spin 0.2s linear infinite; }
+  </style>` : '';
   const svg = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="${rotation} transform-origin: center;">
-      <path d="M12 2L22 20L12 16L2 20L12 2Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+      ${spinStyle}
+      <circle cx="12" cy="12" r="3" fill="${color}" stroke="white" stroke-width="1.5"/>
+      <line x1="7" y1="7" x2="17" y2="17" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+      <line x1="7" y1="17" x2="17" y2="7" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+      <g style="transform-origin: 7px 7px;" class="${isArmed ? 'spin' : ''}">
+         <circle cx="7" cy="7" r="2.5" fill="none" stroke="${color}" stroke-width="0.5"/>
+         <line x1="4.5" y1="7" x2="9.5" y2="7" stroke="${color}" stroke-width="1.5"/>
+      </g>
+      <g style="transform-origin: 17px 7px;" class="${isArmed ? 'spin' : ''}">
+         <circle cx="17" cy="7" r="2.5" fill="none" stroke="${color}" stroke-width="0.5"/>
+         <line x1="14.5" y1="7" x2="19.5" y2="7" stroke="${color}" stroke-width="1.5"/>
+      </g>
+      <g style="transform-origin: 7px 17px;" class="${isArmed ? 'spin' : ''}">
+         <circle cx="7" cy="17" r="2.5" fill="none" stroke="${color}" stroke-width="0.5"/>
+         <line x1="4.5" y1="17" x2="9.5" y2="17" stroke="${color}" stroke-width="1.5"/>
+      </g>
+      <g style="transform-origin: 17px 17px;" class="${isArmed ? 'spin' : ''}">
+         <circle cx="17" cy="17" r="2.5" fill="none" stroke="${color}" stroke-width="0.5"/>
+         <line x1="14.5" y1="17" x2="19.5" y2="17" stroke="${color}" stroke-width="1.5"/>
+      </g>
+      <polygon points="12,2 14,6 10,6" fill="white" />
     </svg>`;
   return L.divIcon({
     html: svg,
@@ -161,7 +185,7 @@ export default function MapView() {
 
                const isSelected = selectedDrones.has(drone.id);
                const color = getColorForDrone(drone, isSelected);
-               const icon = createDroneIcon(color, t.heading);
+               const icon = createDroneIcon(color, t.heading, t.armed_state === 'ARMED');
                const freshnessText = drone.freshness || (drone.status === 'OFFLINE' ? 'OFFLINE' : 'LIVE');
                const opacity = (drone.status === 'OFFLINE' || drone.freshness === 'OFFLINE') ? 0.5 : 1.0;
 
