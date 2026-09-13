@@ -63,6 +63,14 @@ def test_intent_expiration():
     # Mission should win because Collision is expired
     assert winner.source == IntentSource.MISSION
 
+def test_arbiter_idle_is_noop():
+    arbiter = Arbiter()
+
+    winner = arbiter.select_winner({})
+
+    assert winner.source == IntentSource.IDLE
+    assert winner.action == IntentAction.IDLE
+
 def test_safety_filter_limits():
     sf = SafetyFilter(config=None)
     
@@ -88,4 +96,8 @@ async def test_command_ownership():
     intent = FlightIntent(IntentSource.SAFETY, IntentAction.EMERGENCY_KILL)
     await cw.execute(intent)
     mock_fc.kill.assert_called_once()
+
+    # Idle should not force HOLD/HOVER.
+    await cw.execute(FlightIntent(IntentSource.IDLE, IntentAction.IDLE))
+    mock_fc.hover.assert_not_called()
 

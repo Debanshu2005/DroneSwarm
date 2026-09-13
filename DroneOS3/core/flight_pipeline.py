@@ -17,7 +17,7 @@ class Arbiter:
                 valid_intents.append(intent)
 
         if not valid_intents:
-            return FlightIntent(IntentSource.IDLE, IntentAction.HOVER)
+            return FlightIntent(IntentSource.IDLE, IntentAction.IDLE)
 
         # Sort by IntentSource enum value (highest wins)
         valid_intents.sort(key=lambda i: i.source, reverse=True)
@@ -68,6 +68,9 @@ class CommandWriter:
             if intent.action == IntentAction.EMERGENCY_KILL:
                 if hasattr(self.fc, 'kill'):
                     await self.fc.kill()
+            
+            elif intent.action == IntentAction.IDLE:
+                return
                     
             elif intent.action == IntentAction.HOVER:
                 await self.fc.hover()

@@ -28,6 +28,7 @@ class PX4FlightController(IFlightController):
         self._connected = False
         self._telemetry = self._empty_telemetry()
         self._active_tasks = set()
+        self._mode_keepalive_task = None
         self._injections = {}  # Store active TEST_INJECT states
 
     async def connect(self) -> bool:
@@ -166,6 +167,7 @@ class PX4FlightController(IFlightController):
 
     async def disconnect(self) -> None:
         self._connected = False
+        self._stop_mode_keepalive()
         for task in self._active_tasks:
             task.cancel()
         self._active_tasks.clear()
@@ -255,6 +257,7 @@ class PX4FlightController(IFlightController):
     async def land(self) -> bool:
         if not self._connected: return False
         try:
+            self._stop_mode_keepalive()
             await self.client.action.land()
             return True
         except Exception as e:
@@ -269,6 +272,7 @@ class PX4FlightController(IFlightController):
             logger.warning("PX4 RTL rejected: Home position invalid")
             return False
         try:
+            self._stop_mode_keepalive()
             current_alt = self._telemetry.altitude if self._telemetry.altitude is not None else 5.0
             safe_rtl_alt = max(5.0, current_alt)
             try:
@@ -287,6 +291,7 @@ class PX4FlightController(IFlightController):
     async def hover(self) -> bool:
         if not self._connected: return False
         try:
+            self._stop_mode_keepalive()
             await self.client.action.hold()
             return True
         except (OSError, RuntimeError) as e:
@@ -305,6 +310,7 @@ class PX4FlightController(IFlightController):
     async def goto_location(self, lat: float, lon: float, alt: float, yaw: float = 0.0) -> bool:
         if not self._connected: return False
         try:
+            self._stop_mode_keepalive()
             # alt is passed as relative altitude. MAVSDK expects absolute altitude (AMSL).
             home_abs_alt = 0.0
             async for terrain_info in self.client.telemetry.home():
@@ -322,6 +328,7 @@ class PX4FlightController(IFlightController):
     async def goto_local_ned(self, north: float, east: float, down: float, yaw: float = 0.0) -> bool:
         if not self._connected: return False
         try:
+            self._stop_mode_keepalive()
             from mavsdk.offboard import PositionNedYaw
             await self.client.offboard.set_position_ned(PositionNedYaw(north, east, down, yaw))
             try:
@@ -335,6 +342,7 @@ class PX4FlightController(IFlightController):
 
     async def move_velocity(self, vx: float, vy: float, vz: float, duration: float, yaw_rate: float = 0.0) -> bool:
         if not self._connected: return False
+        self._stop_mode_keepalive()
         
         telemetry = await self.get_telemetry()
         mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
@@ -365,6 +373,7 @@ class PX4FlightController(IFlightController):
 
     async def move_velocity_ned(self, north: float, east: float, down: float, duration: float, yaw_rate: float = 0.0) -> bool:
         if not self._connected: return False
+        self._stop_mode_keepalive()
         
         telemetry = await self.get_telemetry()
         mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
@@ -391,6 +400,7 @@ class PX4FlightController(IFlightController):
     async def stop_movement(self) -> bool:
         if not self._connected: return False
         try:
+            self._stop_mode_keepalive()
             telemetry = await self.get_telemetry()
             mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
             use_manual = (not telemetry.gps_valid) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
@@ -417,6 +427,35 @@ class PX4FlightController(IFlightController):
             logger.error(f"Failed to read home position: {e}")
         return None
 
+    def _stop_mode_keepalive(self) -> None:
+        task = self._mode_keepalive_task
+        if task and not task.done():
+            task.cancel()
+        self._mode_keepalive_task = None
+
+    def _start_mode_keepalive(self, mode: str) -> None:
+        self._stop_mode_keepalive()
+        task = asyncio.create_task(self._mode_keepalive_loop(mode))
+        self._mode_keepalive_task = task
+        self._active_tasks.add(task)
+        task.add_done_callback(self._active_tasks.discard)
+
+    async def _mode_keepalive_loop(self, mode: str) -> None:
+        while self._connected:
+            try:
+                if mode == "OFFBOARD":
+                    await self.client.offboard.set_velocity_body(
+                        VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+                    )
+                elif mode == "ALTCTL":
+                    await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
+                await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning(f"{mode} keepalive stopped: {e}")
+                return
+
     async def set_mode(self, mode: str) -> bool:
         if not self._connected:
             raise RuntimeError("Not connected")
@@ -425,17 +464,24 @@ class PX4FlightController(IFlightController):
         
         try:
             if mode_upper in ["RTL", "RETURN", "RETURN_TO_LAUNCH"]:
+                self._stop_mode_keepalive()
                 await self.client.action.return_to_launch()
                 expected_modes = {"RTL", "RETURN", "RETURN_TO_LAUNCH"}
             elif mode_upper == "LAND":
+                self._stop_mode_keepalive()
                 await self.client.action.land()
                 expected_modes = {"LAND"}
             elif mode_upper in ["LOITER", "HOLD", "POSHOLD", "POSITION", "POSCTL"]:
+                self._stop_mode_keepalive()
                 await self.client.action.hold()
                 expected_modes = {"LOITER", "HOLD", "POSHOLD", "POSITION", "POSCTL"}
             elif mode_upper in ["ALTCTL", "ALT_HOLD", "ALTHOLD", "ALTITUDE"]:
-                await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
+                self._stop_mode_keepalive()
+                for _ in range(3):
+                    await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
+                    await asyncio.sleep(0.05)
                 await self.client.manual_control.start_altitude_control()
+                self._start_mode_keepalive("ALTCTL")
                 expected_modes = {"ALTCTL", "ALT_HOLD", "ALTHOLD", "ALTITUDE"}
             elif mode_upper in ["MANUAL", "STABILIZE", "STABILIZED", "ACRO"]:
                 raise RuntimeError(
@@ -454,10 +500,12 @@ class PX4FlightController(IFlightController):
             elif mode_upper in ["GUIDED", "OFFBOARD"]:
                 # In ArduPilot, GUIDED is equivalent to PX4 OFFBOARD.
                 # MAVSDK requires a setpoint before starting offboard mode.
+                self._stop_mode_keepalive()
                 await self.client.offboard.set_velocity_body(
                     VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
                 )
                 await self.client.offboard.start()
+                self._start_mode_keepalive("OFFBOARD")
                 expected_modes = {"GUIDED", "OFFBOARD"}
             else:
                 # Based on audit, MAVSDK-Python action class in this environment
@@ -466,11 +514,12 @@ class PX4FlightController(IFlightController):
             
             # Verify mode change via telemetry
             last_seen_mode = None
+            last_status_text = None
             for _ in range(30):
-                import asyncio
                 await asyncio.sleep(0.1)
                 t = await self.get_telemetry()
                 last_seen_mode = t.flight_mode
+                last_status_text = getattr(t, "status_text", None)
                 telemetry_mode = (t.flight_mode or "").upper().replace("-", "_").replace(" ", "_")
                 if telemetry_mode and telemetry_mode in expected_modes:
                     return True
@@ -478,7 +527,7 @@ class PX4FlightController(IFlightController):
             logger.warning(
                 f"Mode command for {mode} was accepted by MAVSDK, but telemetry did not "
                 f"confirm it within 3 seconds. Last telemetry mode={last_seen_mode or 'UNKNOWN'}, "
-                f"expected={sorted(expected_modes)}."
+                f"expected={sorted(expected_modes)}, status_text={last_status_text or 'NONE'}."
             )
             return True
             
