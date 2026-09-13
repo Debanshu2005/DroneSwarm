@@ -436,10 +436,20 @@ class PX4FlightController(IFlightController):
             elif mode_upper in ["ALTCTL", "ALT_HOLD", "ALTHOLD"]:
                 await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
                 await self.client.manual_control.start_altitude_control()
-            elif mode_upper in ["MANUAL", "STABILIZED", "ACRO"]:
-                # Fallback to altitude control for manual without GPS
-                await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
-                await self.client.manual_control.start_altitude_control()
+            elif mode_upper in ["MANUAL", "STABILIZE", "STABILIZED", "ACRO"]:
+                raise RuntimeError(
+                    f"{mode} cannot currently be set via this interface - MAVSDK's "
+                    "installed Action API does not expose a generic custom-mode-set "
+                    "call, and this function will not guess a raw mode-encoding "
+                    "value on a potentially-armed vehicle. Set this mode via the "
+                    "transmitter or GCS directly for now."
+                )
+            elif mode_upper in ["AUTO", "MISSION"]:
+                raise RuntimeError(
+                    "AUTO mode requires an uploaded mission and must be started via "
+                    "the mission plugin (mission.start_mission()), not set_mode(). "
+                    "No mission-start integration exists in set_mode() currently."
+                )
             elif mode_upper in ["GUIDED", "OFFBOARD"]:
                 # In ArduPilot, GUIDED is equivalent to PX4 OFFBOARD.
                 # MAVSDK requires a setpoint before starting offboard mode.
@@ -448,8 +458,6 @@ class PX4FlightController(IFlightController):
                 )
                 await self.client.offboard.start()
             else:
-                # Based on audit, MAVSDK-Python action class in this environment
-                # does NOT expose set_custom_mode. We cannot fake it.
                 raise RuntimeError(f"Mode {mode} is not supported by the current flight-control interface.")
             
             # Verify mode change via telemetry
@@ -460,8 +468,8 @@ class PX4FlightController(IFlightController):
                 if t.flight_mode and mode_upper in t.flight_mode.upper():
                     return True
                     
-            logger.warning(f"Mode command sent, but telemetry didn't confirm {mode} within 1 second.")
-            return True # Command didn't error, just UI might not show it yet.
+            logger.error(f"Mode command sent, but telemetry never confirmed {mode} was reached.")
+            return False
             
         except Exception as e:
             if isinstance(e, RuntimeError):

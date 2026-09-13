@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-09-09T05:25:15.461Z
+Generated: 2026-09-13T05:37:56.011Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -18,11 +18,11 @@ Structured manifest: workspace.json
 - Graphify graph: not available yet
 - Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: mobile/.gitignore
+- Active file in focus: DroneOS1/core/collision_avoidance.py
 - Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
-- Suggested starting points: mobile/.gitignore, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
+- Suggested starting points: DroneOS1/core/collision_avoidance.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
 ## Current Workspace
-- Active file: mobile/.gitignore
+- Active file: DroneOS1/core/collision_avoidance.py
 - Tracked files in snapshot: 2273
 - Top-level areas: venv (1780), mobile (139), DroneOS (72), DroneOS2 (72), DroneOS3 (72), DroneOS1 (71), [root] (28), deploy (21)
 - Primary file types: .py (1748), [no extension] (200), .txt (54), .typed (29), .png (26), .jsx (24), .js (20), .yaml (20)
@@ -51,7 +51,7 @@ Structured manifest: workspace.json
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-09-07 f08a3f8 Docs: Update USER_GUIDE with physical swarm port requirements
+- HEAD: 2026-09-09 7d64d43 feat: changed the pointer to a drone shpaed pointer and implemented mode switching in the fc section itself
 - Working tree summary: 1 modified
 - M workspacememory.md
 
@@ -61,8 +61,8 @@ Visibility: public | Default branch: main
 Stars: 0 | Forks: 0 | Open issues: 0
 
 Latest commit on main:
-- f08a3f8 by Debanshu2005 on 2026-09-07
-  Docs: Update USER_GUIDE with physical swarm port requirements
+- 7d64d43 by Debanshu2005 on 2026-09-09
+  feat: changed the pointer to a drone shpaed pointer and implemented mode switching in the fc section itself
 
 URL: https://github.com/Debanshu2005/DroneSwarm
 

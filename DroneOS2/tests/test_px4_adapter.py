@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from DroneOS2.adapters.px4_adapter import PX4FlightController
 from DroneOS2.shared.config.models import FlightConfig
@@ -105,3 +105,44 @@ async def test_arm_rejection_includes_prearm_context(base_config):
     assert "PreArm: GPS fix required" in message
     assert "is_armable=False" in message
     assert "gps_valid=False" in message
+
+@pytest.mark.asyncio
+async def test_set_mode_timeout_returns_false(base_config):
+    fc = PX4FlightController("drone1", base_config)
+    fc._connected = True
+    fc.client = MagicMock()
+    fc.client.action.hold = AsyncMock()
+    
+    # Mock get_telemetry to always return a mode that is NOT the target mode
+    async def mock_get_telemetry():
+        return TelemetryData(flight_mode="STABILIZE")
+    fc.get_telemetry = mock_get_telemetry
+    
+    # Attempt to set a mode that won't raise an error but will timeout
+    result = await fc.set_mode("LOITER")
+    
+    assert result is False
+    fc.client.action.hold.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_set_mode_raises_on_unsupported_modes(base_config):
+    fc = PX4FlightController("drone1", base_config)
+    fc._connected = True
+    fc.client = MagicMock()
+    fc.client.action.hold = AsyncMock()
+    
+    # AUTO should raise with a specific message
+    with pytest.raises(RuntimeError) as exc_info_auto:
+        await fc.set_mode("AUTO")
+    assert "AUTO mode requires an uploaded mission" in str(exc_info_auto.value)
+    
+    # STABILIZE should raise with a specific message
+    with pytest.raises(RuntimeError) as exc_info_stab:
+        await fc.set_mode("STABILIZE")
+    assert "cannot currently be set via this interface" in str(exc_info_stab.value)
+    
+    # Ensure no action or manual_control methods were called
+    fc.client.action.hold.assert_not_called()
+    fc.client.manual_control.set_manual_control_input.assert_not_called()
+    fc.client.manual_control.start_altitude_control.assert_not_called()
+
