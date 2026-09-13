@@ -107,6 +107,33 @@ async def test_arm_rejection_includes_prearm_context(base_config):
     assert "gps_valid=False" in message
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("requested_mode", "reported_mode"),
+    [
+        ("LOITER", "HOLD"),
+        ("RTL", "RETURN_TO_LAUNCH"),
+        ("GUIDED", "OFFBOARD"),
+        ("ALTITUDE", "ALTCTL"),
+    ],
+)
+async def test_set_mode_accepts_px4_telemetry_aliases(base_config, requested_mode, reported_mode):
+    fc = PX4FlightController("drone1", base_config)
+    fc._connected = True
+    fc.client = MagicMock()
+    fc.client.action.hold = AsyncMock()
+    fc.client.action.return_to_launch = AsyncMock()
+    fc.client.offboard.set_velocity_body = AsyncMock()
+    fc.client.offboard.start = AsyncMock()
+    fc.client.manual_control.set_manual_control_input = AsyncMock()
+    fc.client.manual_control.start_altitude_control = AsyncMock()
+
+    async def mock_get_telemetry():
+        return TelemetryData(flight_mode=reported_mode)
+    fc.get_telemetry = mock_get_telemetry
+
+    assert await fc.set_mode(requested_mode) is True
+
+@pytest.mark.asyncio
 async def test_set_mode_timeout_raises_runtime_error(base_config):
     fc = PX4FlightController("drone1", base_config)
     fc._connected = True
@@ -145,4 +172,3 @@ async def test_set_mode_raises_on_unsupported_modes(base_config):
     fc.client.action.hold.assert_not_called()
     fc.client.manual_control.set_manual_control_input.assert_not_called()
     fc.client.manual_control.start_altitude_control.assert_not_called()
-

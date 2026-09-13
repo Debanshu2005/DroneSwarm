@@ -424,18 +424,23 @@ class PX4FlightController(IFlightController):
     async def set_mode(self, mode: str) -> bool:
         if not self._connected:
             raise RuntimeError("Not connected")
-        mode_upper = mode.upper()
+        mode_upper = mode.upper().replace("-", "_").replace(" ", "_")
+        expected_modes = set()
         
         try:
             if mode_upper in ["RTL", "RETURN", "RETURN_TO_LAUNCH"]:
                 await self.client.action.return_to_launch()
+                expected_modes = {"RTL", "RETURN", "RETURN_TO_LAUNCH"}
             elif mode_upper == "LAND":
                 await self.client.action.land()
+                expected_modes = {"LAND"}
             elif mode_upper in ["LOITER", "HOLD", "POSHOLD", "POSITION", "POSCTL"]:
                 await self.client.action.hold()
-            elif mode_upper in ["ALTCTL", "ALT_HOLD", "ALTHOLD"]:
+                expected_modes = {"LOITER", "HOLD", "POSHOLD", "POSITION", "POSCTL"}
+            elif mode_upper in ["ALTCTL", "ALT_HOLD", "ALTHOLD", "ALTITUDE"]:
                 await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
                 await self.client.manual_control.start_altitude_control()
+                expected_modes = {"ALTCTL", "ALT_HOLD", "ALTHOLD", "ALTITUDE"}
             elif mode_upper in ["MANUAL", "STABILIZE", "STABILIZED", "ACRO"]:
                 raise RuntimeError(
                     f"{mode} cannot currently be set via this interface - MAVSDK's "
@@ -457,6 +462,7 @@ class PX4FlightController(IFlightController):
                     VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
                 )
                 await self.client.offboard.start()
+                expected_modes = {"GUIDED", "OFFBOARD"}
             else:
                 raise RuntimeError(f"Mode {mode} is not supported by the current flight-control interface.")
             
@@ -465,7 +471,8 @@ class PX4FlightController(IFlightController):
                 import asyncio
                 await asyncio.sleep(0.1)
                 t = await self.get_telemetry()
-                if t.flight_mode and mode_upper in t.flight_mode.upper():
+                telemetry_mode = (t.flight_mode or "").upper().replace("-", "_").replace(" ", "_")
+                if telemetry_mode and telemetry_mode in expected_modes:
                     return True
                     
             logger.error(f"Mode command sent, but telemetry never confirmed {mode} was reached.")

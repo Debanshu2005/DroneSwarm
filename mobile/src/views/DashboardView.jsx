@@ -283,14 +283,14 @@ export default function DashboardView() {
                   <ArrowDown size={16}/> LAND
                </button>
                
-               <button className="action-btn" onClick={() => executeCommand(CommandAction.SET_MODE, {mode: 'RTL'})} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
+               <button className="action-btn" onClick={() => executeCommand(CommandAction.RTL)} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
                   <Navigation size={16}/> RTL
                </button>
-               <button className="action-btn" onClick={() => executeCommand(CommandAction.SET_MODE, {mode: 'HOLD'})} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
+               <button className="action-btn" onClick={() => executeCommand(CommandAction.HOVER)} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
                   <Activity size={16}/> HOLD
                </button>
-               <button className="action-btn" onClick={() => executeCommand(CommandAction.SET_MODE, {mode: 'ALTITUDE'})} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
-                  <Activity size={16}/> ALTITUDE
+               <button className="action-btn" onClick={() => executeCommand(CommandAction.SET_MODE, {mode: 'ALTCTL'})} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
+                  <Activity size={16}/> ALTCTL
                </button>
             </div>
           </div>

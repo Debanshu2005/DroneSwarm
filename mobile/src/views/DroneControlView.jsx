@@ -366,15 +366,12 @@ export default function DroneControlView({ setView }) {
                         }}
                     >
                         {!tel.flight_mode && <option value="" disabled>---</option>}
-                        <option value="STABILIZE">STABILIZE</option>
-                        <option value="LOITER">LOITER</option>
-                        <option value="ALT_HOLD">ALT_HOLD</option>
-                        <option value="GUIDED">GUIDED</option>
-                        <option value="AUTO">AUTO</option>
-                        <option value="RTL">RTL</option>
+                        <option value="HOLD">HOLD</option>
+                        <option value="ALTCTL">ALTCTL</option>
+                        <option value="OFFBOARD">OFFBOARD</option>
+                        <option value="RETURN_TO_LAUNCH">RTL</option>
                         <option value="LAND">LAND</option>
-                        <option value="ACRO">ACRO</option>
-                        {tel.flight_mode && !["STABILIZE", "LOITER", "ALT_HOLD", "GUIDED", "AUTO", "RTL", "LAND", "ACRO"].includes(tel.flight_mode) &&
+                        {tel.flight_mode && !["HOLD", "ALTCTL", "OFFBOARD", "RETURN_TO_LAUNCH", "LAND"].includes(tel.flight_mode) &&
                             <option value={tel.flight_mode}>{tel.flight_mode}</option>
                         }
                     </select>
