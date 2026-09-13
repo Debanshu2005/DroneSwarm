@@ -347,7 +347,8 @@ class PX4FlightController(IFlightController):
         telemetry = await self.get_telemetry()
         mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
         
-        use_manual = (not telemetry.gps_valid) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
+        has_nav = telemetry.gps_valid or telemetry.local_pos_valid
+        use_manual = (not has_nav) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
 
         try:
             if use_manual:
@@ -378,7 +379,8 @@ class PX4FlightController(IFlightController):
         telemetry = await self.get_telemetry()
         mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
         
-        use_manual = (not telemetry.gps_valid) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
+        has_nav = telemetry.gps_valid or telemetry.local_pos_valid
+        use_manual = (not has_nav) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
 
         try:
             if use_manual:
@@ -403,7 +405,8 @@ class PX4FlightController(IFlightController):
             self._stop_mode_keepalive()
             telemetry = await self.get_telemetry()
             mode_upper = telemetry.flight_mode.upper() if telemetry.flight_mode else ""
-            use_manual = (not telemetry.gps_valid) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
+            has_nav = telemetry.gps_valid or telemetry.local_pos_valid
+            use_manual = (not has_nav) or (mode_upper in ["ALTCTL", "MANUAL", "STABILIZED"])
             
             if use_manual:
                 await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
