@@ -486,7 +486,7 @@ class PX4FlightController(IFlightController):
                 raise RuntimeError(f"Mode {mode} is not supported by the current flight-control interface.")
             
             # Verify mode change via telemetry
-            for _ in range(10):
+            for _ in range(30):
                 import asyncio
                 await asyncio.sleep(0.1)
                 t = await self.get_telemetry()
@@ -494,7 +494,7 @@ class PX4FlightController(IFlightController):
                     return True
                     
             logger.error(f"Mode command sent, but telemetry never confirmed {mode} was reached.")
-            return False
+            raise RuntimeError(f"Mode change to {mode} timed out waiting for telemetry confirmation.")
             
         except Exception as e:
             if isinstance(e, RuntimeError):
