@@ -658,6 +658,7 @@ export default function DroneControlView({ setView }) {
             let bg = 'rgba(255,255,255,0.85)';
             if (cs.state === 'ACCEPTED') { color = 'var(--success)'; bg = 'rgba(16, 185, 129, 0.1)'; }
             if (cs.state === 'FAILED' || cs.state === 'REJECTED' || cs.state === 'TIMEOUT') { color = 'var(--danger)'; bg = 'rgba(239, 68, 68, 0.1)'; }
+            if (cs.state === 'NO_REPLY') { color = 'var(--warning)'; bg = 'rgba(245, 158, 11, 0.1)'; }
             if (cs.state === 'MAVSDK_REQUESTED' || cs.state === 'BACKEND_RECEIVED') { color = 'var(--warning)'; }
 
             return (

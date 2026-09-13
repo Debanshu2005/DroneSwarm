@@ -455,7 +455,7 @@ export const DroneProvider = ({ children }) => {
     });
   };
 
-  // Command Timeout Monitor
+  // Command Reply Monitor
   useEffect(() => {
     const timeoutMonitor = setInterval(() => {
        const now = Date.now();
@@ -464,13 +464,13 @@ export const DroneProvider = ({ children }) => {
           const nextDrones = { ...prev };
           for (const [id, drone] of Object.entries(nextDrones)) {
              if (drone.commandState && drone.commandState.state === 'SENDING') {
-                if (now - drone.commandState.timestamp > 5000) { // 5s timeout
+                if (now - drone.commandState.timestamp > 20000) {
                    nextDrones[id] = {
                       ...drone,
-                      commandState: { ...drone.commandState, state: 'TIMEOUT' }
+                      commandState: { ...drone.commandState, state: 'NO_REPLY' }
                    };
                    changed = true;
-                   addLog(`Command timeout for ${id}`);
+                   addLog(`No backend reply for ${id}`, 'WARNING', 'PHONEOS', id, 'COMMAND_NO_REPLY');
                 }
              }
           }
