@@ -2,9 +2,9 @@ import math
 import time
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Optional
-from DroneOS1.shared.utils.logger import setup_logger
-from DroneOS1.shared.protocol.messages import TelemetryData
-from DroneOS1.shared.config.models import CollisionAvoidanceConfig
+from DroneOS.shared.utils.logger import setup_logger
+from DroneOS.shared.protocol.messages import TelemetryData
+from DroneOS.shared.config.models import CollisionAvoidanceConfig
 
 logger = setup_logger("CollisionAvoidance")
 
@@ -35,7 +35,7 @@ class StandardCollisionAvoidance(ICollisionAvoidance):
         if not self.enabled:
             return "NORMAL", None, None, 0.0
             
-        if self_telemetry.latitude is None or self_telemetry.longitude is None:
+        if not self_telemetry.gps_valid or self_telemetry.latitude is None or self_telemetry.longitude is None:
             return "NORMAL", None, None, 0.0
 
         my_lat = self_telemetry.latitude
@@ -48,7 +48,7 @@ class StandardCollisionAvoidance(ICollisionAvoidance):
         min_dist_found = float('inf')
 
         for peer_id, peer_t in swarm_telemetry.items():
-            if peer_t.latitude is None or peer_t.longitude is None:
+            if not peer_t.gps_valid or peer_t.latitude is None or peer_t.longitude is None:
                 continue
                 
             # Check staleness
