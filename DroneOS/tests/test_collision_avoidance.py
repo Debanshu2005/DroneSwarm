@@ -15,6 +15,7 @@ def test_evaluate_threats_heading_independent():
     # Own drone at (0, 0), heading 90 (East)
     self_telemetry = TelemetryData(
         flight_mode="GUIDED",
+        gps_valid=True,
         latitude=0.0,
         longitude=0.0,
         altitude=10.0,
@@ -27,6 +28,7 @@ def test_evaluate_threats_heading_independent():
     # The escape vector should be North (away from South)
     peer_telemetry = TelemetryData(
         flight_mode="GUIDED",
+        gps_valid=True,
         latitude=-0.00005,
         longitude=0.0,
         altitude=10.0,
