@@ -96,7 +96,7 @@ class TelemetryPublisher:
     async def _publish_swarm_state_loop(self) -> None:
         while self._running:
             try:
-                active_drones = len(self.swarm_manager.registry.get_all_peers()) if self.swarm_manager else 0
+                active_drones = (len(self.swarm_manager.registry.get_all_peers()) + 1) if self.swarm_manager else 1
                 formation_type = "dynamic"
                 target_waypoints = []
                 
