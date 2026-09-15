@@ -150,7 +150,8 @@ function App() {
       title: "OVERVIEW",
       items: [
         { id: 'DASHBOARD', label: 'Dashboard', icon: <LayoutDashboard size={20}/> },
-        { id: 'DRONES', label: 'Fleet', icon: <Network size={20}/> }
+        { id: 'DRONES', label: 'Fleet', icon: <Network size={20}/> },
+        { id: 'SWARM', label: 'Swarm Topology', icon: <Network size={20}/> }
       ]
     },
     {
