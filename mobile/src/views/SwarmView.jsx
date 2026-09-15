@@ -3,7 +3,7 @@ import { useDroneContext } from '../context/DroneContext';
 import { Network, ArrowRight } from 'lucide-react';
 
 export default function SwarmView() {
-  const { drones } = useDroneContext();
+  const { drones, swarmState } = useDroneContext();
   
   const onlineDrones = Object.values(drones).filter(d => d.status === 'CONNECTED' || d.status === 'DEGRADED');
   const warningDrones = Object.values(drones).filter(d => d.status === 'failsafe');
@@ -65,22 +65,28 @@ export default function SwarmView() {
 
       <div className="glass-panel" style={{flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px'}}>
          <Network size={64} color="var(--border)" style={{marginBottom: '20px'}}/>
-         <h3 style={{color: 'var(--warning)', marginBottom: '10px'}}>BACKEND SUPPORT REQUIRED</h3>
-         <p style={{color: 'var(--text-muted)', textAlign: 'center', maxWidth: '400px'}}>
-            True decentralized swarm topology mapping requires the DroneOS backend to emit `SWARM_STATE` or `PEER_STATE` packets with adjacency lists. 
-            Currently, the Ground Station only receives independent telemetry streams.
-         </p>
          
-         <div style={{marginTop: '30px', padding: '15px', background: 'var(--bg-color)', border: '1px solid var(--border)', borderRadius: '8px', width: '100%', maxWidth: '500px'}}>
-            <h4 style={{marginBottom: '10px', fontSize: '14px'}}>Simulated Topology Visualization</h4>
+         <div style={{marginTop: '30px', padding: '15px', background: 'var(--bg-color)', border: '1px solid var(--border)', borderRadius: '8px', width: '100%', maxWidth: '600px'}}>
+            <h4 style={{marginBottom: '10px', fontSize: '14px'}}>Decentralized Topology Visualization</h4>
             <div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', justifyContent: 'center'}}>
-               {onlineDrones.map(d => (
-                  <div key={d.id} style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
-                     <div className="status-badge badge-good">{d.id}</div>
-                     <ArrowRight size={16} color="var(--border)"/>
-                  </div>
-               ))}
-               <div className="status-badge" style={{background: 'var(--border)'}}>GCS</div>
+               {onlineDrones.map(d => {
+                  const stateMsg = swarmState[d.id];
+                  return (
+                     <div key={d.id} style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', background: 'var(--surface)', borderRadius: '6px', border: '1px solid var(--border)'}}>
+                        <div className="status-badge badge-good">{d.id}</div>
+                        <div style={{fontSize: '11px', color: 'var(--text-muted)'}}>
+                           Task: <strong style={{color: 'var(--text)'}}>{d.current_task || 'IDLE'}</strong>
+                        </div>
+                        {stateMsg && (
+                           <div style={{fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center'}}>
+                              Formation: {stateMsg.formation_type}<br/>
+                              Swarm Size: {stateMsg.active_drones}<br/>
+                              Waypoints: {stateMsg.target_waypoints?.length || 0}
+                           </div>
+                        )}
+                     </div>
+                  );
+               })}
             </div>
          </div>
          

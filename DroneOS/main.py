@@ -150,6 +150,7 @@ class DroneOSApp:
         
         from DroneOS.core.flight_pipeline import FlightPipeline
         self.flight_pipeline = FlightPipeline(self.state_store, self.flight_controller, self.flight_cfg, self.decision_engine)
+        self.flight_pipeline.on_intent_change = self._handle_intent_change
         
         self.telemetry_publisher = TelemetryPublisher(
             self.node_id, 
@@ -159,7 +160,9 @@ class DroneOSApp:
             self.mission_manager,
             health_monitor=self.health_monitor,
             telemetry_interval=self.network_cfg.telemetry_interval,
-            heartbeat_interval=self.network_cfg.heartbeat_interval
+            heartbeat_interval=self.network_cfg.heartbeat_interval,
+            swarm_manager=self.swarm_manager,
+            state_store=self.state_store
         )
         
         self.diagnostics = SystemHealthReporter(
@@ -208,6 +211,18 @@ class DroneOSApp:
         except Exception as e:
             logger.error(f"Failed to dispatch task in main: {e}")
 
+    async def _handle_intent_change(self, task_name: str) -> None:
+        from DroneOS.shared.protocol.messages import PeerStateMessage
+        import time
+        msg = PeerStateMessage(
+            sender_id=self.node_id,
+            timestamp=time.time(),
+            peer_id=self.node_id,
+            is_active=True,
+            current_task=task_name
+        )
+        await self.network.broadcast_message(msg)
+
     async def _handle_gps_degraded(self) -> None:
         telemetry = await self.flight_controller.get_telemetry()
         armed = getattr(telemetry, "armed_state", None) == "ARMED"
@@ -235,6 +250,16 @@ class DroneOSApp:
             await self.safety_module.trigger_connection_lost_failsafe()
         else:
             logger.info("Shutdown requested while disarmed; exiting cleanly.")
+            
+        from DroneOS.shared.protocol.messages import DroneLeaveMessage
+        import time
+        leave_msg = DroneLeaveMessage(
+            sender_id=self.node_id,
+            timestamp=time.time(),
+            reason="shutdown"
+        )
+        await self.network.broadcast_message(leave_msg)
+        
         self._running = False
         return "graceful"
 
@@ -259,6 +284,24 @@ class DroneOSApp:
         elif msg.msg_type == MessageType.TELEMETRY:
             if msg.sender_id.startswith("drone"):
                 self.swarm_manager.sync.handle_telemetry(msg)
+                
+        elif msg.msg_type == MessageType.DRONE_JOIN:
+            self.swarm_manager.discovery.handle_join(msg)
+            
+        elif msg.msg_type == MessageType.DRONE_LEAVE:
+            self.swarm_manager.removal.handle_leave(msg)
+            
+        elif msg.msg_type == MessageType.PEER_STATE:
+            self.swarm_manager.sync.handle_peer_state(msg)
+            
+        elif msg.msg_type == MessageType.SWARM_HEARTBEAT:
+            self.swarm_manager.heartbeat_mgr.handle_swarm_heartbeat(msg)
+            
+        elif msg.msg_type == MessageType.SWARM_STATE:
+            logger.debug(f"Received SwarmStateMessage from {msg.sender_id}")
+            
+        elif msg.msg_type == MessageType.DRONE_IDENTITY:
+            logger.info(f"Peer identity: {msg.drone_id} role={msg.role}")
                 
         elif msg.msg_type == MessageType.CONTROL:
             target = getattr(msg, 'target_id', None)
@@ -457,6 +500,20 @@ class DroneOSApp:
         
         # Start publisher loops
         self.telemetry_publisher.start()
+        
+        from DroneOS.shared.protocol.messages import DroneJoinMessage, DroneIdentityMessage
+        import time
+        join_msg = DroneJoinMessage(
+            sender_id=self.node_id,
+            timestamp=time.time(),
+            drone_ip=self.network_cfg.host,
+            drone_port=self.network_cfg.port,
+            capabilities=self.swarm_manager.identity.capabilities
+        )
+        self._dispatch_task(self.network.broadcast_message(join_msg))
+        
+        identity_msg = self.swarm_manager.identity.get_identity_message()
+        self._dispatch_task(self.network.broadcast_message(identity_msg))
         
         logger.info("DroneOS is running. Press Ctrl+C to stop.")
         

@@ -1,10 +1,10 @@
 import asyncio
 import time
-from DroneOS1.shared.utils.logger import setup_logger
-from DroneOS1.core.intents import FlightIntent, IntentSource, IntentAction
-from DroneOS1.core.flight_state import FlightStateStore
-from DroneOS1.core.interfaces import IFlightController
-from DroneOS1.core.smart_rtl_engine import SmartRtlEngine
+from DroneOS.shared.utils.logger import setup_logger
+from DroneOS.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS.core.flight_state import FlightStateStore
+from DroneOS.core.interfaces import IFlightController
+from DroneOS.core.smart_rtl_engine import SmartRtlEngine
 
 logger = setup_logger("FlightPipeline")
 
@@ -130,6 +130,8 @@ class FlightPipeline:
         self.srtl_engine = SmartRtlEngine(config)
         self._running = False
         self._hz = config.pipeline_hz
+        self.on_intent_change = None
+        self.last_winning_source = None
 
     async def run_pipeline_loop(self):
         self._running = True
@@ -159,17 +161,21 @@ class FlightPipeline:
             intents = self.state_store.get_intents()
             winning_intent = self.arbiter.select_winner(intents)
             
-            # 3. Safety Filter
+            if winning_intent.source != self.last_winning_source:
+                self.last_winning_source = winning_intent.source
+                if self.on_intent_change:
+                    await self.on_intent_change(winning_intent.source.name if winning_intent.source else "IDLE")
+            
+            # 4. Safety Filter
             safe_intent = self.safety_filter.validate(winning_intent, telemetry)
             
-            # 4. Command Writer
+            # 5. Command Writer
             await self.command_writer.execute(safe_intent)
             
-            # 5. Wait for next tick
+            # 6. Wait for next tick
             elapsed = time.monotonic() - start_time
             sleep_time = max(0.0, loop_interval - elapsed)
             await asyncio.sleep(sleep_time)
 
     def stop(self):
         self._running = False
-

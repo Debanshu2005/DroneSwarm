@@ -1,7 +1,7 @@
 import time
 from typing import Dict, Optional, List, Any
-from DroneOS2.shared.utils.logger import setup_logger
-from DroneOS2.shared.protocol.messages import (
+from DroneOS.shared.utils.logger import setup_logger
+from DroneOS.shared.protocol.messages import (
     SwarmHeartbeatMessage, HeartbeatMessage, DroneJoinMessage, DroneLeaveMessage,
     SwarmStateMessage, PeerStateMessage, DroneIdentityMessage, TelemetryMessage, TelemetryData
 )
@@ -31,6 +31,7 @@ class PeerStateManager:
         self.lon: Optional[float] = None
         self.alt: Optional[float] = None
         self.last_position_time: Optional[float] = None
+        self.battery_level: Optional[float] = None
 
 class SwarmRegistry:
     def __init__(self):
@@ -86,6 +87,17 @@ class SwarmHeartbeatManager:
                 peer.lon = msg.lon
                 peer.alt = msg.alt
                 peer.last_position_time = time.time()
+
+    def handle_swarm_heartbeat(self, msg: SwarmHeartbeatMessage):
+        peer = self.registry.get_peer(msg.sender_id)
+        if not peer:
+            self.registry.add_peer(msg.sender_id)
+            peer = self.registry.get_peer(msg.sender_id)
+        if peer:
+            peer.last_seen = time.time()
+            peer.is_active = (msg.status == "active")
+            if msg.battery_level is not None:
+                peer.battery_level = msg.battery_level
 
     def purge_stale_peers(self):
         current = time.time()

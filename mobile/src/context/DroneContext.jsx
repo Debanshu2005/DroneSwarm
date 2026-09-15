@@ -35,6 +35,7 @@ export const DroneProvider = ({ children }) => {
   
   const [drones, setDrones] = useState({});
   const [selectedDrones, setSelectedDrones] = useState(new Set());
+  const [swarmState, setSwarmState] = useState({});
   
   const [wsUrl, setWsUrl] = useState(() => safeStorageGet("PhoneOS_WsUrl", "ws://swarmos-pi.local:8080"));
   const [relayAuthToken, setRelayAuthToken] = useState(() => safeStorageGet("PhoneOS_RelayAuthToken", ""));
@@ -369,6 +370,27 @@ export const DroneProvider = ({ children }) => {
        });
     });
 
+    manager.subscribe(MessageType.SWARM_STATE, (msg) => {
+      setSwarmState(prev => ({
+        ...prev,
+        [msg.sender_id]: msg
+      }));
+    });
+
+    manager.subscribe(MessageType.PEER_STATE, (msg) => {
+      setDrones(prev => {
+        const drone = prev[msg.sender_id];
+        if (!drone) return prev;
+        return {
+          ...prev,
+          [msg.sender_id]: {
+            ...drone,
+            current_task: msg.current_task
+          }
+        };
+      });
+    });
+
     setWsManager(manager);
 
     const hbInterval = setInterval(() => {
@@ -492,7 +514,7 @@ export const DroneProvider = ({ children }) => {
   const selectOnly = (id) => setSelectedDrones(new Set([id]));
 
   const value = {
-    wsManager, isConnected, drones, selectedDrones,
+    wsManager, isConnected, drones, selectedDrones, swarmState,
     wsUrl, setWsUrl, relayAuthToken, setRelayAuthToken, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs, connectionError,
     sendCommand, sendTerminalCommand, sendParamRequest, toggleSelect, selectAll, selectNone, selectOnly, addLog,
     testOverrides, setTestOverride, clearTestOverrides, injectFailure, testSessionLog, clearTestSessionLog
