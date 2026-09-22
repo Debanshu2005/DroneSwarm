@@ -1,10 +1,10 @@
 import asyncio
 import time
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.core.intents import FlightIntent, IntentSource, IntentAction
-from DroneOS.core.flight_state import FlightStateStore
-from DroneOS.core.interfaces import IFlightController
-from DroneOS.core.smart_rtl_engine import SmartRtlEngine
+from DroneOS2.shared.utils.logger import setup_logger
+from DroneOS2.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS2.core.flight_state import FlightStateStore
+from DroneOS2.core.interfaces import IFlightController
+from DroneOS2.core.smart_rtl_engine import SmartRtlEngine
 
 logger = setup_logger("FlightPipeline")
 

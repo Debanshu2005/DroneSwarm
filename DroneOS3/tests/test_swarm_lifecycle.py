@@ -3,14 +3,14 @@ import time
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from DroneOS.shared.protocol.messages import (
+from DroneOS3.shared.protocol.messages import (
     DroneJoinMessage, DroneLeaveMessage, MessageType,
     SwarmStateMessage, PeerStateMessage, SwarmHeartbeatMessage, TelemetryData
 )
-from DroneOS.core.swarm_manager import SwarmMembership
-from DroneOS.core.telemetry_publisher import TelemetryPublisher
-from DroneOS.core.flight_pipeline import FlightPipeline
-from DroneOS.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS3.core.swarm_manager import SwarmMembership
+from DroneOS3.core.telemetry_publisher import TelemetryPublisher
+from DroneOS3.core.flight_pipeline import FlightPipeline
+from DroneOS3.core.intents import FlightIntent, IntentSource, IntentAction
 
 class MockMessage:
     def __init__(self, sender_id, msg_type):

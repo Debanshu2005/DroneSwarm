@@ -1,7 +1,7 @@
 import time
 import asyncio
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.shared.protocol.messages import HeartbeatMessage, TelemetryMessage, SwarmHeartbeatMessage, SwarmStateMessage
+from DroneOS2.shared.utils.logger import setup_logger
+from DroneOS2.shared.protocol.messages import HeartbeatMessage, TelemetryMessage, SwarmHeartbeatMessage, SwarmStateMessage
 
 logger = setup_logger("TelemetryPublisher")
 
@@ -24,7 +24,7 @@ class TelemetryPublisher:
         self.swarm_manager = swarm_manager
         self.state_store = state_store
         
-        from DroneOS.core.formation_engine import FormationEngine
+        from DroneOS2.core.formation_engine import FormationEngine
         if self.swarm_manager and self.state_store:
             self.formation_engine = FormationEngine(self.swarm_manager, self.state_store)
         else:
