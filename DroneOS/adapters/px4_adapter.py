@@ -171,7 +171,16 @@ class PX4FlightController(IFlightController):
         for task in self._active_tasks:
             task.cancel()
         self._active_tasks.clear()
-        self.client = None
+        
+        if self.client:
+            try:
+                stop_server = getattr(self.client, "_stop_mavsdk_server", None)
+                if callable(stop_server):
+                    stop_server()
+            except Exception as e:
+                logger.warning(f"Failed to stop MAVSDK server on disconnect: {e}")
+            self.client = None
+            
         logger.info("PX4 DISCONNECTED")
 
     async def arm(self) -> bool:

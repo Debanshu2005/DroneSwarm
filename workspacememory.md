@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-09-15T04:52:59.686Z
+Generated: 2026-09-22T05:11:07.129Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -18,14 +18,14 @@ Structured manifest: workspace.json
 - Graphify graph: not available yet
 - Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: DroneOS1/core/interfaces.py
+- Active file in focus: DroneOS/adapters/px4_adapter.py
 - Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
-- Suggested starting points: DroneOS1/core/interfaces.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
+- Suggested starting points: DroneOS/adapters/px4_adapter.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
 ## Current Workspace
-- Active file: DroneOS1/core/interfaces.py
-- Tracked files in snapshot: 2276
-- Top-level areas: venv (1780), mobile (139), DroneOS (73), DroneOS1 (72), DroneOS2 (72), DroneOS3 (72), [root] (29), deploy (21)
-- Primary file types: .py (1751), [no extension] (200), .txt (54), .typed (29), .png (26), .jsx (24), .js (20), .yaml (20)
+- Active file: DroneOS/adapters/px4_adapter.py
+- Tracked files in snapshot: 2280
+- Top-level areas: venv (1780), mobile (139), DroneOS (74), DroneOS1 (73), DroneOS2 (73), DroneOS3 (73), [root] (29), deploy (21)
+- Primary file types: .py (1755), [no extension] (200), .txt (54), .typed (29), .png (26), .jsx (24), .js (20), .yaml (20)
 - Key files: .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md, mobile/.gitignore, mobile/README.md, mobile/android/.gitignore
 ## Package Snapshot
 - Package metadata unavailable: package.json was not found.
@@ -51,7 +51,7 @@ Structured manifest: workspace.json
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-09-13 a0e756f fixes
+- HEAD: 2026-09-15 ac63da4 feat: add network configurations for drones and collision avoidance tests
 - Working tree summary: 1 modified
 - M workspacememory.md
 
@@ -61,8 +61,8 @@ Visibility: public | Default branch: main
 Stars: 0 | Forks: 0 | Open issues: 0
 
 Latest commit on main:
-- a0e756f by Debanshu2005 on 2026-09-13
-  fixes
+- ac63da4 by Debanshu2005 on 2026-09-15
+  feat: add network configurations for drones and collision avoidance tests
 
 URL: https://github.com/Debanshu2005/DroneSwarm
 

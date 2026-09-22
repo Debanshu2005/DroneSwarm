@@ -31,10 +31,31 @@ class TerminalController:
 
     async def run_repl(self) -> None:
         logger.info("Starting Terminal Controller REPL...")
-        loop = asyncio.get_running_loop()
+        import threading
+        import queue
+        q = queue.Queue()
+
+        def _reader():
+            while True:
+                try:
+                    line = sys.stdin.readline()
+                    q.put(line)
+                    if not line:
+                        break
+                except Exception:
+                    break
+
+        t = threading.Thread(target=_reader, daemon=True)
+        t.start()
+        
         while True:
             try:
-                line = await loop.run_in_executor(None, sys.stdin.readline)
+                await asyncio.sleep(0.1)
+                try:
+                    line = q.get_nowait()
+                except queue.Empty:
+                    continue
+                    
                 if not line:
                     break
                 line = line.strip()
