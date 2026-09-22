@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-09-22T05:11:07.129Z
+Generated: 2026-09-22T08:42:41.059Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -18,11 +18,11 @@ Structured manifest: workspace.json
 - Graphify graph: not available yet
 - Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: DroneOS/adapters/px4_adapter.py
+- Active file in focus: DroneOS3/main.py
 - Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
-- Suggested starting points: DroneOS/adapters/px4_adapter.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
+- Suggested starting points: DroneOS3/main.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
 ## Current Workspace
-- Active file: DroneOS/adapters/px4_adapter.py
+- Active file: DroneOS3/main.py
 - Tracked files in snapshot: 2280
 - Top-level areas: venv (1780), mobile (139), DroneOS (74), DroneOS1 (73), DroneOS2 (73), DroneOS3 (73), [root] (29), deploy (21)
 - Primary file types: .py (1755), [no extension] (200), .txt (54), .typed (29), .png (26), .jsx (24), .js (20), .yaml (20)
@@ -33,7 +33,7 @@ Structured manifest: workspace.json
 - Logged change events: 1
 - Change mix: save (1)
 - Remembered file snapshots: 1
-- Working tree summary: 1 modified
+- Working tree summary: clean
 ## Tracked Snapshots
 - DroneOS/tests/test_terminal_controller.py | 246 lines | 8805 chars | hash be871eb34242
   Last snapshot: 2026-08-29T12:17:18.957Z
@@ -51,9 +51,9 @@ Structured manifest: workspace.json
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-09-15 ac63da4 feat: add network configurations for drones and collision avoidance tests
-- Working tree summary: 1 modified
-- M workspacememory.md
+- HEAD: 2026-09-22 badd09d bug fixes pt2
+- Working tree summary: clean
+- Working tree: clean
 
 ## GitHub Snapshot
 GitHub Repository: Debanshu2005/DroneSwarm
@@ -61,8 +61,8 @@ Visibility: public | Default branch: main
 Stars: 0 | Forks: 0 | Open issues: 0
 
 Latest commit on main:
-- ac63da4 by Debanshu2005 on 2026-09-15
-  feat: add network configurations for drones and collision avoidance tests
+- badd09d by Debanshu2005 on 2026-09-22
+  bug fixes pt2
 
 URL: https://github.com/Debanshu2005/DroneSwarm
 
