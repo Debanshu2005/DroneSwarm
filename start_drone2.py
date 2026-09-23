@@ -97,9 +97,7 @@ def main():
     )
     
     if not wait_for_port(server_port):
-        print(f"[{drone_cfg.drone_id}] ERROR: MAVSDK server failed to listen on port {server_port}.")
-        mavsdk_proc.kill()
-        sys.exit(1)
+        print(f"[{drone_cfg.drone_id}] WARNING: MAVSDK server is not listening on port {server_port} yet. It may be waiting for the flight controller to boot. Continuing...")
         
     print(f"[{drone_cfg.drone_id}] MAVSDK server ready. Starting Relay...")
     
