@@ -44,14 +44,6 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
         return f"serial://{device}:{baud}"
     return conn_str
 
-def wait_for_port(port: int, timeout: float = 30.0) -> bool:
-    start = time.time()
-    while time.time() - start < timeout:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(('127.0.0.1', port)) == 0:
-                return True
-        time.sleep(0.1)
-    return False
 
 def main():
     config_dir = Path(__file__).resolve().parent / "DroneOS" / "configs"

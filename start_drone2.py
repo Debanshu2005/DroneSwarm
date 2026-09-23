@@ -44,20 +44,7 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
         return f"serial://{device}:{baud}"
     return conn_str
 
-def wait_for_port(port: int, timeout: float = 30.0) -> bool:
-    start = time.time()
-    while time.time() - start < timeout:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(('127.0.0.1', port)) == 0:
-                return True
-        time.sleep(0.1)
-    return False
 
-def get_mavsdk_server_path():
-    import os
-    import sys
-    from importlib.resources import files
-    import mavsdk.bin
 
     exec_name = "mavsdk_server.exe" if sys.platform.startswith("win") else "mavsdk_server"
     return os.fspath(files(mavsdk.bin).joinpath(exec_name))
@@ -88,18 +75,7 @@ def main():
             
     time.sleep(1.0)
     
-    # 2. Spawn MAVSDK Server manually
-    mavsdk_bin = get_mavsdk_server_path()
-    print(f"[{drone_cfg.drone_id}] Starting {mavsdk_bin} on port {server_port}")
     
-    mavsdk_proc = subprocess.Popen(
-        [mavsdk_bin, "-p", str(server_port), resolved_conn]
-    )
-    
-    if not wait_for_port(server_port):
-        print(f"[{drone_cfg.drone_id}] WARNING: MAVSDK server is not listening on port {server_port} yet. It may be waiting for the flight controller to boot. Continuing...")
-        
-    print(f"[{drone_cfg.drone_id}] MAVSDK server ready. Starting Relay...")
     
     # 3. Spawn Relay manually
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
@@ -111,14 +87,11 @@ def main():
     import mavsdk
     old_init = mavsdk.System.__init__
     def patched_init(self, *args, **kwargs):
-        kwargs['mavsdk_server_address'] = '127.0.0.1'
         kwargs['port'] = server_port
         old_init(self, *args, **kwargs)
     mavsdk.System.__init__ = patched_init
 
-    # Tell px4_adapter not to kill the pre-spawned mavsdk_server
-    import os
-    os.environ['MAVSDK_SERVER_PORT'] = str(server_port)
+    
     
     # 5. Run the DroneOS1 application
     from DroneOS1.main import DroneOSApp
@@ -138,13 +111,6 @@ def main():
             relay_proc.wait(timeout=5.0)
         except subprocess.TimeoutExpired:
             relay_proc.kill()
-            
-        print(f"[{drone_cfg.drone_id}] Terminating managed MAVSDK server (PID {mavsdk_proc.pid})...")
-        mavsdk_proc.terminate()
-        try:
-            mavsdk_proc.wait(timeout=5.0)
-        except subprocess.TimeoutExpired:
-            mavsdk_proc.kill()
             
         print(f"[{drone_cfg.drone_id}] Lifecycle Manager exit.")
 

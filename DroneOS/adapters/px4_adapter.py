@@ -47,7 +47,8 @@ class PX4FlightController(IFlightController):
                 for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                     if proc.info['name'] and 'mavsdk_server' in proc.info['name']:
                         cmdline = proc.info.get('cmdline') or []
-                        if cmdline and any(target_conn in arg for arg in cmdline):
+                        base_conn = target_conn.rsplit(':', 1)[0] if target_conn.startswith('serial://') else target_conn
+                        if cmdline and any(base_conn in arg for arg in cmdline):
                             logger.info(f"Killing orphaned mavsdk_server (PID {proc.info['pid']}) for {target_conn}")
                             proc.kill()
             except Exception as e:
