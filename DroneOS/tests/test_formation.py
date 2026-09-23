@@ -195,3 +195,34 @@ def test_formation_engine_ned_directions(engine, swarm_manager):
     intent = engine.compute_intent(telemetry, None, params)
     assert abs(intent.params['vx']) < 1e-5
     assert intent.params['vy'] < 0
+
+def test_formation_engine_speed_clamp(engine, swarm_manager):
+    now = time.time()
+    
+    peer_anchor = PeerStateManager("drone0")
+    peer_anchor.last_seen = now
+    peer_anchor.is_active = True
+    peer_anchor.lat = 40.0
+    peer_anchor.lon = -75.0
+    peer_anchor.alt = 10.0
+    peer_anchor.last_position_time = now
+    
+    peer_self = PeerStateManager("drone1")
+    peer_self.last_seen = now
+    peer_self.is_active = True
+    peer_self.lat = 40.0
+    peer_self.lon = -75.0
+    
+    swarm_manager.registry.peers = {"drone0": peer_anchor, "drone1": peer_self}
+    
+    # Huge position error
+    telemetry = TelemetryData(flight_mode="GUIDED", gps_valid=True, latitude=41.0, longitude=-75.0)
+    params = {'type': 'V', 'spacing': 5.0, 'speed': 0.3}
+    
+    intent = engine.compute_intent(telemetry, None, params)
+    
+    assert intent.action == IntentAction.MOVE_VELOCITY
+    assert intent.source == IntentSource.FORMATION
+    
+    magnitude = math.hypot(intent.params['vx'], intent.params['vy'])
+    assert magnitude <= 0.3 + 1e-6

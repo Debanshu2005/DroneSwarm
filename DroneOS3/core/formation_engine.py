@@ -15,19 +15,6 @@ class FormationEngine:
         self.form_mgr = FormationManager()
         self.last_total_drones = 0
 
-    def compute_intent(self, current_telemetry, peer_telemetry, params) -> FlightIntent:
-        f_type_str = params.get('type', 'V').upper()
-        try:
-            f_type = FormationType(f_type_str)
-        except ValueError:
-            logger.error(f"Invalid formation type: {f_type_str}")
-            return None
-            
-        spacing = float(params.get('spacing', 2.0))
-        speed = float(params.get('speed', 0.5))
-        repulsion_radius_m = float(params.get('repulsion_radius_m', 2.5))
-        self.form_mgr.set_formation(f_type, spacing)
-        
     def get_active_peers(self):
         """Returns a sorted list of active peer IDs (including self) based on last_seen."""
         now = time.time()
@@ -189,6 +176,12 @@ class FormationEngine:
                     
                 vx = error_north * kp
                 vy = error_east * kp
+                
+                magnitude = math.hypot(vx, vy)
+                if magnitude > speed and magnitude > 0:
+                    scale = speed / magnitude
+                    vx *= scale
+                    vy *= scale
                 
                 return FlightIntent(
                     IntentSource.FORMATION, 
