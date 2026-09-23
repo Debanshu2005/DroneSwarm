@@ -264,17 +264,6 @@ export const DroneProvider = ({ children }) => {
        }
        
        addLog(`ACK from ${msg.sender_id}: ${msg.status_text}`, severity, source, msg.sender_id, event);
-       setDrones(prev => {
-          const drone = prev[msg.sender_id];
-          if (!drone) return prev;
-          return {
-             ...prev,
-             [msg.sender_id]: {
-                ...drone,
-                commandState: { ...drone.commandState, state: 'ACCEPTED' }
-             }
-          };
-       });
     });
 
     manager.subscribe(MessageType.COMMAND_LIFECYCLE, (msg) => {
