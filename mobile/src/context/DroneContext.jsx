@@ -248,7 +248,22 @@ export const DroneProvider = ({ children }) => {
     });
 
     manager.subscribe(MessageType.STATUS, (msg) => {
-       addLog(`ACK from ${msg.sender_id}: ${msg.status_text}`, 'INFO', 'PX4', msg.sender_id, 'STATUS_TEXT');
+       let severity = 'INFO';
+       if (msg.severity) {
+         const sev = msg.severity.toLowerCase();
+         if (sev === 'error') severity = 'ERROR';
+         else if (sev === 'critical') severity = 'CRITICAL';
+         else if (sev === 'warning') severity = 'WARNING';
+       }
+       let source = 'PX4';
+       let event = 'STATUS_TEXT';
+       
+       if (severity === 'ERROR' || severity === 'CRITICAL') {
+         source = 'DRONEOS';
+         event = 'BACKEND_ERROR';
+       }
+       
+       addLog(`ACK from ${msg.sender_id}: ${msg.status_text}`, severity, source, msg.sender_id, event);
        setDrones(prev => {
           const drone = prev[msg.sender_id];
           if (!drone) return prev;

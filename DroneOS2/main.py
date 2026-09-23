@@ -252,7 +252,6 @@ class DroneOSApp:
             logger.info("Shutdown requested while disarmed; exiting cleanly.")
             
         from DroneOS2.shared.protocol.messages import DroneLeaveMessage
-        import time
         leave_msg = DroneLeaveMessage(
             sender_id=self.node_id,
             timestamp=time.time(),
@@ -485,6 +484,12 @@ class DroneOSApp:
 
         await self.network.start()
         
+        import logging
+        from DroneOS2.shared.utils.remote_log_handler import RemoteLogHandler
+        self.remote_log_handler = RemoteLogHandler(self.node_id, self.network, asyncio.get_running_loop())
+        logging.getLogger().addHandler(self.remote_log_handler)
+        self._dispatch_task(self.remote_log_handler.drain_task())
+        
         # Start sensors
         self._dispatch_task(self.health_monitor.start())
         self._dispatch_task(self.battery_monitor.start(
@@ -533,6 +538,11 @@ class DroneOSApp:
         for task in self._active_tasks:
             task.cancel()
         self._active_tasks.clear()
+        
+        if hasattr(self, 'remote_log_handler'):
+            self.remote_log_handler.stop()
+            import logging
+            logging.getLogger().removeHandler(self.remote_log_handler)
         
         self.telemetry_publisher.stop()
         self.health_monitor.stop()

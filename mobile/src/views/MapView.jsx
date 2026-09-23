@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useDroneContext } from '../context/DroneContext';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, Tooltip, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { AlertCircle, Crosshair, Layers, Navigation } from 'lucide-react';
 import { useDeviceLocation } from '../hooks/useDeviceLocation';
 import { DEFAULT_MAP_CENTER, DIGITAL_SKY_AIRSPACE_URL, resolveAirspaceZone } from '../utils/airspace';
 import AirspaceZonePanel from '../components/AirspaceZonePanel';
+import { calculateDistance } from '../utils/geoUtils';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -71,11 +72,28 @@ function RecenterAutomatically({ center }) {
 }
 
 export default function MapView() {
-  const { drones, selectedDrones } = useDroneContext();
+  const { drones, selectedDrones, swarmState } = useDroneContext();
   const [mapStyle, setMapStyle] = useState('satellite');
   const [centerTarget, setCenterTarget] = useState(null);
+  const [showFormation, setShowFormation] = useState(true);
   const location = useDeviceLocation();
   const userLocation = location.coords;
+
+  const mergedTargets = {};
+  const allWaypoints = [];
+  Object.values(swarmState).forEach(state => {
+      if (state.target_waypoints) {
+          state.target_waypoints.forEach(wp => {
+              allWaypoints.push({ ...wp, timestamp: state.timestamp });
+          });
+      }
+  });
+  allWaypoints.forEach(wp => {
+      if (!mergedTargets[wp.drone_id] || mergedTargets[wp.drone_id].timestamp < wp.timestamp) {
+          mergedTargets[wp.drone_id] = wp;
+      }
+  });
+  const hasFormationData = Object.keys(mergedTargets).length > 0;
 
   const tiles = {
      street: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -141,6 +159,11 @@ export default function MapView() {
             </div>
          </div>
          <div className="airspace-command-actions">
+            {hasFormationData && (
+                <button className={`secondary-btn compact ${showFormation ? 'active' : ''}`} onClick={() => setShowFormation(!showFormation)} title="Toggle Formation">
+                   <Navigation size={18}/> {showFormation ? 'Hide Formation' : 'Show Formation'}
+                </button>
+            )}
             <button className="secondary-btn compact" onClick={location.requestLocation} title="Request GPS">
                <Navigation size={18}/> GPS
             </button>
@@ -229,6 +252,40 @@ export default function MapView() {
                   </Popup>
                </CircleMarker>
             )}
+
+            {showFormation && Object.entries(mergedTargets).map(([droneId, target]) => {
+                const drone = drones[droneId];
+                if (!drone || !drone.telemetry || drone.telemetry.latitude == null || drone.telemetry.longitude == null || isNaN(drone.telemetry.latitude)) return null;
+                
+                const liveLat = drone.telemetry.latitude;
+                const liveLon = drone.telemetry.longitude;
+                const distance = calculateDistance(liveLat, liveLon, target.lat, target.lon);
+                
+                let color = '#f97316'; // orange > 3m
+                if (distance < 1.0) color = '#28d17c'; // green
+                else if (distance < 3.0) color = '#eab308'; // yellow
+                
+                return (
+                    <React.Fragment key={`target-${droneId}`}>
+                        <Polyline 
+                           positions={[[liveLat, liveLon], [target.lat, target.lon]]} 
+                           color={color} 
+                           weight={2} 
+                           dashArray="5, 10" 
+                           opacity={0.8}
+                        />
+                        <CircleMarker 
+                           center={[target.lat, target.lon]} 
+                           radius={5} 
+                           pathOptions={{ color: color, fillColor: color, fillOpacity: 0.5 }}
+                        >
+                            <Tooltip permanent direction="top" opacity={0.9} offset={[0, -10]}>
+                                <div style={{ fontSize: '11px', fontWeight: 600 }}>{droneId}: {distance.toFixed(1)}m off target</div>
+                            </Tooltip>
+                        </CircleMarker>
+                    </React.Fragment>
+                );
+            })}
          </MapContainer>
       </div>
 
