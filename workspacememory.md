@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-09-22T08:42:41.059Z
+Generated: 2026-09-23T04:51:08.277Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -18,11 +18,11 @@ Structured manifest: workspace.json
 - Graphify graph: not available yet
 - Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: DroneOS3/main.py
+- Active file in focus: DroneOS1/tests/test_swarm_lifecycle.py
 - Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
-- Suggested starting points: DroneOS3/main.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
+- Suggested starting points: DroneOS1/tests/test_swarm_lifecycle.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
 ## Current Workspace
-- Active file: DroneOS3/main.py
+- Active file: DroneOS1/tests/test_swarm_lifecycle.py
 - Tracked files in snapshot: 2280
 - Top-level areas: venv (1780), mobile (139), DroneOS (74), DroneOS1 (73), DroneOS2 (73), DroneOS3 (73), [root] (29), deploy (21)
 - Primary file types: .py (1755), [no extension] (200), .txt (54), .typed (29), .png (26), .jsx (24), .js (20), .yaml (20)
@@ -51,7 +51,7 @@ Structured manifest: workspace.json
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-09-22 badd09d bug fixes pt2
+- HEAD: 2026-09-22 9fc5c77 fix
 - Working tree summary: clean
 - Working tree: clean
 
@@ -61,8 +61,8 @@ Visibility: public | Default branch: main
 Stars: 0 | Forks: 0 | Open issues: 0
 
 Latest commit on main:
-- badd09d by Debanshu2005 on 2026-09-22
-  bug fixes pt2
+- 9fc5c77 by Debanshu2005 on 2026-09-22
+  fix
 
 URL: https://github.com/Debanshu2005/DroneSwarm
 

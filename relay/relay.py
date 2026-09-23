@@ -24,7 +24,7 @@ class UdpWebsocketRelay:
         self.auth_token = os.getenv("RELAY_AUTH_TOKEN")
         self.net_secret = os.getenv("DRONE_NET_SECRET")
         
-        self.active_websockets = set()
+        self.clients = set()
         self.known_endpoints = {} # Target ID to address tuple
         
         # We need a reference to the loop
@@ -130,9 +130,9 @@ class UdpWebsocketRelay:
                 self.known_endpoints[sender_id] = addr
                 
             # Broadcast to all connected WebSockets
-            if self.active_websockets:
-                # logger.debug(f"Forwarding {msg_dict.get('msg_type')} from {sender_id} to {len(self.active_websockets)} WS clients")
-                aws = [ws.send(msg_str) for ws in self.active_websockets]
+            if self.clients:
+                # logger.debug(f"Forwarding {msg_dict.get('msg_type')} from {sender_id} to {len(self.clients)} WS clients")
+                aws = [ws.send(msg_str) for ws in self.clients]
                 await asyncio.gather(*aws, return_exceptions=True)
                 
         except json.JSONDecodeError as e:
@@ -148,16 +148,16 @@ class UdpWebsocketRelay:
         
         # Prevent duplicate WS connections from the same IP
         ip = websocket.remote_address[0]
-        to_remove = [ws for ws in self.active_websockets if ws.remote_address[0] == ip]
+        to_remove = [ws for ws in self.clients if ws.remote_address[0] == ip]
         for ws in to_remove:
             logger.info(f"Closing duplicate WebSocket from {ip}")
             try:
                 await ws.close()
             except:
                 pass
-            self.active_websockets.discard(ws)
+            self.clients.discard(ws)
             
-        self.active_websockets.add(websocket)
+        self.clients.add(websocket)
         try:
             async for message in websocket:
                 if isinstance(message, str):
@@ -167,7 +167,7 @@ class UdpWebsocketRelay:
         except Exception as e:
             logger.error(f"WebSocket error: {e}")
         finally:
-            self.active_websockets.discard(websocket)
+            self.clients.discard(websocket)
 
     async def forward_ws_to_udp(self, message: str):
         if not self.transport:
@@ -212,7 +212,8 @@ class UdpWebsocketRelay:
     async def _relay_groundstation_heartbeat_loop(self):
         while True:
             try:
-                await self._send_relay_groundstation_heartbeat()
+                if self.clients:
+                    await self._send_relay_groundstation_heartbeat()
             except asyncio.CancelledError:
                 raise
             except Exception as e:
