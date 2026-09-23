@@ -67,7 +67,7 @@ def main():
     server_port = 50051
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
-            cmdline = proc.info.get('cmdline', [])
+            cmdline = proc.info.get('cmdline') or []
             if proc.info['name'] and 'mavsdk_server' in proc.info['name']:
                 if cmdline and any(str(server_port) in arg for arg in cmdline):
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")

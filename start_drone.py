@@ -25,7 +25,7 @@ def main():
         import psutil
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
-                cmdline = proc.info.get('cmdline', [])
+                cmdline = proc.info.get('cmdline') or []
                 joined = ' '.join(cmdline)
                 if 'relay.py' in joined and str(project_root) in joined:
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")

@@ -48,7 +48,7 @@ class PX4FlightController(IFlightController):
             try:
                 for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                     if proc.info['name'] and 'mavsdk_server' in proc.info['name']:
-                        cmdline = proc.info.get('cmdline', [])
+                        cmdline = proc.info.get('cmdline') or []
                         if managed_port and any(managed_port in arg for arg in cmdline):
                             continue  # skip our own pre-spawned server
                         if cmdline and any(target_conn in arg for arg in cmdline):
