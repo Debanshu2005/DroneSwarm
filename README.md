@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="banner.jpg" alt="PhoneOS Swarm Preview" width="1000" />
+  <img src="banner.jpg" alt="PhoneOS Swarm Preview" width="700" />
 </p>
 
 ## 🌟 Key Features
