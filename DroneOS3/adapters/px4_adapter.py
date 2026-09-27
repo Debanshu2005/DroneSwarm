@@ -42,7 +42,8 @@ class PX4FlightController(IFlightController):
         import psutil
         import re
         
-        def kill_orphaned_mavsdk(target_conn: str):
+        def kill_orphaned_mavsdk(target_conn: str) -> bool:
+            killed = False
             # If a lifecycle manager pre-spawned a server on a specific port, don't kill it
             managed_port = os.getenv('MAVSDK_SERVER_PORT')
             try:
@@ -55,8 +56,10 @@ class PX4FlightController(IFlightController):
                         if cmdline and any(base_conn in arg for arg in cmdline):
                             logger.info(f"Killing orphaned mavsdk_server (PID {proc.info['pid']}) for {target_conn}")
                             proc.kill()
+                            killed = True
             except Exception as e:
                 logger.warning(f"Failed to kill orphaned MAVSDK server: {e}")
+            return killed
 
         def resolve_connection(conn_str: str) -> Optional[str]:
             if not conn_str.startswith("serial://auto:"):
@@ -107,7 +110,8 @@ class PX4FlightController(IFlightController):
             return False
 
         for attempt, conn_str in enumerate(candidates, start=1):
-            kill_orphaned_mavsdk(conn_str)
+            if kill_orphaned_mavsdk(conn_str):
+                await asyncio.sleep(2.0)
             # Recreate System to ensure it spawns a fresh mavsdk_server if it previously failed
             self.client = System()
 
