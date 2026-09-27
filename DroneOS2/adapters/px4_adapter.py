@@ -114,7 +114,7 @@ class PX4FlightController(IFlightController):
             logger.info(f"PX4 CONNECTING to {conn_str} ({attempt}/{len(candidates)})")
             try:
                 # Wrap connect in a timeout to prevent hanging forever
-                await asyncio.wait_for(self.client.connect(system_address=conn_str), timeout=10.0)
+                await asyncio.wait_for(self.client.connect(system_address=conn_str), timeout=30.0)
                 
                 async def wait_for_connection():
                     async for state in self.client.core.connection_state():
@@ -123,7 +123,7 @@ class PX4FlightController(IFlightController):
                     return False
                 
                 # Wrap connection state in a timeout as well
-                is_connected = await asyncio.wait_for(wait_for_connection(), timeout=15.0)
+                is_connected = await asyncio.wait_for(wait_for_connection(), timeout=45.0)
                 if is_connected:
                     logger.info(f"PX4 CONNECTED via {conn_str}")
                     self._connected = True

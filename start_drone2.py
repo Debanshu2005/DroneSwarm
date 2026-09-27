@@ -46,9 +46,6 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
 
 
 
-    exec_name = "mavsdk_server.exe" if sys.platform.startswith("win") else "mavsdk_server"
-    return os.fspath(files(mavsdk.bin).joinpath(exec_name))
-
 def main():
     config_dir = Path(__file__).resolve().parent / "DroneOS1" / "configs"
     drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
@@ -83,16 +80,7 @@ def main():
         [sys.executable, str(relay_script)]
     )
     
-    # 4. Monkey-patch mavsdk.System so DroneOS1 connects cleanly
-    import mavsdk
-    old_init = mavsdk.System.__init__
-    def patched_init(self, *args, **kwargs):
-        kwargs['port'] = server_port
-        old_init(self, *args, **kwargs)
-    mavsdk.System.__init__ = patched_init
 
-    
-    
     # 5. Run the DroneOS1 application
     from DroneOS1.main import DroneOSApp
     
