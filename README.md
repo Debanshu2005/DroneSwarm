@@ -1,6 +1,20 @@
-# DroneSwarm (PhoneOS Swarm) 🚁
+<h1 align="center">PhoneOS Swarm</h1>
 
-DroneSwarm is a scalable, multi-agent drone operating system and ground control station (GCS). It bridges the gap between hardware flight controllers (PX4 via MAVSDK) and a rich, responsive mobile application for fleet management.
+<p align="center">
+  🚁 Scalable, multi-agent drone operating system and rich, responsive mobile ground control station.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Debanshu2005/DroneSwarm/stargazers"><img src="https://img.shields.io/github/stars/Debanshu2005/DroneSwarm?style=flat-square&label=stars&color=007ec6" alt="Stars"></a>
+  <a href="https://github.com/Debanshu2005/DroneSwarm/releases"><img src="https://img.shields.io/github/v/release/Debanshu2005/DroneSwarm?style=flat-square&label=version&color=007ec6" alt="Version"></a>
+  <a href="https://github.com/Debanshu2005/DroneSwarm/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Debanshu2005/DroneSwarm?style=flat-square&label=license&color=007ec6" alt="License"></a>
+  <a href="https://github.com/Debanshu2005/DroneSwarm/pulse"><img src="https://img.shields.io/github/commit-activity/m/Debanshu2005/DroneSwarm?style=flat-square&label=commit%20activity&color=007ec6" alt="Commits"></a>
+  <a href="https://github.com/Debanshu2005"><img src="https://img.shields.io/github/followers/Debanshu2005?style=flat-square&label=follow&color=ea4335" alt="Follow"></a>
+</p>
+
+<p align="center">
+  <img src="YOUR_NEW_GITHUB_IMAGE_LINK_HERE" alt="PhoneOS Swarm Preview" width="1000" />
+</p>
 
 ## 🌟 Key Features
 
