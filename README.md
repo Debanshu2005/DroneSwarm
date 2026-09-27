@@ -6,14 +6,14 @@
 
 <p align="center">
   <a href="https://github.com/Debanshu2005/DroneSwarm/stargazers"><img src="https://img.shields.io/github/stars/Debanshu2005/DroneSwarm?style=flat-square&label=stars&color=007ec6" alt="Stars"></a>
-  <a href="https://github.com/Debanshu2005/DroneSwarm/releases"><img src="https://img.shields.io/github/v/release/Debanshu2005/DroneSwarm?style=flat-square&label=version&color=007ec6" alt="Version"></a>
+  <a href="https://github.com/Debanshu2005/DroneSwarm/commits/main"><img src="https://img.shields.io/github/last-commit/Debanshu2005/DroneSwarm?style=flat-square&label=last%20commit&color=007ec6" alt="Last Commit"></a>
   <a href="https://github.com/Debanshu2005/DroneSwarm/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Debanshu2005/DroneSwarm?style=flat-square&label=license&color=007ec6" alt="License"></a>
   <a href="https://github.com/Debanshu2005/DroneSwarm/pulse"><img src="https://img.shields.io/github/commit-activity/m/Debanshu2005/DroneSwarm?style=flat-square&label=commit%20activity&color=007ec6" alt="Commits"></a>
   <a href="https://github.com/Debanshu2005"><img src="https://img.shields.io/github/followers/Debanshu2005?style=flat-square&label=follow&color=ea4335" alt="Follow"></a>
 </p>
 
 <p align="center">
-  <img src="YOUR_NEW_GITHUB_IMAGE_LINK_HERE" alt="PhoneOS Swarm Preview" width="1000" />
+  <img src="banner.jpg" alt="PhoneOS Swarm Preview" width="1000" />
 </p>
 
 ## 🌟 Key Features
