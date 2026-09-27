@@ -68,9 +68,11 @@ class PX4FlightController(IFlightController):
             by_id_paths = sorted(glob.glob("/dev/serial/by-id/*"))
             acm_paths = sorted(glob.glob("/dev/ttyACM*"))
             usb_paths = sorted(glob.glob("/dev/ttyUSB*"))
+            ama_paths = sorted(glob.glob("/dev/ttyAMA*"))
             
-            match = re.search(r'\d+', self.vehicle_name)
-            idx = (int(match.group()) - 1) if match else 0
+            # Since each Pi companion computer only has 1 flight controller physically attached,
+            # we always grab the first available device, regardless of whether this is "drone1" or "drone4".
+            idx = 0
             
             if by_id_paths and len(by_id_paths) > idx:
                 device = by_id_paths[idx]
@@ -78,6 +80,8 @@ class PX4FlightController(IFlightController):
                 device = acm_paths[idx]
             elif usb_paths and len(usb_paths) > idx:
                 device = usb_paths[idx]
+            elif ama_paths and len(ama_paths) > idx:
+                device = ama_paths[idx]
             elif by_id_paths:
                 device = by_id_paths[-1] # Fallback
                 
