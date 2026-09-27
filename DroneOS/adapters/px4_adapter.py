@@ -64,9 +64,9 @@ class PX4FlightController(IFlightController):
             by_id_paths = sorted(glob.glob("/dev/serial/by-id/*"))
             acm_paths = sorted(glob.glob("/dev/ttyACM*"))
             usb_paths = sorted(glob.glob("/dev/ttyUSB*"))
+            ama_paths = sorted(glob.glob("/dev/ttyAMA*"))
             
-            match = re.search(r'\d+', self.vehicle_name)
-            idx = (int(match.group()) - 1) if match else 0
+            idx = 0
             
             if by_id_paths and len(by_id_paths) > idx:
                 device = by_id_paths[idx]
@@ -74,6 +74,8 @@ class PX4FlightController(IFlightController):
                 device = acm_paths[idx]
             elif usb_paths and len(usb_paths) > idx:
                 device = usb_paths[idx]
+            elif ama_paths and len(ama_paths) > idx:
+                device = ama_paths[idx]
             elif by_id_paths:
                 device = by_id_paths[-1] # Fallback
                 
@@ -110,7 +112,7 @@ class PX4FlightController(IFlightController):
             logger.info(f"PX4 CONNECTING to {conn_str} ({attempt}/{len(candidates)})")
             try:
                 # Wrap connect in a timeout to prevent hanging forever
-                await asyncio.wait_for(self.client.connect(system_address=conn_str), timeout=10.0)
+                await asyncio.wait_for(self.client.connect(system_address=conn_str), timeout=30.0)
                 
                 async def wait_for_connection():
                     async for state in self.client.core.connection_state():
@@ -119,7 +121,7 @@ class PX4FlightController(IFlightController):
                     return False
                 
                 # Wrap connection state in a timeout as well
-                is_connected = await asyncio.wait_for(wait_for_connection(), timeout=15.0)
+                is_connected = await asyncio.wait_for(wait_for_connection(), timeout=45.0)
                 if is_connected:
                     logger.info(f"PX4 CONNECTED via {conn_str}")
                     self._connected = True
