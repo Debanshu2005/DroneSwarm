@@ -79,20 +79,21 @@ def main():
 
     time.sleep(1.0)
 
-    # 2. Spawn MAVSDK Server on unique port
-    mavsdk_bin = get_mavsdk_server_path()
-    print(f"[{drone_cfg.drone_id}] Starting {mavsdk_bin} on port {server_port}")
-
-    mavsdk_proc = subprocess.Popen(
-        [mavsdk_bin, "-p", str(server_port), resolved_conn],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-
-    if not wait_for_port(server_port):
-        print(f"[{drone_cfg.drone_id}] WARNING: MAVSDK server is not listening on port {server_port} yet. It may be waiting for the flight controller to boot. Continuing...")
-
-    print(f"[{drone_cfg.drone_id}] MAVSDK server ready. Starting Relay...")
+    if not is_sim:
+        # 2. Spawn MAVSDK Server on unique port
+        mavsdk_bin = get_mavsdk_server_path()
+        print(f"[{drone_cfg.drone_id}] Starting {mavsdk_bin} on port {server_port}")
+    
+        mavsdk_proc = subprocess.Popen(
+            [mavsdk_bin, "-p", str(server_port), resolved_conn],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    
+        if not wait_for_port(server_port):
+            print(f"[{drone_cfg.drone_id}] WARNING: MAVSDK server is not listening on port {server_port} yet. It may be waiting for the flight controller to boot. Continuing...")
+    
+        print(f"[{drone_cfg.drone_id}] MAVSDK server ready. Starting Relay...")
 
     # 3. Spawn Relay on default ports (WS 8080, UDP 14550/14551)
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
@@ -100,14 +101,15 @@ def main():
         [sys.executable, str(relay_script)] + sys.argv[1:]
     )
 
-    # 4. Monkey-patch mavsdk.System so DroneOS2 connects to the already-running
-    #    mavsdk_server on server_port WITHOUT spawning a new one.
-    import mavsdk
-    old_init = mavsdk.System.__init__
-    def patched_init(self, *args, **kwargs):
-        kwargs['port'] = server_port
-        old_init(self, *args, **kwargs)
-    mavsdk.System.__init__ = patched_init
+    if not is_sim:
+        # 4. Monkey-patch mavsdk.System so DroneOS2 connects to the already-running
+        #    mavsdk_server on server_port WITHOUT spawning a new one.
+        import mavsdk
+        old_init = mavsdk.System.__init__
+        def patched_init(self, *args, **kwargs):
+            kwargs['port'] = server_port
+            old_init(self, *args, **kwargs)
+        mavsdk.System.__init__ = patched_init
 
     
 
