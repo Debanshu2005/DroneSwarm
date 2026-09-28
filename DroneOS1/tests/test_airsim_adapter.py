@@ -186,25 +186,25 @@ async def test_heartbeat_age_grows_on_error(adapter):
 async def test_supersede_goto_with_land(adapter):
     with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
         await adapter.connect()
-        
+        await adapter.arm()
         adapter.client.moveToPositionAsync.return_value = FakeFuture(delay=2.0)
+        adapter.client.landAsync.return_value = FakeFuture(delay=0.1)
         
         start = time.time()
-        goto_task = asyncio.create_task(adapter.goto_local_ned(10.0, 0.0, -10.0))
+        goto_res = await adapter.goto_local_ned(10.0, 0.0, -10.0)
         await asyncio.sleep(0.1)
         
-        land_task = asyncio.create_task(adapter.land())
+        land_res = await adapter.land()
+        dur = time.time() - start
         
-        land_res = await land_task
-        goto_res = await goto_task
-        
-        duration = time.time() - start
-        
-        assert goto_res == False
+        assert goto_res == True
         assert land_res == True
-        assert duration < 2.5 # land preempted without waiting 2.0s lock
-        assert adapter._mode == "HOLD"
+        assert dur < 0.5
         
+        adapter._telem_client._state.landed_state = 0
+        await asyncio.sleep(2.0)
+        # Land will have finished and set mode to HOLD
+        assert adapter._mode == "HOLD"
         await adapter.disconnect()
 
 @pytest.mark.asyncio
@@ -274,10 +274,159 @@ async def test_move_velocity_duration(adapter):
         start = time.time()
         assert await adapter.move_velocity(1.0, 0.0, 0.0, 0.1)
         dur = time.time() - start
-        assert 0.1 <= dur < 0.2
+        assert dur < 0.05
         await adapter.disconnect()
 
 def test_all_abstract_methods_implemented():
     assert "get_home_position" in dir(AirSimFlightController)
     assert "goto_location" in dir(AirSimFlightController)
     assert "move_velocity_ned" in dir(AirSimFlightController)
+
+from DroneOS1.core.flight_pipeline import CommandWriter
+from DroneOS1.core.intents import FlightIntent, IntentSource, IntentAction
+
+@pytest.mark.asyncio
+async def test_b2_command_writer_timing(adapter):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        await adapter.arm()
+        adapter.client.moveToPositionAsync.return_value = FakeFuture(delay=2.0)
+        adapter.client.landAsync.return_value = FakeFuture(delay=3.0)
+        adapter.client.goHomeAsync.return_value = FakeFuture(delay=2.0)
+        adapter.client.moveByVelocityAsync.return_value = FakeFuture(delay=0.5)
+        adapter.client.moveByVelocityBodyFrameAsync.return_value = FakeFuture(delay=0.5)
+
+        writer = CommandWriter(adapter)
+        
+        intents = [
+            FlightIntent(IntentSource.MANUAL, IntentAction.GOTO, params={'lat': 47.0, 'lon': -122.0, 'alt': 10.0}),
+            FlightIntent(IntentSource.MANUAL, IntentAction.GOTO_NED, params={'north': 10, 'east': 10, 'down': -10}),
+            FlightIntent(IntentSource.MANUAL, IntentAction.LAND),
+            FlightIntent(IntentSource.MANUAL, IntentAction.RTL),
+            FlightIntent(IntentSource.MANUAL, IntentAction.HOVER),
+            FlightIntent(IntentSource.MANUAL, IntentAction.MOVE_VELOCITY, params={'vx': 1, 'vy': 0, 'vz': 0, 'duration': 0.1}),
+            FlightIntent(IntentSource.MANUAL, IntentAction.MOVE_VELOCITY_NED, params={'north': 1, 'east': 0, 'down': 0, 'duration': 0.1}),
+        ]
+        
+        for intent in intents:
+            start = time.time()
+            await writer.execute(intent)
+            dur = time.time() - start
+            assert dur < 0.05, f"CommandWriter.execute blocked for {dur}s on {intent.action.name}"
+            
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method,args", [
+    ("arm", []),
+    ("disarm", []),
+    ("land", []),
+    ("rtl", []),
+    ("hover", []),
+    ("move_velocity", [1.0, 0.0, 0.0, 0.1, 0.0]),
+    ("move_velocity_ned", [1.0, 0.0, 0.0, 0.1, 0.0]),
+    ("goto_location", [47.641568, -122.140165, 10.0, 0.0]),
+    ("goto_local_ned", [10.0, 10.0, -10.0, 0.0]),
+    ("stop_movement", []),
+])
+async def test_b3_adapter_methods_timing(adapter, method, args):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        await adapter.arm()
+        
+        adapter.client.moveToPositionAsync.return_value = FakeFuture(delay=2.0)
+        adapter.client.landAsync.return_value = FakeFuture(delay=3.0)
+        adapter.client.goHomeAsync.return_value = FakeFuture(delay=2.0)
+        adapter.client.moveByVelocityAsync.return_value = FakeFuture(delay=0.5)
+        adapter.client.moveByVelocityBodyFrameAsync.return_value = FakeFuture(delay=0.5)
+        
+        start = time.time()
+        await getattr(adapter, method)(*args)
+        dur = time.time() - start
+        
+        assert dur < 0.05, f"Adapter {method} blocked for {dur}s"
+        
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_b4_rtl_assertions(adapter):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        await adapter.arm()
+        adapter.client.goHomeAsync.return_value = FakeFuture(delay=0.1)
+        adapter.client.landAsync.return_value = FakeFuture(delay=0.1)
+        
+        start = time.time()
+        res = await adapter.rtl()
+        dur = time.time() - start
+        assert res == True
+        assert dur < 0.1
+        
+        await asyncio.sleep(0.3)
+        adapter._telem_client._state.landed_state = 0
+        await asyncio.sleep(0.2)
+        
+        telem = await adapter.get_telemetry()
+        assert telem.armed_state == "DISARMED"
+        assert adapter._mode == "HOLD"
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_b5_land_assertions(adapter):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        await adapter.arm()
+        adapter.client.landAsync.return_value = FakeFuture(delay=0.1)
+        
+        res = await adapter.land()
+        assert res == True
+        
+        await asyncio.sleep(0.2)
+        adapter._telem_client._state.landed_state = 0
+        await asyncio.sleep(0.2)
+        
+        telem = await adapter.get_telemetry()
+        assert telem.armed_state == "DISARMED"
+        assert adapter._mode == "HOLD"
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_b6_velocity_clamping_and_duration(adapter):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        adapter.config.pipeline_hz = 10.0
+        
+        await adapter.move_velocity(10.0, 0.0, 0.0, 0.1)
+        args = adapter.client.moveByVelocityBodyFrameAsync.call_args[0]
+        assert args[0] == 5.0 # clamped
+        assert args[3] >= 0.2 # max(0.1, 2/10)
+        
+        adapter.config.pipeline_hz = 20.0
+        await adapter.move_velocity(1.0, 0.0, 0.0, 0.05)
+        args2 = adapter.client.moveByVelocityBodyFrameAsync.call_args[0]
+        assert args2[3] >= 0.1 # max(0.05, 2/20)
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_b7_watcher_failure(adapter):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        await adapter.arm()
+        adapter.client.landAsync.return_value = FakeFuture(result=Exception("Sim error"), delay=0.1)
+        
+        await adapter.land()
+        await asyncio.sleep(0.2)
+        assert adapter._mode == "HOLD"
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_b8_disconnect_cleans_tasks(adapter):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        await adapter.arm()
+        adapter.client.moveToPositionAsync.return_value = FakeFuture(delay=10.0)
+        await adapter.goto_location(47.0, -122.0, 10.0)
+        
+        assert len(adapter._bg_tasks) > 0
+        await adapter.disconnect()
+        assert len(adapter._bg_tasks) == 0

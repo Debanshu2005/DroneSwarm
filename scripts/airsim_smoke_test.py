@@ -1,61 +1,127 @@
 import argparse
+import asyncio
+import time
 import sys
+import importlib
+import yaml
+import math
 
-def main():
-    parser = argparse.ArgumentParser(description="AirSim Smoke Test")
-    parser.add_argument("--vehicle", default="Drone1")
-    parser.add_argument("--pkg", default="DroneOS")
-    args = parser.parse_args()
+def calculate_distance(lat1, lon1, lat2, lon2):
+    return math.sqrt(((lat1 - lat2) * 111320.0)**2 + ((lon1 - lon2) * 111320.0 * math.cos(math.radians(lat1)))**2)
 
+async def run_smoke_test(args):
     try:
         import airsim
     except ImportError:
-        print("AirSim module not found. Smoke test exiting cleanly.")
+        print("AirSim module not found. Exiting 0.")
         sys.exit(0)
 
     try:
-        client = airsim.MultirotorClient(port=41451)
-        client.confirmConnection()
-        client.enableApiControl(True, args.vehicle)
-    except Exception as e:
-        print(f"AirSim not running or failed to connect: {e}")
+        pkg_core_pipeline = importlib.import_module(f"{args.pkg}.core.flight_pipeline")
+        pkg_core_intents = importlib.import_module(f"{args.pkg}.core.intents")
+        pkg_adapter = importlib.import_module(f"{args.pkg}.adapters.airsim_adapter")
+        pkg_config = importlib.import_module(f"{args.pkg}.shared.config.models")
+    except ImportError as e:
+        print(f"Failed to import package {args.pkg}: {e}")
+        sys.exit(1)
+
+    CommandWriter = pkg_core_pipeline.CommandWriter
+    FlightIntent = pkg_core_intents.FlightIntent
+    IntentSource = pkg_core_intents.IntentSource
+    IntentAction = pkg_core_intents.IntentAction
+    AirSimFlightController = pkg_adapter.AirSimFlightController
+    FlightConfig = pkg_config.FlightConfig
+    
+    with open(f"{args.pkg}/configs/flight.yaml", "r") as f:
+        config_data = yaml.safe_load(f)
+    config_data['adapter_type'] = 'airsim'
+    flight_config = FlightConfig(**config_data)
+
+    adapter = AirSimFlightController(args.vehicle, flight_config)
+    writer = CommandWriter(adapter)
+
+    print("Connecting to AirSim...")
+    start = time.time()
+    connected = await adapter.connect()
+    print(f"Connect returned in {time.time()-start:.3f}s")
+    if not connected:
+        print("Simulator unavailable. Exiting 0.")
         sys.exit(0)
 
-    print(f"Connected to AirSim for {args.vehicle} using package {args.pkg}")
-
     try:
-        home = client.getHomeGeoPoint(args.vehicle)
-        print(f"Home GeoPoint: {home.latitude}, {home.longitude}, {home.altitude}")
-        
-        gps = client.getGpsData("", args.vehicle)
-        print(f"Current GPS: {gps.gnss.geo_point.latitude}, {gps.gnss.geo_point.longitude}, {gps.gnss.geo_point.altitude}")
+        home = await adapter.get_home_position()
+        telem = await adapter.get_telemetry()
+        print(f"Home: {home}")
+        print(f"Telem: lat={telem.latitude}, lon={telem.longitude}, alt={telem.altitude}")
 
         print("Arming...")
-        client.armDisarm(True, args.vehicle)
+        start = time.time()
+        await adapter.arm()
+        print(f"Arm returned in {time.time()-start:.3f}s")
+        while (await adapter.get_telemetry()).armed_state != "ARMED":
+            await asyncio.sleep(0.1)
 
-        print("Taking off (5m)...")
-        client.takeoffAsync(10.0, args.vehicle).join()
-        client.moveToZAsync(-5.0, 5.0, vehicle_name=args.vehicle).join()
+        print("Takeoff to 5m...")
+        start = time.time()
+        intent_takeoff = FlightIntent(IntentSource.MANUAL, IntentAction.TAKEOFF, params={'altitude': 5.0})
+        await writer.execute(intent_takeoff)
+        print(f"Takeoff (blocking) returned in {time.time()-start:.3f}s")
 
-        print("Moving forward (3m)...")
-        yaw_mode = airsim.YawMode(is_rate=True, yaw_or_rate=0.0)
-        client.moveByVelocityBodyFrameAsync(3.0, 0.0, 0.0, 1.0, airsim.DrivetrainType.MaxDegreeOfFreedom, yaw_mode, args.vehicle).join()
+        print("Moving forward 3m (3s of move_velocity @ 10Hz)...")
+        # 10 Hz = 30 calls
+        start_move = time.time()
+        for i in range(30):
+            intent_vel = FlightIntent(IntentSource.MANUAL, IntentAction.MOVE_VELOCITY, params={'vx': 1.0, 'vy': 0.0, 'vz': 0.0, 'duration': 0.1})
+            start = time.time()
+            await writer.execute(intent_vel)
+            if i == 0:
+                print(f"First move_velocity returned in {time.time()-start:.3f}s")
+            await asyncio.sleep(0.1)
+        print(f"Completed 3s of velocity commands in {time.time()-start_move:.3f}s")
+        
+        # Stop
+        intent_hover = FlightIntent(IntentSource.MANUAL, IntentAction.HOVER)
+        await writer.execute(intent_hover)
 
-        print("Goto 10m north of home...")
-        client.moveToPositionAsync(10.0, 0.0, -5.0, 5.0, vehicle_name=args.vehicle).join()
+        # Goto 10m north
+        target_lat = home[0] + (10.0 / 111320.0)
+        target_lon = home[1]
+        print(f"Goto 10m North ({target_lat}, {target_lon})...")
+        intent_goto = FlightIntent(IntentSource.MANUAL, IntentAction.GOTO, params={'lat': target_lat, 'lon': target_lon, 'alt': 5.0})
+        start = time.time()
+        await writer.execute(intent_goto)
+        print(f"Goto returned in {time.time()-start:.3f}s")
+
+        print("Waiting for completion...")
+        start = time.time()
+        while True:
+            t = await adapter.get_telemetry()
+            dist = calculate_distance(t.latitude, t.longitude, target_lat, target_lon)
+            if dist < 2.0:
+                break
+            await asyncio.sleep(0.5)
+        print(f"Reached destination in {time.time()-start:.3f}s")
 
         print("RTL...")
-        client.goHomeAsync(30.0, args.vehicle).join()
+        intent_rtl = FlightIntent(IntentSource.MANUAL, IntentAction.RTL)
+        start = time.time()
+        await writer.execute(intent_rtl)
+        print(f"RTL returned in {time.time()-start:.3f}s")
         
-        print("Done.")
+        print("Waiting for DISARMED...")
+        start = time.time()
+        while (await adapter.get_telemetry()).armed_state != "DISARMED":
+            await asyncio.sleep(0.5)
+        print(f"Disarmed after {time.time()-start:.3f}s")
 
-    except Exception as e:
-        print(f"Smoke test failed: {e}")
     finally:
-        try:
-            client.enableApiControl(False, args.vehicle)
-        except:
-            pass
+        print("Disconnecting...")
+        await adapter.disconnect()
+
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--pkg", type=str, default="DroneOS", help="Package name (e.g. DroneOS)")
+    parser.add_argument("--vehicle", type=str, default="Drone1", help="Vehicle name in AirSim")
+    args = parser.parse_args()
+    asyncio.run(run_smoke_test(args))

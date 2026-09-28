@@ -19,9 +19,9 @@ except ImportError:
 class AirSimFlightController(IFlightController):
     """
     AirSim flight controller adapter.
-    Test hooks:
-    - self.sim_battery_level (float): override battery level (default 100.0)
-    - self.sim_gps_valid (bool): override GPS validity (default True)
+    Implements a dispatch-and-return non-blocking contract (like PX4): 
+    motions return True when dispatched. Completion is observed via get_telemetry().
+    Takeoff is the only exception, which blocks until altitude is reached.
     """
     def __init__(self, vehicle_name: str, config: FlightConfig):
         self.vehicle_name = vehicle_name
@@ -46,6 +46,8 @@ class AirSimFlightController(IFlightController):
         self._last_error = None
         self._last_error_time = 0.0
         self._last_ok = time.time()
+        self._bg_tasks = set()
+        self._rtl_task = None
 
     def _empty_telemetry(self) -> TelemetryData:
         return TelemetryData(
@@ -59,6 +61,45 @@ class AirSimFlightController(IFlightController):
             logger.error(msg)
             self._last_error = msg
             self._last_error_time = now
+
+    async def _watch(self, fut, seq, name, timeout):
+        try:
+            await asyncio.wait_for(asyncio.to_thread(fut.join), timeout=timeout)
+        except Exception as e:
+            if self._cmd_seq == seq:
+                self._log_rate_limited(f"AirSim {name} watcher failed or timed out: {e}")
+                self._awaiting_disarm = False
+                if self._mode in ("LAND", "RTL", "TAKEOFF"):
+                    self._mode = "HOLD"
+        else:
+            if self._cmd_seq != seq:
+                logger.debug(f"{name} superseded")
+
+    async def _rtl_sequence(self, rtl_fut, seq):
+        try:
+            await asyncio.wait_for(asyncio.to_thread(rtl_fut.join), timeout=75.0)
+        except Exception as e:
+            if self._cmd_seq == seq:
+                self._log_rate_limited(f"AirSim RTL goHome failed: {e}")
+                self._mode = "HOLD"
+            return
+            
+        if self._cmd_seq != seq:
+            return
+            
+        try:
+            async with self._cmd_lock:
+                if self._cmd_seq != seq:
+                    return
+                self._awaiting_disarm = True
+                land_fut = await asyncio.to_thread(self.client.landAsync, 30.0, self.vehicle_name)
+                
+            await asyncio.wait_for(asyncio.to_thread(land_fut.join), timeout=35.0)
+        except Exception as e:
+            if self._cmd_seq == seq:
+                self._log_rate_limited(f"AirSim RTL land failed: {e}")
+                self._awaiting_disarm = False
+                self._mode = "HOLD"
 
     async def connect(self) -> bool:
         if not airsim:
@@ -112,6 +153,15 @@ class AirSimFlightController(IFlightController):
         self._connected = False
         self._armed = False
         self._mode = "disconnected"
+        
+        for t in list(self._bg_tasks):
+            t.cancel()
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        self._bg_tasks.clear()
+        self._rtl_task = None
         
         if self._telemetry_task:
             self._telemetry_task.cancel()
@@ -208,11 +258,11 @@ class AirSimFlightController(IFlightController):
             return True
         except asyncio.TimeoutError:
             logger.error("AirSim takeoff timed out")
-            if seq == self._cmd_seq: self._mode = "HOLD"
+            if getattr(self, '_cmd_seq', None) == locals().get('seq', -1): self._mode = "HOLD"
             return False
         except Exception as e:
             logger.error(f"AirSim takeoff failed: {e}")
-            if seq == self._cmd_seq: self._mode = "HOLD"
+            if getattr(self, '_cmd_seq', None) == locals().get('seq', -1): self._mode = "HOLD"
             return False
 
     async def land(self) -> bool:
@@ -223,19 +273,14 @@ class AirSimFlightController(IFlightController):
                 seq = self._cmd_seq
                 self._mode = "LAND"
                 self._awaiting_disarm = True
-                land_fut = await asyncio.to_thread(self.client.landAsync, 30.0, self.vehicle_name)
+                fut = await asyncio.to_thread(self.client.landAsync, 30.0, self.vehicle_name)
                 
-            await asyncio.to_thread(land_fut.join)
-            
-            if seq != self._cmd_seq:
-                logger.debug("land superseded")
-                return False
-                
-            self._mode = "HOLD"
+            task = asyncio.create_task(self._watch(fut, seq, "land", 35.0))
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
             return True
         except Exception as e:
             logger.error(f"AirSim land failed: {e}")
-            if getattr(self, '_cmd_seq', None) == locals().get('seq', -1): self._mode = "HOLD"
             return False
 
     async def rtl(self) -> bool:
@@ -245,35 +290,16 @@ class AirSimFlightController(IFlightController):
                 self._cmd_seq += 1
                 seq = self._cmd_seq
                 self._mode = "RTL"
+                self._awaiting_disarm = False
                 rtl_fut = await asyncio.to_thread(self.client.goHomeAsync, 30.0, self.vehicle_name)
                 
-            await asyncio.wait_for(asyncio.to_thread(rtl_fut.join), timeout=35.0)
-            
-            if seq != self._cmd_seq:
-                logger.debug("rtl superseded before land")
-                return False
-                
-            async with self._cmd_lock:
-                self._cmd_seq += 1
-                seq = self._cmd_seq
-                self._awaiting_disarm = True
-                land_fut = await asyncio.to_thread(self.client.landAsync, 30.0, self.vehicle_name)
-                
-            await asyncio.wait_for(asyncio.to_thread(land_fut.join), timeout=35.0)
-            
-            if seq != self._cmd_seq:
-                logger.debug("rtl superseded after land")
-                return False
-                
-            self._mode = "HOLD"
+            task = asyncio.create_task(self._rtl_sequence(rtl_fut, seq))
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
+            self._rtl_task = task
             return True
-        except asyncio.TimeoutError:
-            logger.error("AirSim RTL timed out")
-            if seq == self._cmd_seq: self._mode = "HOLD"
-            return False
         except Exception as e:
             logger.error(f"AirSim RTL failed: {e}")
-            if seq == self._cmd_seq: self._mode = "HOLD"
             return False
 
     async def hover(self) -> bool:
@@ -281,16 +307,8 @@ class AirSimFlightController(IFlightController):
         try:
             async with self._cmd_lock:
                 self._cmd_seq += 1
-                seq = self._cmd_seq
                 self._mode = "HOLD"
-                hover_fut = await asyncio.to_thread(self.client.hoverAsync, self.vehicle_name)
-                
-            await asyncio.to_thread(hover_fut.join)
-            
-            if seq != self._cmd_seq:
-                logger.debug("hover superseded")
-                return False
-                
+                await asyncio.to_thread(self.client.hoverAsync, self.vehicle_name)
             return True
         except Exception as e:
             logger.error(f"AirSim hover failed: {e}")
@@ -305,21 +323,16 @@ class AirSimFlightController(IFlightController):
             vz = max(-max_vel, min(max_vel, vz))
             yaw_mode = airsim.YawMode(is_rate=True, yaw_or_rate=yaw_rate)
             
+            hz = getattr(self.config, 'pipeline_hz', 10.0)
+            eff_dur = max(duration, 2.0 / hz)
+            
             async with self._cmd_lock:
                 self._cmd_seq += 1
-                seq = self._cmd_seq
                 self._awaiting_disarm = False
-                fut = await asyncio.to_thread(
+                await asyncio.to_thread(
                     self.client.moveByVelocityBodyFrameAsync,
-                    vx, vy, vz, duration, airsim.DrivetrainType.MaxDegreeOfFreedom, yaw_mode, self.vehicle_name
+                    vx, vy, vz, eff_dur, airsim.DrivetrainType.MaxDegreeOfFreedom, yaw_mode, self.vehicle_name
                 )
-                
-            await asyncio.to_thread(fut.join)
-            
-            if seq != self._cmd_seq:
-                logger.debug("move_velocity superseded")
-                return False
-                
             return True
         except Exception as e:
             logger.error(f"AirSim move_velocity failed: {e}")
@@ -334,21 +347,16 @@ class AirSimFlightController(IFlightController):
             down = max(-max_vel, min(max_vel, down))
             yaw_mode = airsim.YawMode(is_rate=True, yaw_or_rate=yaw_rate)
             
+            hz = getattr(self.config, 'pipeline_hz', 10.0)
+            eff_dur = max(duration, 2.0 / hz)
+            
             async with self._cmd_lock:
                 self._cmd_seq += 1
-                seq = self._cmd_seq
                 self._awaiting_disarm = False
-                fut = await asyncio.to_thread(
+                await asyncio.to_thread(
                     self.client.moveByVelocityAsync,
-                    north, east, down, duration, airsim.DrivetrainType.MaxDegreeOfFreedom, yaw_mode, self.vehicle_name
+                    north, east, down, eff_dur, airsim.DrivetrainType.MaxDegreeOfFreedom, yaw_mode, self.vehicle_name
                 )
-                
-            await asyncio.to_thread(fut.join)
-            
-            if seq != self._cmd_seq:
-                logger.debug("move_velocity_ned superseded")
-                return False
-                
             return True
         except Exception as e:
             logger.error(f"AirSim move_velocity_ned failed: {e}")
@@ -379,12 +387,9 @@ class AirSimFlightController(IFlightController):
                     north, east, down, max_vel, 60.0, airsim.DrivetrainType.MaxDegreeOfFreedom, yaw_mode, -1, 1, self.vehicle_name
                 )
                 
-            await asyncio.to_thread(fut.join)
-            
-            if seq != self._cmd_seq:
-                logger.debug("goto_location superseded")
-                return False
-                
+            task = asyncio.create_task(self._watch(fut, seq, "goto_location", 65.0))
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
             return True
         except Exception as e:
             logger.error(f"AirSim goto_location failed: {e}")
@@ -405,12 +410,9 @@ class AirSimFlightController(IFlightController):
                     north, east, down, max_vel, 60.0, airsim.DrivetrainType.MaxDegreeOfFreedom, yaw_mode, -1, 1, self.vehicle_name
                 )
                 
-            await asyncio.to_thread(fut.join)
-            
-            if seq != self._cmd_seq:
-                logger.debug("goto_local_ned superseded")
-                return False
-                
+            task = asyncio.create_task(self._watch(fut, seq, "goto_local_ned", 65.0))
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
             return True
         except Exception as e:
             logger.error(f"AirSim goto_local_ned failed: {e}")
@@ -503,6 +505,8 @@ class AirSimFlightController(IFlightController):
                 if self._awaiting_disarm and state.landed_state == 0:
                     self._armed = False
                     self._awaiting_disarm = False
+                    if self._mode in ("LAND", "RTL"):
+                        self._mode = "HOLD"
                 
                 self._telemetry.armed_state = "ARMED" if self._armed else "DISARMED"
                 self._telemetry.flight_mode = self._mode
