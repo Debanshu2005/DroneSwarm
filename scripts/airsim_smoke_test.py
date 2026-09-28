@@ -32,9 +32,9 @@ async def run_smoke_test(args):
     AirSimFlightController = pkg_adapter.AirSimFlightController
     FlightConfig = pkg_config.FlightConfig
     
-    with open(f"{args.pkg}/configs/flight.yaml", "r") as f:
+    with open(f"{args.pkg}/configs/flight.sim.yaml", "r") as f:
         config_data = yaml.safe_load(f)
-    config_data['adapter_type'] = 'airsim'
+    assert config_data.get('adapter_type') == 'airsim', f"Expected adapter_type='airsim' in sim profile, got {config_data.get('adapter_type')}"
     flight_config = FlightConfig(**config_data)
 
     adapter = AirSimFlightController(args.vehicle, flight_config)
