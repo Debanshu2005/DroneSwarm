@@ -21,6 +21,7 @@ def resolve_flight_config(config_dir: Path, flight_config_cls):
     'sim': loads configs/flight.yaml, then deep merges configs/flight.sim.yaml over it.
     """
     profile = os.environ.get("DRONEOS_PROFILE", "hw")
+    config_dir = Path(config_dir)
     base_flight_path = config_dir / "flight.yaml"
     sim_flight_path = config_dir / "flight.sim.yaml"
     
