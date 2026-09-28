@@ -142,6 +142,13 @@ export class MultiWebSocketManager {
         let sent = false;
         Object.values(this.connections).forEach(ws => {
             if (ws.connected) {
+                console.info("SEND", {
+                    target_id: message.target_id,
+                    action: message.action,
+                    cmd_id: message.cmd_id,
+                    timestamp: message.timestamp,
+                    websocketUrl: ws.url,
+                });
                 const success = ws.send(message);
                 if (success) sent = true;
             }

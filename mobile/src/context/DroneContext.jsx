@@ -270,6 +270,20 @@ export const DroneProvider = ({ children }) => {
        setDrones(prev => {
           const drone = prev[msg.sender_id];
           if (!drone) return prev;
+          const currentCmdId = drone.commandState?.cmd_id;
+          const isCurrentCommand = Boolean(msg.cmd_id && currentCmdId && msg.cmd_id === currentCmdId);
+          console.info("RECV LIFECYCLE", {
+            sender_id: msg.sender_id,
+            target_id: msg.target_id,
+            action: msg.action,
+            stage: msg.stage,
+            cmd_id: msg.cmd_id,
+            currentCmdId,
+            acceptedForUi: isCurrentCommand,
+          });
+          // Late lifecycle events (for example HOVER after a movement release)
+          // must not replace a newer LAND/RTL command in the UI.
+          if (!isCurrentCommand) return prev;
           return {
              ...prev,
              [msg.sender_id]: {
@@ -434,6 +448,7 @@ export const DroneProvider = ({ children }) => {
        }
 
        const cmd_id = `cmd_${Date.now()}_${id}`;
+       console.info("COMMAND QUEUED", { target_id: id, action, cmd_id, timestamp: Date.now() });
        setDrones(prev => ({
           ...prev,
           [id]: {

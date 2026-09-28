@@ -30,6 +30,7 @@ class UdpNetworkAdapter(INetworkAdapter):
         self.configured_peer_host = peer_host
         self.configured_peer_port = peer_port
         self.configured_peer_endpoints = peer_endpoints or []
+        self.trace_network = os.getenv("DRONEOS_DIAGNOSTIC_TRACE", "").lower() in {"1", "true", "yes", "on"}
         self.net_secret = os.getenv("DRONE_NET_SECRET")
         self.known_endpoints = {}
         self.callbacks: List[Callable[[BaseMessage], Coroutine[Any, Any, None]]] = []
@@ -83,6 +84,8 @@ class UdpNetworkAdapter(INetworkAdapter):
         def datagram_received(self, data, addr):
             # Do not process our own broadcasts if they loop back
             logger.debug(f"Raw datagram received from {addr} ({len(data)} bytes)")
+            if self.adapter.trace_network:
+                logger.info(f"TRACE UDP_RX port={self.adapter.port} from={addr} bytes={len(data)} payload={data[:300]!r}")
             if self.adapter.loop and self.adapter.loop.is_running():
                 task = self.adapter.loop.create_task(self.adapter._handle_incoming(data, addr))
                 # Keep a strong reference to avoid silent GC drops in asyncio
@@ -152,6 +155,8 @@ class UdpNetworkAdapter(INetworkAdapter):
                 # peer DroneOS node and to this node's relay deterministically.
                 for addr in dict.fromkeys(self.configured_peer_endpoints):
                     self.transport.sendto(data, addr)
+                    if self.trace_network:
+                        logger.info(f"TRACE UDP_TX port={self.port} to={addr} type={message.msg_type.value} cmd_id={getattr(message, 'cmd_id', None)}")
                     logger.debug(f"Packet sent (Configured Endpoint) to {addr[0]}:{addr[1]}")
                 return
 
@@ -199,6 +204,8 @@ class UdpNetworkAdapter(INetworkAdapter):
             return
 
         logger.debug(f"Packet validated: sender={message.sender_id}, type={message.msg_type.value}")
+        if self.trace_network:
+            logger.info(f"TRACE MESSAGE_RX port={self.port} sender={message.sender_id} target={message.target_id} type={message.msg_type.value} cmd_id={getattr(message, 'cmd_id', None)}")
 
         if not self._verify_message_signature(message, addr):
             return

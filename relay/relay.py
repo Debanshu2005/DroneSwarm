@@ -26,6 +26,7 @@ class UdpWebsocketRelay:
         self.gs_heartbeat_interval = gs_heartbeat_interval
         self.auth_token = os.getenv("RELAY_AUTH_TOKEN")
         self.net_secret = os.getenv("DRONE_NET_SECRET")
+        self.trace_network = os.getenv("DRONEOS_DIAGNOSTIC_TRACE", "").lower() in {"1", "true", "yes", "on"}
         
         self.clients = set()
         self.known_endpoints = {} # Target ID to address tuple
@@ -180,16 +181,22 @@ class UdpWebsocketRelay:
             msg_dict = json.loads(message)
             target_id = msg_dict.get('target_id')
             data = json.dumps(self._sign_message_dict(msg_dict)).encode('utf-8')
+            if self.trace_network:
+                logger.info(f"TRACE WS_RX ws={self.ws_port} target={target_id} type={msg_dict.get('msg_type')} action={msg_dict.get('action')} cmd_id={msg_dict.get('cmd_id')}")
             
             if target_id and target_id in self.known_endpoints:
                 # Unicast
                 addr = self.known_endpoints[target_id]
                 self.transport.sendto(data, addr)
+                if self.trace_network:
+                    logger.info(f"TRACE UDP_TX udp={self.udp_bind_port} to={addr} route=learned-unicast")
                 logger.debug(f"Forwarded WS msg ({msg_dict.get('msg_type')}) via Unicast to {addr}")
             else:
                 # Broadcast
                 addr = (self.udp_target_host or self.udp_broadcast_addr, self.udp_target_port)
                 self.transport.sendto(data, addr)
+                if self.trace_network:
+                    logger.info(f"TRACE UDP_TX udp={self.udp_bind_port} to={addr} route=configured-target")
                 logger.debug(f"Forwarded WS msg ({msg_dict.get('msg_type')}) via Broadcast to {addr}")
                 
         except json.JSONDecodeError:
