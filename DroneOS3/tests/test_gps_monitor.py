@@ -2,9 +2,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 
-from DroneOS2.main import DroneOSApp
-from DroneOS2.sensors.gps_monitor import GpsMonitor
-from DroneOS2.shared.protocol.messages import TelemetryData
+from DroneOS3.main import DroneOSApp
+from DroneOS3.sensors.gps_monitor import GpsMonitor
+from DroneOS3.shared.protocol.messages import TelemetryData
 
 @pytest.mark.asyncio
 async def test_gps_monitor_degraded_and_restored_callbacks_fire_once_per_transition():

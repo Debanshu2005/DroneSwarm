@@ -2,8 +2,8 @@ import os
 import psutil
 import asyncio
 from typing import Dict, Any, List
-from DroneOS2.shared.config.models import AppConfig
-from DroneOS2.shared.utils.logger import setup_logger
+from DroneOS3.shared.config.models import AppConfig
+from DroneOS3.shared.utils.logger import setup_logger
 
 logger = setup_logger("Diagnostics")
 

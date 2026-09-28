@@ -1,7 +1,7 @@
 import threading
 from typing import Dict
-from DroneOS2.shared.protocol.messages import TelemetryData
-from DroneOS2.core.intents import FlightIntent, IntentSource
+from DroneOS3.shared.protocol.messages import TelemetryData
+from DroneOS3.core.intents import FlightIntent, IntentSource
 
 class SwarmState:
     def __init__(self):

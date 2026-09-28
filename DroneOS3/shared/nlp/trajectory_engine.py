@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from DroneOS2.shared.nlp.nav_types import NavigationMode, SensorReport
+from DroneOS3.shared.nlp.nav_types import NavigationMode, SensorReport
 
 
 EARTH_RADIUS_M = 6378137.0

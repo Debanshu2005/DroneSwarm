@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock
 import pytest
 
-from DroneOS2.sensors.battery_monitor import BatteryMonitor
+from DroneOS3.sensors.battery_monitor import BatteryMonitor
 
 @pytest.mark.asyncio
 async def test_transient_low_battery_dip_does_not_fire():

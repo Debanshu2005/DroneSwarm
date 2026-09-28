@@ -1,8 +1,8 @@
 import pytest
-from DroneOS2.core.navigation_manager import NavigationManager
-from DroneOS2.shared.protocol.messages import TelemetryData
-from DroneOS2.core.flight_state import FlightStateStore
-from DroneOS2.core.intents import IntentSource, IntentAction
+from DroneOS3.core.navigation_manager import NavigationManager
+from DroneOS3.shared.protocol.messages import TelemetryData
+from DroneOS3.core.flight_state import FlightStateStore
+from DroneOS3.core.intents import IntentSource, IntentAction
 
 def test_navigate_to_waypoint_heading_independent():
     state_store = FlightStateStore()

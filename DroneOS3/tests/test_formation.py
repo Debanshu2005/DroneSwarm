@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 from typing import Dict, Any
 import time
 
-from DroneOS2.core.formation_manager import FormationManager, FormationType, convert_local_offset_to_global
-from DroneOS2.core.formation_engine import FormationEngine
-from DroneOS2.core.swarm_manager import PeerStateManager
-from DroneOS2.shared.protocol.messages import TelemetryData
-from DroneOS2.core.intents import IntentSource, IntentAction
+from DroneOS3.core.formation_manager import FormationManager, FormationType, convert_local_offset_to_global
+from DroneOS3.core.formation_engine import FormationEngine
+from DroneOS3.core.swarm_manager import PeerStateManager
+from DroneOS3.shared.protocol.messages import TelemetryData
+from DroneOS3.core.intents import IntentSource, IntentAction
 
 def test_convert_local_offset_to_global():
     anchor_lat = 40.0

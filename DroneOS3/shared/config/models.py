@@ -53,7 +53,7 @@ class SafetyConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     level: str = "INFO"
-    log_file: str = "logs/DroneOS2.log"
+    log_file: str = "logs/DroneOS3.log"
     max_bytes: int = 10485760 # 10MB
     backup_count: int = 5
 

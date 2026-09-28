@@ -4,10 +4,10 @@ import sys
 import math
 import time
 
-from DroneOS2.core.interfaces import IFlightController
-from DroneOS2.core.command_handler import CommandHandler
-from DroneOS2.shared.protocol.messages import ControlMessage, CommandAction, StatusMessage
-from DroneOS2.shared.nlp.trajectory_engine import (
+from DroneOS3.core.interfaces import IFlightController
+from DroneOS3.core.command_handler import CommandHandler
+from DroneOS3.shared.protocol.messages import ControlMessage, CommandAction, StatusMessage
+from DroneOS3.shared.nlp.trajectory_engine import (
     parse_task_sequence, 
     TaskAction, 
     ParsedTask, 
@@ -18,7 +18,7 @@ from DroneOS2.shared.nlp.trajectory_engine import (
     LocalTarget,
     local_distance_m
 )
-from DroneOS2.shared.nlp.telemetry_bridge import build_nav_context
+from DroneOS3.shared.nlp.telemetry_bridge import build_nav_context
 
 logger = logging.getLogger(__name__)
 

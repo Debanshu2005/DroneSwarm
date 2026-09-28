@@ -1,12 +1,12 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
-from DroneOS2.core.terminal_controller import TerminalController
-from DroneOS2.core.command_handler import CommandHandler
-from DroneOS2.core.flight_manager import FlightManager
-from DroneOS2.core.flight_state import FlightStateStore
-from DroneOS2.shared.protocol.messages import CommandAction, ControlMessage
-from DroneOS2.core.intents import IntentSource, IntentAction
+from DroneOS3.core.terminal_controller import TerminalController
+from DroneOS3.core.command_handler import CommandHandler
+from DroneOS3.core.flight_manager import FlightManager
+from DroneOS3.core.flight_state import FlightStateStore
+from DroneOS3.shared.protocol.messages import CommandAction, ControlMessage
+from DroneOS3.core.intents import IntentSource, IntentAction
 
 @pytest.mark.asyncio
 async def test_terminal_goto_local_reaches_intent():

@@ -1,6 +1,6 @@
-from DroneOS2.shared.protocol.messages import TelemetryData
-from DroneOS2.shared.nlp.nav_types import NavigationMode, SensorReport
-from DroneOS2.shared.nlp.trajectory_engine import VehicleOrigin
+from DroneOS3.shared.protocol.messages import TelemetryData
+from DroneOS3.shared.nlp.nav_types import NavigationMode, SensorReport
+from DroneOS3.shared.nlp.trajectory_engine import VehicleOrigin
 
 def build_nav_context(telemetry: TelemetryData) -> tuple[SensorReport, VehicleOrigin]:
     if telemetry.gps_valid and telemetry.global_pos_valid:

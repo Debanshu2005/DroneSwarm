@@ -2,12 +2,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import asyncio
 
-from DroneOS2.shared.nlp.trajectory_engine import parse_task_sequence, TaskAction
-from DroneOS2.core.flight_manager import FlightManager
-from DroneOS2.core.intents import IntentSource, IntentAction
-from DroneOS2.core.flight_state import FlightStateStore
-from DroneOS2.core.interfaces import IFlightController
-from DroneOS2.shared.protocol.messages import TelemetryData
+from DroneOS3.shared.nlp.trajectory_engine import parse_task_sequence, TaskAction
+from DroneOS3.core.flight_manager import FlightManager
+from DroneOS3.core.intents import IntentSource, IntentAction
+from DroneOS3.core.flight_state import FlightStateStore
+from DroneOS3.core.interfaces import IFlightController
+from DroneOS3.shared.protocol.messages import TelemetryData
 
 @pytest.fixture
 def mock_fc():
@@ -77,8 +77,8 @@ async def test_smart_rtl_state_machine_lifecycle(mock_fc, state_store):
     assert state_store.smart_rtl_target == (10.0005, 20.0, 5.0)
     
     # 2. Evaluate engine - expect GOTO (NAVIGATING)
-    from DroneOS2.core.smart_rtl_engine import SmartRtlEngine
-    from DroneOS2.shared.config.models import SmartRtlConfig
+    from DroneOS3.core.smart_rtl_engine import SmartRtlEngine
+    from DroneOS3.shared.config.models import SmartRtlConfig
     class MockConfig:
         smart_rtl = SmartRtlConfig(arrival_radius_m=2.0, timeout_s=60.0)
     

@@ -2,9 +2,9 @@ import pytest
 import asyncio
 from unittest.mock import MagicMock, patch
 
-from DroneOS2.adapters.px4_adapter import PX4FlightController
-from DroneOS2.shared.config.models import FlightConfig
-from DroneOS2.shared.protocol.messages import TelemetryData
+from DroneOS3.adapters.px4_adapter import PX4FlightController
+from DroneOS3.shared.config.models import FlightConfig
+from DroneOS3.shared.protocol.messages import TelemetryData
 
 @pytest.fixture
 def base_config():
@@ -37,7 +37,7 @@ async def test_explicit_serial_configuration(base_config, monkeypatch):
         return True
     monkeypatch.setattr(asyncio, "wait_for", mock_wait_for)
     
-    with patch("DroneOS2.adapters.px4_adapter.System", return_value=mock_system):
+    with patch("DroneOS3.adapters.px4_adapter.System", return_value=mock_system):
         # We expect this to try to connect to the exact string in base_config
         await fc.connect()
         
@@ -65,7 +65,7 @@ async def test_auto_serial_fallback_preserved(base_config, monkeypatch):
         return True
     monkeypatch.setattr(asyncio, "wait_for", mock_wait_for)
     
-    with patch("DroneOS2.adapters.px4_adapter.System", return_value=mock_system):
+    with patch("DroneOS3.adapters.px4_adapter.System", return_value=mock_system):
         await fc.connect()
         
         # Ensure we DID search USB paths

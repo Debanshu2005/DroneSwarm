@@ -1,7 +1,7 @@
 import pytest
 from typing import List, Tuple
 
-from DroneOS2.core.repulsion_field import compute_repulsion
+from DroneOS3.core.repulsion_field import compute_repulsion
 
 def test_repulsion_zero_outside_radius():
     rep_n, rep_e = compute_repulsion([(3.0, 0.0)], radius=2.5, gain=1.0, max_displacement=2.0)

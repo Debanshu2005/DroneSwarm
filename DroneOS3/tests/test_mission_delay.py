@@ -3,10 +3,10 @@ import asyncio
 import time
 from unittest.mock import MagicMock, AsyncMock
 
-from DroneOS2.core.decision_engine import LocalDecisionEngine
-from DroneOS2.core.intents import FlightIntent, IntentSource, IntentAction
-from DroneOS2.shared.protocol.messages import TelemetryData
-from DroneOS2.core.flight_state import FlightStateStore
+from DroneOS3.core.decision_engine import LocalDecisionEngine
+from DroneOS3.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS3.shared.protocol.messages import TelemetryData
+from DroneOS3.core.flight_state import FlightStateStore
 
 @pytest.fixture
 def state_store():

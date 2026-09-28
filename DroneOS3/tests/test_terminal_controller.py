@@ -3,11 +3,11 @@ from unittest.mock import AsyncMock, MagicMock, patch, call
 import asyncio
 import math
 
-from DroneOS2.core.terminal_controller import TerminalController
-from DroneOS2.core.interfaces import IFlightController
-from DroneOS2.core.command_handler import CommandHandler
-from DroneOS2.shared.protocol.messages import CommandAction, TelemetryData
-from DroneOS2.shared.nlp.trajectory_engine import parse_task_sequence
+from DroneOS3.core.terminal_controller import TerminalController
+from DroneOS3.core.interfaces import IFlightController
+from DroneOS3.core.command_handler import CommandHandler
+from DroneOS3.shared.protocol.messages import CommandAction, TelemetryData
+from DroneOS3.shared.nlp.trajectory_engine import parse_task_sequence
 
 @pytest.fixture
 def mocks():

@@ -3,9 +3,9 @@ import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock
 
-from DroneOS2.core.intents import FlightIntent, IntentSource, IntentAction
-from DroneOS2.core.flight_state import FlightStateStore
-from DroneOS2.core.flight_pipeline import Arbiter, SafetyFilter, CommandWriter, FlightPipeline
+from DroneOS3.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS3.core.flight_state import FlightStateStore
+from DroneOS3.core.flight_pipeline import Arbiter, SafetyFilter, CommandWriter, FlightPipeline
 
 def test_arbiter_priority():
     arbiter = Arbiter()

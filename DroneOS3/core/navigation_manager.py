@@ -1,8 +1,8 @@
 import math
-from DroneOS2.shared.utils.logger import setup_logger
-from DroneOS2.shared.protocol.messages import TelemetryData
-from DroneOS2.core.flight_state import FlightStateStore
-from DroneOS2.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS3.shared.utils.logger import setup_logger
+from DroneOS3.shared.protocol.messages import TelemetryData
+from DroneOS3.core.flight_state import FlightStateStore
+from DroneOS3.core.intents import FlightIntent, IntentSource, IntentAction
 
 logger = setup_logger("NavigationManager")
 

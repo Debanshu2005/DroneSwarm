@@ -1,6 +1,6 @@
-from DroneOS2.core.interfaces import IFlightController
-from DroneOS2.shared.config.models import FlightConfig, DroneConfig
-from DroneOS2.shared.utils.logger import setup_logger
+from DroneOS3.core.interfaces import IFlightController
+from DroneOS3.shared.config.models import FlightConfig, DroneConfig
+from DroneOS3.shared.utils.logger import setup_logger
 
 logger = setup_logger("AdapterFactory")
 
@@ -20,7 +20,7 @@ class AdapterFactory:
             return AirSimFlightController(vehicle_name=drone_cfg.vehicle_name, config=flight_cfg)
             
         elif backend_type in ["mavsdk", "px4"]:
-            from DroneOS2.adapters.px4_adapter import PX4FlightController
+            from DroneOS3.adapters.px4_adapter import PX4FlightController
             logger.info("Initializing PX4/MAVSDK Flight Controller Adapter.")
             return PX4FlightController(vehicle_name=drone_cfg.vehicle_name, config=flight_cfg)
             

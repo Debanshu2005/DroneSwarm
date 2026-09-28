@@ -3,11 +3,11 @@ import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock
 
-from DroneOS2.core.flight_pipeline import FlightPipeline
-from DroneOS2.core.flight_state import FlightStateStore
-from DroneOS2.core.intents import FlightIntent, IntentSource, IntentAction
-from DroneOS2.shared.config.models import FlightConfig
-from DroneOS2.shared.protocol.messages import TelemetryData
+from DroneOS3.core.flight_pipeline import FlightPipeline
+from DroneOS3.core.flight_state import FlightStateStore
+from DroneOS3.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS3.shared.config.models import FlightConfig
+from DroneOS3.shared.protocol.messages import TelemetryData
 
 def make_flight_config(**overrides):
     data = {

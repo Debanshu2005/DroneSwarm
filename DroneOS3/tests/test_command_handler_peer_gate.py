@@ -3,9 +3,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
 
-from DroneOS2.core.command_handler import CommandHandler
-from DroneOS2.core.swarm_manager import SwarmMembership
-from DroneOS2.shared.protocol.messages import CommandAction, ControlMessage, TelemetryData
+from DroneOS3.core.command_handler import CommandHandler
+from DroneOS3.core.swarm_manager import SwarmMembership
+from DroneOS3.shared.protocol.messages import CommandAction, ControlMessage, TelemetryData
 
 def make_handler(monkeypatch, require=False, expected_ids="", expected_count=""):
     if require:

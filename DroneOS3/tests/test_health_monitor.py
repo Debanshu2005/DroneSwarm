@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock
 import pytest
 
-from DroneOS2.sensors.health_monitor import HealthMonitor
+from DroneOS3.sensors.health_monitor import HealthMonitor
 
 @pytest.mark.asyncio
 async def test_connection_lost_and_restored_callbacks_fire_once_per_transition():

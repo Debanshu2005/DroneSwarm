@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock
-from DroneOS2.shared.communication.network_node import UdpNetworkAdapter
-from DroneOS2.shared.communication.serializers import JsonSerializer
-from DroneOS2.shared.protocol.messages import HeartbeatMessage
+from DroneOS3.shared.communication.network_node import UdpNetworkAdapter
+from DroneOS3.shared.communication.serializers import JsonSerializer
+from DroneOS3.shared.protocol.messages import HeartbeatMessage
 
 def test_default_serialization_omits_empty_hmac_sig():
     serializer = JsonSerializer()
