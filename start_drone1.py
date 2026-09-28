@@ -70,6 +70,7 @@ def main():
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
                     proc.kill()
             elif cmdline and 'relay.py' in ' '.join(cmdline) and 'DroneOS' in ' '.join(cmdline):
+                if is_sim: continue
                 print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
                 proc.kill()
         except Exception:
@@ -82,7 +83,7 @@ def main():
     # 3. Spawn Relay manually
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
     relay_proc = subprocess.Popen(
-        [sys.executable, str(relay_script)],
+        [sys.executable, str(relay_script)] + sys.argv[1:],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )

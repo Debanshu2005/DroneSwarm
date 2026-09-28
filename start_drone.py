@@ -29,6 +29,9 @@ def main():
                 cmdline = proc.info.get('cmdline') or []
                 joined = ' '.join(cmdline)
                 if 'relay.py' in joined and str(project_root) in joined:
+                    if os.environ.get('DRONEOS_PROFILE') == 'sim':
+                        # In sim mode, skip blind cleanup that would kill sibling nodes
+                        continue
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
                     proc.kill()
             except Exception:
