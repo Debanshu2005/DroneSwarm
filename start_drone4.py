@@ -49,19 +49,24 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
 def main():
     config_dir = Path(__file__).resolve().parent / "DroneOS3" / "configs"
     drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
-    flight_cfg = load_yaml_config(config_dir / "flight.yaml", FlightConfig)
+    from DroneOS3.shared.config.profile import resolve_flight_config
+    flight_cfg = resolve_flight_config(config_dir, FlightConfig)
 
-    resolved_conn = resolve_serial(drone_cfg.vehicle_name, flight_cfg.px4_connection_string)
+    if os.environ.get("DRONEOS_PROFILE") == "sim":
+        resolved_conn = "sim"
+    else:
+        resolved_conn = resolve_serial(drone_cfg.vehicle_name, flight_cfg.px4_connection_string)
 
     print(f"[{drone_cfg.drone_id}] Starting DroneOS Lifecycle Manager...")
 
     # 1. Kill any existing orphaned servers/relays
     import psutil
+    is_sim = os.environ.get("DRONEOS_PROFILE") == "sim"
     server_port = 50051
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmdline = proc.info.get('cmdline') or []
-            if proc.info['name'] and 'mavsdk_server' in proc.info['name']:
+            if not is_sim and proc.info['name'] and 'mavsdk_server' in proc.info['name']:
                 if cmdline and any(str(server_port) in arg for arg in cmdline):
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
                     proc.kill()

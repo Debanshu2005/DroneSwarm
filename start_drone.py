@@ -16,7 +16,8 @@ def main():
     project_root = Path(__file__).resolve().parent
     config_dir = Path(__file__).resolve().parent / "DroneOS2" / "configs"
     drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
-    flight_cfg = load_yaml_config(config_dir / "flight.yaml", FlightConfig)
+    from DroneOS2.shared.config.profile import resolve_flight_config
+    flight_cfg = resolve_flight_config(config_dir, FlightConfig)
     
     print(f"[{drone_cfg.drone_id}] Starting DroneOS Lifecycle Manager...")
     print(f"[{drone_cfg.drone_id}] MAVSDK Server lifecycle is delegated to MAVSDK-Python.")

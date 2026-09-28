@@ -43,9 +43,11 @@ class DroneOSApp:
             config_dir = Path(sys.argv[1]).resolve()
         else:
             config_dir = Path(__file__).resolve().parent / "configs"
+        from DroneOS2.shared.config.profile import resolve_flight_config, log_startup_banner
         self.drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
         self.network_cfg = load_yaml_config(config_dir / "network.yaml", NetworkConfig)
-        self.flight_cfg = load_yaml_config(config_dir / "flight.yaml", FlightConfig)
+        self.flight_cfg = resolve_flight_config(config_dir, FlightConfig)
+        log_startup_banner(self.drone_cfg.drone_id, self.drone_cfg.vehicle_name, self.flight_cfg.adapter_type)
         
         # We need MissionConfig to provide storage dir
         try:
@@ -532,7 +534,7 @@ class DroneOSApp:
                 await self.shutdown()
 
     async def shutdown(self) -> None:
-        logger.info("Shutting down DroneOS...")
+        logger.info("Shutting down DroneOS2...")
         self._running = False
         
         for task in self._active_tasks:
@@ -557,7 +559,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(app.run())
     except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received. Shutting down DroneOS...")
+        logger.info("Keyboard interrupt received. Shutting down DroneOS2...")
     except asyncio.CancelledError:
         pass
     finally:
