@@ -1,7 +1,20 @@
 import threading
 from typing import Dict
 from DroneOS1.shared.protocol.messages import TelemetryData
-from DroneOS1.core.intents import FlightIntent, IntentSource
+from DroneOS1.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS1.shared.utils.logger import setup_logger
+
+logger = setup_logger("FlightStateStore")
+
+CRITICAL_MANUAL_ACTIONS = {
+    IntentAction.TAKEOFF,
+    IntentAction.LAND,
+    IntentAction.RTL,
+}
+
+
+def is_critical_manual_intent(intent: FlightIntent) -> bool:
+    return intent.source == IntentSource.MANUAL and intent.action in CRITICAL_MANUAL_ACTIONS
 
 class SwarmState:
     def __init__(self):
@@ -39,7 +52,23 @@ class FlightStateStore:
 
     def submit_intent(self, intent: FlightIntent):
         with self.intent_lock:
+            current_manual = self.active_intents.get(IntentSource.MANUAL)
+            # A late deadman MOVE/HOVER packet must not replace a queued
+            # TAKEOFF/LAND/RTL before the pipeline has dispatched it.
+            if (
+                intent.source == IntentSource.MANUAL
+                and current_manual is not None
+                and is_critical_manual_intent(current_manual)
+                and not is_critical_manual_intent(intent)
+            ):
+                logger.warning(
+                    "Ignoring stale manual %s while critical manual %s is active.",
+                    intent.action.value,
+                    current_manual.action.value,
+                )
+                return False
             self.active_intents[intent.source] = intent
+            return True
 
     def get_intents(self) -> Dict[IntentSource, FlightIntent]:
         with self.intent_lock:
@@ -49,4 +78,12 @@ class FlightStateStore:
     def clear_intent(self, source: IntentSource):
         with self.intent_lock:
             self.active_intents.pop(source, None)
+
+    def complete_intent(self, intent: FlightIntent) -> bool:
+        """Clear an intent only if it has not been superseded meanwhile."""
+        with self.intent_lock:
+            if self.active_intents.get(intent.source) is intent:
+                self.active_intents.pop(intent.source, None)
+                return True
+        return False
 

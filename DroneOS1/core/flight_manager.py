@@ -51,20 +51,24 @@ class FlightManager:
             except (ValueError, TypeError):
                 return False
                 
-        # Emit a takeoff intent
-        intent = FlightIntent(IntentSource.MANUAL, IntentAction.TAKEOFF, ttl_seconds=5.0, params={"altitude": altitude})
+        # Keep the GCS lifecycle correlation with the intent until the
+        # pipeline has actually invoked the flight controller.
+        intent_params = {"altitude": altitude}
+        if params:
+            intent_params.update({key: value for key, value in params.items() if key.startswith("_")})
+        intent = FlightIntent(IntentSource.MANUAL, IntentAction.TAKEOFF, ttl_seconds=15.0, params=intent_params)
         self.state_store.submit_intent(intent)
         logger.info(f"Takeoff intent submitted for {altitude}m.")
         return True
 
     async def land(self, params: Dict[str, Any] = None) -> bool:
-        intent = FlightIntent(IntentSource.MANUAL, IntentAction.LAND, ttl_seconds=5.0)
+        intent = FlightIntent(IntentSource.MANUAL, IntentAction.LAND, ttl_seconds=15.0, params=params or {})
         self.state_store.submit_intent(intent)
         logger.info("Land intent submitted.")
         return True
 
     async def rtl(self, params: Dict[str, Any] = None) -> bool:
-        intent = FlightIntent(IntentSource.MANUAL, IntentAction.RTL, ttl_seconds=5.0)
+        intent = FlightIntent(IntentSource.MANUAL, IntentAction.RTL, ttl_seconds=15.0, params=params or {})
         self.state_store.submit_intent(intent)
         logger.info("RTL intent submitted.")
         return True
