@@ -1,0 +1,30 @@
+{
+  "SettingsVersion": 1.2,
+  "SimMode": "Multirotor",
+  "Vehicles": {
+    "Drone1": {
+      "VehicleType": "SimpleFlight",
+      "X": 0,
+      "Y": 0,
+      "Z": 0
+    },
+    "Drone2": {
+      "VehicleType": "SimpleFlight",
+      "X": 0,
+      "Y": 5,
+      "Z": 0
+    },
+    "Drone3": {
+      "VehicleType": "SimpleFlight",
+      "X": 0,
+      "Y": 10,
+      "Z": 0
+    },
+    "Drone4": {
+      "VehicleType": "SimpleFlight",
+      "X": 0,
+      "Y": 15,
+      "Z": 0
+    }
+  }
+}
