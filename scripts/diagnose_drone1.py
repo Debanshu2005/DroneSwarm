@@ -40,7 +40,6 @@ async def main() -> None:
     async with websockets.connect(URL) as websocket:
         await send_and_trace(websocket, "hover", "diagnostic_drone1")
         await send_and_trace(websocket, "land", "diagnostic_drone1_land")
-        await send_and_trace(websocket, "rtl", "diagnostic_drone1_rtl")
 
 
 if __name__ == "__main__":
