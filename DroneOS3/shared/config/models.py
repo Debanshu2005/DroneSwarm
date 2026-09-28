@@ -31,6 +31,10 @@ class SmartRtlConfig(BaseModel):
     arrival_radius_m: float = 2.0
     timeout_s: float = 60.0
 
+class SimFaultConfig(BaseModel):
+    drop_gps: bool = False
+    battery_drain_multiplier: float = 0.0
+
 class FlightConfig(BaseModel):
     adapter_type: str
     takeoff_altitude: float
@@ -45,6 +49,7 @@ class FlightConfig(BaseModel):
     collision_avoidance: Optional[CollisionAvoidanceConfig] = None
     safety_limits: Optional[SafetyLimitsConfig] = None
     smart_rtl: Optional[SmartRtlConfig] = None
+    sim: Optional[SimFaultConfig] = None
 
 class SafetyConfig(BaseModel):
     low_battery_threshold: float = 20.0
@@ -53,7 +58,7 @@ class SafetyConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     level: str = "INFO"
-    log_file: str = "logs/DroneOS3.log"
+    log_file: str = "logs/droneos.log"
     max_bytes: int = 10485760 # 10MB
     backup_count: int = 5
 
@@ -96,4 +101,3 @@ class AppConfig(BaseModel):
     mission: Optional[MissionConfig] = None
     movement: Optional[MovementConfig] = None
     formation: Optional[FormationConfig] = None
-

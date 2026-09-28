@@ -1,3 +1,6 @@
-adapter_type: "airsim"
-airsim_host: "127.0.0.1"
+adapter_type: airsim
+airsim_host: 127.0.0.1
 airsim_port: 41451
+sim:
+  battery_drain_multiplier: 0.0
+  drop_gps: false

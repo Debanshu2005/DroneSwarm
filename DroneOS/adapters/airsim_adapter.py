@@ -573,6 +573,12 @@ class AirSimFlightController(IFlightController):
                     heading += 360.0
                 self._telemetry.heading = heading
                 
+                if self.config.sim:
+                    self.sim_gps_valid = not self.config.sim.drop_gps
+                    if self.config.sim.battery_drain_multiplier > 0:
+                        self.sim_battery_level -= self.config.sim.battery_drain_multiplier * 0.1
+                        self.sim_battery_level = max(0.0, self.sim_battery_level)
+                
                 self._telemetry.battery_level = self.sim_battery_level
                 self._telemetry.gps_valid = self.sim_gps_valid
                 

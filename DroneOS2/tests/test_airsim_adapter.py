@@ -450,3 +450,27 @@ async def test_b8_disconnect_cleans_tasks(adapter):
             import concurrent.futures
             assert isinstance(adapter._executor, concurrent.futures.ThreadPoolExecutor)
             assert adapter._executor._max_workers == 1
+
+@pytest.mark.asyncio
+async def test_simulated_faults_gps(adapter):
+    from DroneOS2.shared.config.models import SimFaultConfig
+    with patch('DroneOS2.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        adapter.config.sim = SimFaultConfig(drop_gps=True, battery_drain_multiplier=0.0)
+        await adapter.connect()
+        await asyncio.sleep(0.2)
+        telem = await adapter.get_telemetry()
+        assert telem.gps_valid == False
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_simulated_faults_battery(adapter):
+    from DroneOS2.shared.config.models import SimFaultConfig
+    with patch('DroneOS2.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        adapter.config.sim = SimFaultConfig(drop_gps=False, battery_drain_multiplier=10.0)
+        await adapter.connect()
+        # Battery drops by 10.0 * 0.1 = 1.0 per telemetry loop (0.1s)
+        # Sleep for 0.5s -> should drop by ~5
+        await asyncio.sleep(0.5)
+        telem = await adapter.get_telemetry()
+        assert telem.battery_level < 98.0
+        await adapter.disconnect()
