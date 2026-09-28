@@ -474,3 +474,43 @@ async def test_simulated_faults_battery(adapter):
         telem = await adapter.get_telemetry()
         assert telem.battery_level < 98.0
         await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_simulated_faults_overrides(adapter):
+    from DroneOS3.shared.config.models import SimFaultConfig
+    with patch('DroneOS3.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        adapter.config.sim = SimFaultConfig(drop_gps=False, battery_drain_multiplier=0.0)
+        await adapter.connect()
+        await asyncio.sleep(0.2)
+        
+        # Override battery
+        await adapter.set_sim_battery(15.0)
+        await asyncio.sleep(0.2)
+        telem = await adapter.get_telemetry()
+        assert telem.battery_level == 15.0
+        
+        # Override GPS
+        await adapter.set_sim_gps_valid(False)
+        await asyncio.sleep(0.2)
+        telem = await adapter.get_telemetry()
+        assert telem.gps_valid == False
+        
+        # Clear overrides restores config
+        adapter.clear_sim_overrides()
+        await asyncio.sleep(0.2)
+        telem = await adapter.get_telemetry()
+        assert telem.gps_valid == True
+        assert telem.battery_level == 15.0  # It stays at 15 because drain is 0, wait, actually drain is 0 so it stays where it was.
+        
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_simulated_faults_default_path(adapter):
+    with patch('DroneOS3.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        adapter.config.sim = None
+        await adapter.connect()
+        await asyncio.sleep(0.2)
+        telem = await adapter.get_telemetry()
+        assert telem.gps_valid == True
+        assert telem.battery_level == 100.0
+        await adapter.disconnect()

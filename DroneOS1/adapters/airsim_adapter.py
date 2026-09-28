@@ -43,6 +43,8 @@ class AirSimFlightController(IFlightController):
         self._cmd_lock = asyncio.Lock()
         self._cmd_seq = 0
         self._awaiting_disarm = False
+        self._sim_battery_override = None
+        self._sim_gps_override = None
         
         self._last_error = None
         self._last_error_time = 0.0
@@ -91,7 +93,6 @@ class AirSimFlightController(IFlightController):
                 vx = state.kinematics_estimated.linear_velocity.x_val
                 vy = state.kinematics_estimated.linear_velocity.y_val
                 vz = state.kinematics_estimated.linear_velocity.z_val
-                import math
                 dist = math.sqrt((curr_n - target_n)**2 + (curr_e - target_e)**2 + (curr_d - target_d)**2)
                 vel = math.sqrt(vx**2 + vy**2 + vz**2)
                 if dist < 1.0 and vel < 0.2:
@@ -122,7 +123,7 @@ class AirSimFlightController(IFlightController):
                     arrived = True
                     break
             except Exception as e:
-                logger.error(f"DEBUG RTL EXCEPTION: {e}")
+                pass
             await asyncio.sleep(0.5)
         if not arrived:
             if self._cmd_seq == seq:
@@ -133,7 +134,6 @@ class AirSimFlightController(IFlightController):
             async with self._cmd_lock:
                 if self._cmd_seq != seq:
                     return
-                logger.error("DEBUG RTL: setting _awaiting_disarm = True")
                 self._awaiting_disarm = True
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(self._executor, self.client.landAsync, 30.0, self.vehicle_name)
@@ -536,6 +536,16 @@ class AirSimFlightController(IFlightController):
             logger.debug(f"set_param stub called for {name}={value}")
         return False
         
+    async def set_sim_battery(self, level: float):
+        self._sim_battery_override = max(0.0, min(100.0, level))
+        
+    async def set_sim_gps_valid(self, valid: bool):
+        self._sim_gps_override = valid
+        
+    def clear_sim_overrides(self):
+        self._sim_battery_override = None
+        self._sim_gps_override = None
+
     async def _telemetry_loop(self):
         while self._connected and self._telem_client is not None:
             try:
@@ -574,10 +584,16 @@ class AirSimFlightController(IFlightController):
                 self._telemetry.heading = heading
                 
                 if self.config.sim:
-                    self.sim_gps_valid = not self.config.sim.drop_gps
-                    if self.config.sim.battery_drain_multiplier > 0:
+                    if self._sim_gps_override is None:
+                        self.sim_gps_valid = not self.config.sim.drop_gps
+                    if self._sim_battery_override is None and self.config.sim.battery_drain_multiplier > 0:
                         self.sim_battery_level -= self.config.sim.battery_drain_multiplier * 0.1
                         self.sim_battery_level = max(0.0, self.sim_battery_level)
+                
+                if self._sim_gps_override is not None:
+                    self.sim_gps_valid = self._sim_gps_override
+                if self._sim_battery_override is not None:
+                    self.sim_battery_level = self._sim_battery_override
                 
                 self._telemetry.battery_level = self.sim_battery_level
                 self._telemetry.gps_valid = self.sim_gps_valid
@@ -590,7 +606,6 @@ class AirSimFlightController(IFlightController):
                 self._telemetry.health_all_ok = True
                 
                 if self._awaiting_disarm and state.landed_state == 0:
-                    print("DEBUG TELEM: landed_state 0 seen, disarming")
                     self._armed = False
                     self._awaiting_disarm = False
                     if self._mode in ("LAND", "RTL"):

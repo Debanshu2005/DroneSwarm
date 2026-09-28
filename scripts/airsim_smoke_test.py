@@ -5,6 +5,8 @@ import sys
 import importlib
 import yaml
 import math
+import os
+from pathlib import Path
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     return math.sqrt(((lat1 - lat2) * 111320.0)**2 + ((lon1 - lon2) * 111320.0 * math.cos(math.radians(lat1)))**2)
@@ -13,13 +15,18 @@ async def run_smoke_test(args):
     try:
         import airsim
     except ImportError:
-        print("AirSim module not found. Exiting 0.")
-        sys.exit(0)
+        if os.environ.get("ALLOW_SKIP") == "1":
+            print("AirSim module not found. Exiting 0 (SKIPPED).")
+            sys.exit(0)
+        else:
+            print("AirSim module not found. Exiting 1.")
+            sys.exit(1)
 
     try:
         pkg_core_pipeline = importlib.import_module(f"{args.pkg}.core.flight_pipeline")
         pkg_core_intents = importlib.import_module(f"{args.pkg}.core.intents")
         pkg_adapter = importlib.import_module(f"{args.pkg}.adapters.airsim_adapter")
+        pkg_profile = importlib.import_module(f"{args.pkg}.shared.config.profile")
         pkg_config = importlib.import_module(f"{args.pkg}.shared.config.models")
     except ImportError as e:
         print(f"Failed to import package {args.pkg}: {e}")
@@ -30,12 +37,10 @@ async def run_smoke_test(args):
     IntentSource = pkg_core_intents.IntentSource
     IntentAction = pkg_core_intents.IntentAction
     AirSimFlightController = pkg_adapter.AirSimFlightController
-    FlightConfig = pkg_config.FlightConfig
     
-    with open(f"{args.pkg}/configs/flight.sim.yaml", "r") as f:
-        config_data = yaml.safe_load(f)
-    assert config_data.get('adapter_type') == 'airsim', f"Expected adapter_type='airsim' in sim profile, got {config_data.get('adapter_type')}"
-    flight_config = FlightConfig(**config_data)
+    os.environ["DRONEOS_PROFILE"] = "sim"
+    flight_config = pkg_profile.resolve_flight_config(Path(f"{args.pkg}/configs"), pkg_config.FlightConfig)
+    assert flight_config.adapter_type == 'airsim', f"Expected adapter_type='airsim' in sim profile, got {flight_config.adapter_type}"
 
     adapter = AirSimFlightController(args.vehicle, flight_config)
     writer = CommandWriter(adapter)
@@ -45,8 +50,12 @@ async def run_smoke_test(args):
     connected = await adapter.connect()
     print(f"Connect returned in {time.time()-start:.3f}s")
     if not connected:
-        print("Simulator unavailable. Exiting 0.")
-        sys.exit(0)
+        if os.environ.get("ALLOW_SKIP") == "1":
+            print("Simulator unavailable. Exiting 0 (SKIPPED).")
+            sys.exit(0)
+        else:
+            print("Simulator unavailable. Exiting 1.")
+            sys.exit(1)
 
     try:
         home = await adapter.get_home_position()

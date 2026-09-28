@@ -1,31 +1,36 @@
 import asyncio
 import importlib
 import yaml
+import yaml
 import sys
 import time
+import os
 
 async def test_drone(pkg_name, vehicle_name):
     print(f"[{pkg_name}] Initializing...")
     try:
         pkg_adapter = importlib.import_module(f"{pkg_name}.adapters.airsim_adapter")
+        pkg_profile = importlib.import_module(f"{pkg_name}.shared.config.profile")
         pkg_config = importlib.import_module(f"{pkg_name}.shared.config.models")
     except ImportError as e:
         print(f"[{pkg_name}] Failed to import package: {e}")
         return False
         
-    with open(f"{pkg_name}/configs/flight.sim.yaml", "r") as f:
-        config_data = yaml.safe_load(f)
-        
-    assert config_data.get('adapter_type') == 'airsim', f"Expected adapter_type='airsim' in {pkg_name}, got {config_data.get('adapter_type')}"
+    os.environ["DRONEOS_PROFILE"] = "sim"
+    flight_config = pkg_profile.resolve_flight_config(f"{pkg_name}/configs", pkg_config.FlightConfig)
+    assert flight_config.adapter_type == 'airsim', f"Expected adapter_type='airsim' in {pkg_name}, got {flight_config.adapter_type}"
     
-    flight_config = pkg_config.FlightConfig(**config_data)
     adapter = pkg_adapter.AirSimFlightController(vehicle_name, flight_config)
     
     print(f"[{pkg_name}] Connecting...")
     connected = await adapter.connect()
     if not connected:
-        print(f"[{pkg_name}] Simulator unavailable. Ensure AirSim is running.")
-        return False
+        if os.environ.get("ALLOW_SKIP") == "1":
+            print(f"[{pkg_name}] Simulator unavailable. Exiting 0 (SKIPPED).")
+            return True
+        else:
+            print(f"[{pkg_name}] Simulator unavailable. Ensure AirSim is running.")
+            return False
         
     print(f"[{pkg_name}] Connected. Arming...")
     await adapter.arm()

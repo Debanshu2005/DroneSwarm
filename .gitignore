@@ -16,6 +16,7 @@ mobile/www/
 *.tar.gz
 *.txt
 *.json
+!sim/airsim/settings.json
 .pytest_cache/
 graphify-out/
 logs/
