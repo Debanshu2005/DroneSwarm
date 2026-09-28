@@ -88,7 +88,9 @@ def main():
                       "--udp-bind-host", "127.0.0.1", "--udp-bind-port", "14651",
                       "--udp-target-host", "127.0.0.1", "--udp-target-port", "14551"]
     relay_proc = subprocess.Popen(
-        [sys.executable, str(relay_script)] + relay_args
+        [sys.executable, str(relay_script)] + relay_args,
+        stdout=None if os.environ.get("DRONEOS_DIAGNOSTIC_TRACE") else subprocess.DEVNULL,
+        stderr=None if os.environ.get("DRONEOS_DIAGNOSTIC_TRACE") else subprocess.DEVNULL
     )
     
 

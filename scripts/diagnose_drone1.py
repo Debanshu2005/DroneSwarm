@@ -37,9 +37,11 @@ async def send_and_trace(websocket, action: str, cmd_id: str) -> None:
 
 
 async def main() -> None:
+    suffix = int(time.time() * 1000)
     async with websockets.connect(URL) as websocket:
-        await send_and_trace(websocket, "hover", "diagnostic_drone1")
-        await send_and_trace(websocket, "land", "diagnostic_drone1_land")
+        await send_and_trace(websocket, "hover", f"diagnostic_drone1_hover_{suffix}")
+        await send_and_trace(websocket, "land", f"diagnostic_drone1_land_{suffix}")
+        await send_and_trace(websocket, "rtl", f"diagnostic_drone1_rtl_{suffix}")
 
 
 if __name__ == "__main__":

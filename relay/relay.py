@@ -135,9 +135,23 @@ class UdpWebsocketRelay:
                 
             # Broadcast to all connected WebSockets
             if self.clients:
-                # logger.debug(f"Forwarding {msg_dict.get('msg_type')} from {sender_id} to {len(self.clients)} WS clients")
-                aws = [ws.send(msg_str) for ws in self.clients]
-                await asyncio.gather(*aws, return_exceptions=True)
+                # A slow or abandoned app connection must not hold up the
+                # healthy GCS client.  Bound each send and evict only the
+                # failed client; this matters when several simulated relays
+                # share one Windows host.
+                clients = tuple(self.clients)
+                results = await asyncio.gather(
+                    *(asyncio.wait_for(ws.send(msg_str), timeout=1.0) for ws in clients),
+                    return_exceptions=True,
+                )
+                for ws, result in zip(clients, results):
+                    if isinstance(result, Exception):
+                        logger.warning(f"Dropping stalled WebSocket client {ws.remote_address}: {result}")
+                        self.clients.discard(ws)
+                        try:
+                            await ws.close()
+                        except Exception:
+                            pass
                 
         except json.JSONDecodeError as e:
             logger.warning(f"Invalid JSON received from UDP: {e}")
