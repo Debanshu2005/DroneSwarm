@@ -28,7 +28,7 @@ The simulation-only `network.sim.yaml` overlays provide deterministic loopback r
 
 | Drone | DroneOS UDP | Relay UDP input | WebSocket |
 | --- | --- | --- | --- |
-| Drone1 | `127.0.0.1:14550` | `127.0.0.1:14650` | `ws://<Windows-LAN-IP>:8080` |
+| Drone1 | `127.0.0.1:14550` | `127.0.0.1:14650` | `ws://<Windows-LAN-IP>:8084` |
 | Drone2 | `127.0.0.1:14551` | `127.0.0.1:14651` | `ws://<Windows-LAN-IP>:8081` |
 | Drone3 | `127.0.0.1:14552` | `127.0.0.1:14652` | `ws://<Windows-LAN-IP>:8082` |
 | Drone4 | `127.0.0.1:14553` | `127.0.0.1:14653` | `ws://<Windows-LAN-IP>:8083` |
