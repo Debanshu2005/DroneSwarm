@@ -41,6 +41,7 @@ class AirSimFlightController(IFlightController):
         self.sim_gps_valid = True
         
         self._cmd_lock = asyncio.Lock()
+        self._telem_lock = asyncio.Lock()
         self._cmd_seq = 0
         self._awaiting_disarm = False
         self._sim_battery_override = None
@@ -86,7 +87,8 @@ class AirSimFlightController(IFlightController):
             if self._cmd_seq != seq:
                 return
             try:
-                state = await asyncio.to_thread(self._telem_client.getMultirotorState, self.vehicle_name)
+                async with self._telem_lock:
+                    state = await asyncio.to_thread(self._telem_client.getMultirotorState, self.vehicle_name)
                 curr_n = state.kinematics_estimated.position.x_val
                 curr_e = state.kinematics_estimated.position.y_val
                 curr_d = state.kinematics_estimated.position.z_val
@@ -111,7 +113,8 @@ class AirSimFlightController(IFlightController):
             if self._cmd_seq != seq:
                 return
             try:
-                state = await asyncio.to_thread(self._telem_client.getMultirotorState, self.vehicle_name)
+                async with self._telem_lock:
+                    state = await asyncio.to_thread(self._telem_client.getMultirotorState, self.vehicle_name)
                 curr_n = state.kinematics_estimated.position.x_val
                 curr_e = state.kinematics_estimated.position.y_val
                 dist_home = math.sqrt(curr_n**2 + curr_e**2)
@@ -549,7 +552,8 @@ class AirSimFlightController(IFlightController):
     async def _telemetry_loop(self):
         while self._connected and self._telem_client is not None:
             try:
-                state = await asyncio.to_thread(self._telem_client.getMultirotorState, self.vehicle_name)
+                async with self._telem_lock:
+                    state = await asyncio.to_thread(self._telem_client.getMultirotorState, self.vehicle_name)
                 
                 self._last_ok = time.time()
                 
