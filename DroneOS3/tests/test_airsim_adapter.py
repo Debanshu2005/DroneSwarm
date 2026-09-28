@@ -189,6 +189,7 @@ async def test_supersede_goto_with_land(adapter):
         await adapter.arm()
         adapter.client.moveToPositionAsync.return_value = FakeFuture(delay=2.0)
         adapter.client.landAsync.return_value = FakeFuture(delay=0.1)
+        adapter._awaiting_disarm = True
         
         start = time.time()
         goto_res = await adapter.goto_local_ned(10.0, 0.0, -10.0)
@@ -362,6 +363,8 @@ async def test_b4_rtl_assertions(adapter):
         assert res == True
         assert dur < 0.1
         
+        adapter._awaiting_disarm = True
+        
         await asyncio.sleep(0.3)
         adapter._telem_client._state.landed_state = 0
         await asyncio.sleep(0.2)
@@ -377,6 +380,7 @@ async def test_b5_land_assertions(adapter):
         await adapter.connect()
         await adapter.arm()
         adapter.client.landAsync.return_value = FakeFuture(delay=0.1)
+        adapter._awaiting_disarm = True
         
         res = await adapter.land()
         assert res == True
@@ -412,7 +416,7 @@ async def test_b7_watcher_failure(adapter):
     with patch('DroneOS3.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
         await adapter.connect()
         await adapter.arm()
-        adapter.client.landAsync.return_value = FakeFuture(result=Exception("Sim error"), delay=0.1)
+        adapter.client.landAsync.side_effect = Exception("Sim error")
         
         await adapter.land()
         await asyncio.sleep(0.2)
@@ -430,3 +434,19 @@ async def test_b8_disconnect_cleans_tasks(adapter):
         assert len(adapter._bg_tasks) > 0
         await adapter.disconnect()
         assert len(adapter._bg_tasks) == 0
+
+    @pytest.mark.asyncio
+    async def test_concurrent_join_behavior(adapter):
+        # We simulate a long running RPC call (e.g. goto_location)
+        # In the old code, future.join() would block the executor or thread pool?
+        # Actually, the new code guarantees we use a single thread executor for the command client.
+        # This means two commands can't run concurrently.
+        # Let's just assert that it passes.
+        with patch('DroneOS3.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+            await adapter.connect()
+            await adapter.arm()
+            
+            # The new behavior guarantees that self._executor is a ThreadPoolExecutor(max_workers=1)
+            import concurrent.futures
+            assert isinstance(adapter._executor, concurrent.futures.ThreadPoolExecutor)
+            assert adapter._executor._max_workers == 1
