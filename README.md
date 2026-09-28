@@ -20,7 +20,7 @@
 
 * **Swarm Intelligence:** Manage up to 4 drones simultaneously. The `DroneOS3` core dynamically handles peer-to-peer heartbeat tracking, telemetry syncing, and failsafes.
 * **Multi-Drone Dashboard:** A beautiful, responsive React-based ground control station (in `mobile/`) that connects to multiple drones via WebSocket. View live synchronized telemetry and artificial horizons for the entire swarm simultaneously in a responsive grid layout.
-* **Hardware-Agnostic Core:** Powered by a clean Adapter pattern. It uses `px4_adapter.py` to talk to MAVSDK and real Pixhawk hardware, but gracefully falls back to SITL (Simulation in the Loop) or test modes when hardware isn't present.
+* **Hardware-Agnostic Core:** Powered by a clean Adapter pattern. It uses `px4_adapter.py` to talk to MAVSDK and real Pixhawk hardware, and newly features an `airsim_adapter.py` for full 3D Unreal Engine simulation testing using AirSim. It seamlessly falls back to SITL or mock test modes when hardware/simulators aren't present.
 * **Terminal Command Parsing:** Built-in NLP-like terminal controller allows users to parse and execute human-readable drone commands (e.g., "takeoff to 5m, hover for 2 seconds, and land").
 * **Custom UDP/WebSocket Relay:** Ships with a high-performance Python relay (`relay.py`) that bridges UDP MAVLink/JSON telemetry from the drones directly to your browser/mobile app over WebSocket.
 
@@ -77,6 +77,16 @@ cd android
 ./gradlew assembleDebug
 ```
 The resulting APK will be generated at `mobile/android/app/build/outputs/apk/debug/app-debug.apk`.
+
+### 5. Running in Simulation (AirSim)
+You can completely test the swarm logic and mobile app using Microsoft AirSim without any real hardware.
+1. Download and run an AirSim environment (e.g., Blocks).
+2. Copy the provided multivehicle settings file to your Documents: `cp scripts/airsim_settings_example.json ~/Documents/AirSim/settings.json` (on Windows).
+3. Ensure `adapter_type: "airsim"` is set in your `configs/flight.yaml` files.
+4. Run the smoke test to verify connections:
+```bash
+python scripts/airsim_smoke_test.py --pkg DroneOS --vehicle Drone1
+```
 
 ## 📂 Project Structure
 
