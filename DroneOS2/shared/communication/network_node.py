@@ -20,7 +20,8 @@ class UdpNetworkAdapter(INetworkAdapter):
     In a more advanced implementation, this could use TCP for reliable messages and UDP for telemetry.
     """
     def __init__(self, node_id: str, host: str, port: int, broadcast_address: str, 
-                 serializer: IMessageSerializer, peer_host: Optional[str] = None, peer_port: Optional[int] = None):
+                 serializer: IMessageSerializer, peer_host: Optional[str] = None, peer_port: Optional[int] = None,
+                 peer_endpoints: Optional[List[tuple[str, int]]] = None):
         self.node_id = node_id
         self.host = host
         self.port = port
@@ -28,6 +29,7 @@ class UdpNetworkAdapter(INetworkAdapter):
         self.serializer = serializer
         self.configured_peer_host = peer_host
         self.configured_peer_port = peer_port
+        self.configured_peer_endpoints = peer_endpoints or []
         self.net_secret = os.getenv("DRONE_NET_SECRET")
         self.known_endpoints = {}
         self.callbacks: List[Callable[[BaseMessage], Coroutine[Any, Any, None]]] = []
@@ -145,6 +147,12 @@ class UdpNetworkAdapter(INetworkAdapter):
         try:
             data = self.serializer.serialize(self._sign_message(message))
             
+            if self.configured_peer_endpoints:
+                for addr in dict.fromkeys(self.configured_peer_endpoints):
+                    self.transport.sendto(data, addr)
+                    logger.debug(f"Packet sent (Configured Endpoint) to {addr[0]}:{addr[1]}")
+                return
+
             if self.configured_peer_host and self.configured_peer_port:
                 addr = (self.configured_peer_host, self.configured_peer_port)
                 self.transport.sendto(data, addr)

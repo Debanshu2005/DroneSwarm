@@ -1,0 +1,11 @@
+# Simulation-only loopback topology for Drone1. Production network.yaml is unchanged.
+host: "127.0.0.1"
+port: 14550
+broadcast_address: "127.0.0.1"
+peer_host: null
+peer_port: null
+peer_endpoints:
+  - ["127.0.0.1", 14551] # Drone2
+  - ["127.0.0.1", 14552] # Drone3
+  - ["127.0.0.1", 14553] # Drone4
+  - ["127.0.0.1", 14650] # Drone1 relay input

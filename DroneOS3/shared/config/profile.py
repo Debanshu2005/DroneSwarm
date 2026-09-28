@@ -51,6 +51,20 @@ def resolve_flight_config(config_dir: Path, flight_config_cls):
             
     return flight_cfg
 
+def resolve_network_config(config_dir: Path, network_config_cls):
+    """Load the production network config, overlaying network.sim.yaml in sim."""
+    config_dir = Path(config_dir)
+    with open(config_dir / "network.yaml", "r") as f:
+        network_data = yaml.safe_load(f) or {}
+    if os.environ.get("DRONEOS_PROFILE", "hw") == "sim":
+        sim_path = config_dir / "network.sim.yaml"
+        if sim_path.exists():
+            with open(sim_path, "r") as f:
+                network_data = deep_merge(network_data, yaml.safe_load(f) or {})
+        else:
+            logger.warning(f"Profile is 'sim' but {sim_path} not found.")
+    return network_config_cls(**network_data)
+
 def log_startup_banner(drone_id: str, vehicle_name: str, adapter_type: str):
     profile = os.environ.get("DRONEOS_PROFILE", "hw")
     msg = f"BACKEND={adapter_type} PROFILE={profile} drone={drone_id} vehicle={vehicle_name}"

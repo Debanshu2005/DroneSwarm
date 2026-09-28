@@ -1,0 +1,11 @@
+# Simulation-only loopback topology for Drone3.
+host: "127.0.0.1"
+port: 14552
+broadcast_address: "127.0.0.1"
+peer_host: null
+peer_port: null
+peer_endpoints:
+  - ["127.0.0.1", 14550] # Drone1
+  - ["127.0.0.1", 14551] # Drone2
+  - ["127.0.0.1", 14553] # Drone4
+  - ["127.0.0.1", 14652] # Drone3 relay input

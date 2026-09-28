@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-09-28T04:53:34.032Z
+Generated: 2026-09-28T15:12:28.280Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -18,15 +18,15 @@ Structured manifest: workspace.json
 - Graphify graph: not available yet
 - Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: mobile/src/components/AirspaceZonePanel.jsx
+- Active file in focus: start_drone4.py
 - Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
-- Suggested starting points: mobile/src/components/AirspaceZonePanel.jsx, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
+- Suggested starting points: start_drone4.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
 ## Current Workspace
-- Active file: mobile/src/components/AirspaceZonePanel.jsx
-- Tracked files in snapshot: 2295
-- Top-level areas: venv (1780), mobile (140), DroneOS (75), DroneOS1 (74), DroneOS2 (74), DroneOS3 (74), [root] (38), deploy (21)
-- Primary file types: .py (1768), [no extension] (200), .txt (54), .typed (29), .png (26), .jsx (24), .js (20), .yaml (20)
-- Key files: .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, README.md, mobile/.gitignore, mobile/README.md, mobile/android/.gitignore
+- Active file: start_drone4.py
+- Tracked files in snapshot: 3771
+- Top-level areas: venv (1780), AirSim (1428), mobile (140), DroneOS (81), DroneOS1 (79), DroneOS2 (79), DroneOS3 (79), [root] (45)
+- Primary file types: .py (1901), [no extension] (219), .hpp (214), .uasset (179), .cpp (126), .png (126), .md (106), .h (98)
+- Key files: .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, AirSim/.gitignore, AirSim/AirLib/.gitignore, AirSim/GazeboDrone/README.md, AirSim/MavLinkCom/MavLinkMoCap/Readme.md
 ## Package Snapshot
 - Package metadata unavailable: package.json was not found.
 ## Current Stack
@@ -51,7 +51,7 @@ Structured manifest: workspace.json
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-09-27 28aa3b2 docs: bust github image cache
+- HEAD: 2026-09-28 551609e feat: bypass MAVSDK server initialization during simulation and add simulation test script
 - Working tree summary: clean
 - Working tree: clean
 
@@ -61,8 +61,8 @@ Visibility: public | Default branch: main
 Stars: 0 | Forks: 0 | Open issues: 0
 
 Latest commit on main:
-- 28aa3b2 by Debanshu2005 on 2026-09-27
-  docs: bust github image cache
+- 551609e by Debanshu2005 on 2026-09-28
+  feat: bypass MAVSDK server initialization during simulation and add simulation test script
 
 URL: https://github.com/Debanshu2005/DroneSwarm
 

@@ -24,6 +24,17 @@ We have provided launch scripts (`launch_sim.bat` for Windows and `launch_sim.sh
 
 These scripts set `DRONEOS_PROFILE=sim`, which instructs the DroneOS codebase to load the simulator backend without requiring any changes to your committed `flight.yaml` files. They also pass distinct WebSocket ports to each relay to avoid TCP port conflicts on a single PC.
 
+The simulation-only `network.sim.yaml` overlays provide deterministic loopback routing:
+
+| Drone | DroneOS UDP | Relay UDP input | WebSocket |
+| --- | --- | --- | --- |
+| Drone1 | `127.0.0.1:14550` | `127.0.0.1:14650` | `ws://127.0.0.1:8080` |
+| Drone2 | `127.0.0.1:14551` | `127.0.0.1:14651` | `ws://127.0.0.1:8081` |
+| Drone3 | `127.0.0.1:14552` | `127.0.0.1:14652` | `ws://127.0.0.1:8082` |
+| Drone4 | `127.0.0.1:14553` | `127.0.0.1:14653` | `ws://127.0.0.1:8083` |
+
+Each node sends its heartbeat/telemetry to its three peers and its own relay; each relay unicast-forwards GCS traffic only to its matching DroneOS endpoint. AirSim remains at `127.0.0.1:41451`.
+
 Run the launch script from the root of the repository:
 *   **Windows**: `sim\launch_sim.bat`
 *   **Linux**: `bash sim/launch_sim.sh`

@@ -30,27 +30,43 @@ async def test_groundstation_heartbeat_gating():
     
     # Assert transport.sendto was not called
     relay.transport.sendto.assert_not_called()
-    
+
     # 2. Simulate client connecting
     mock_ws = MagicMock()
     relay.clients.add(mock_ws)
-    
+
     if relay.clients:
         await relay._send_relay_groundstation_heartbeat()
-        
+
     # Assert transport.sendto WAS called
     assert relay.transport.sendto.call_count == 1
     relay.transport.sendto.reset_mock()
-    
+
     # 3. Simulate client disconnecting
     relay.clients.discard(mock_ws)
-    
+
     if relay.clients:
         await relay._send_relay_groundstation_heartbeat()
-        
+
     # Assert transport.sendto was not called again
     relay.transport.sendto.assert_not_called()
 
+
+@pytest.mark.asyncio
+async def test_simulation_relay_uses_its_own_unicast_drone_endpoint():
+    relay = UdpWebsocketRelay(
+        udp_bind_host="127.0.0.1", udp_bind_port=14650,
+        udp_target_host="127.0.0.1", udp_target_port=14550,
+    )
+    relay.transport = MagicMock()
+
+    await relay.forward_ws_to_udp('{"msg_type":"command","sender_id":"gs","target_id":"drone1"}')
+    await relay._send_relay_groundstation_heartbeat()
+
+    assert [call.args[1] for call in relay.transport.sendto.call_args_list] == [
+        ("127.0.0.1", 14550),
+        ("127.0.0.1", 14550),
+    ]
 # Alternatively, we can test the loop itself by using a short timeout.
 @pytest.mark.asyncio
 async def test_groundstation_heartbeat_loop_behavior():

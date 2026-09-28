@@ -147,7 +147,7 @@ export default function DroneControlView({ setView }) {
   const requestCommand = (action, params = null, danger = false) => {
     // LAND, RTL, SRTL, EMERGENCY are SUPER KEYS - always execute immediately, no confirmation
     if (action === CommandAction.LAND || action === CommandAction.RTL || action === CommandAction.SRTL || action === CommandAction.EMERGENCY) {
-        stopMove(); // High priority commands cancel active movement immediately
+        stopMove({ sendHover: false }); // Cancel stale MOVE callbacks before the super-key command.
         executeCommand(action, params);
         return;
     }
@@ -168,10 +168,13 @@ export default function DroneControlView({ setView }) {
      }, 200);
   };
 
-  const stopMove = () => {
-     if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+  const stopMove = ({ sendHover = true } = {}) => {
+     if (moveIntervalRef.current) {
+        clearInterval(moveIntervalRef.current);
+        moveIntervalRef.current = null;
+     }
      setActiveMoveParams(null);
-     executeCommand(CommandAction.HOVER);
+     if (sendHover) executeCommand(CommandAction.HOVER);
   };
 
   // Joystick safety

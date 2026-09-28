@@ -46,6 +46,27 @@ async def test_broadcast_message_sends_to_both_ports():
     # Second call should be the relay forward broadcast (port 14551)
     assert calls[1].args[1] == ("255.255.255.255", 14551)
 
+
+@pytest.mark.asyncio
+async def test_simulation_endpoints_are_sent_deterministically():
+    serializer = MagicMock()
+    serializer.serialize.return_value = b'{"mock": "data"}'
+    endpoints = [
+        ("127.0.0.1", 14551),
+        ("127.0.0.1", 14552),
+        ("127.0.0.1", 14553),
+        ("127.0.0.1", 14650),
+    ]
+    adapter = UdpNetworkAdapter(
+        "drone1", "127.0.0.1", 14550, "127.0.0.1", serializer,
+        peer_endpoints=endpoints,
+    )
+    adapter.transport = MagicMock()
+
+    await adapter.broadcast_message(HeartbeatMessage(sender_id="drone1", status="active", timestamp=12345.0))
+
+    assert [call.args[1] for call in adapter.transport.sendto.call_args_list] == endpoints
+
 @pytest.mark.asyncio
 async def test_udp_hmac_signs_and_accepts_when_secret_set(monkeypatch):
     monkeypatch.setenv("DRONE_NET_SECRET", "shared-secret")

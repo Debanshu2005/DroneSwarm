@@ -43,9 +43,9 @@ class DroneOSApp:
             config_dir = Path(sys.argv[1]).resolve()
         else:
             config_dir = Path(__file__).resolve().parent / "configs"
-        from DroneOS.shared.config.profile import resolve_flight_config, log_startup_banner
+        from DroneOS.shared.config.profile import resolve_flight_config, resolve_network_config, log_startup_banner
         self.drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
-        self.network_cfg = load_yaml_config(config_dir / "network.yaml", NetworkConfig)
+        self.network_cfg = resolve_network_config(config_dir, NetworkConfig)
         self.flight_cfg = resolve_flight_config(config_dir, FlightConfig)
         log_startup_banner(self.drone_cfg.drone_id, self.drone_cfg.vehicle_name, self.flight_cfg.adapter_type)
         
@@ -85,7 +85,8 @@ class DroneOSApp:
             self.network_cfg.broadcast_address,
             self.serializer,
             self.network_cfg.peer_host,
-            self.network_cfg.peer_port
+            self.network_cfg.peer_port,
+            self.network_cfg.peer_endpoints,
         )
         
         self.flight_controller = AdapterFactory.create_flight_controller(

@@ -13,13 +13,16 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(leve
 logger = logging.getLogger("PhoneOS_Relay")
 
 class UdpWebsocketRelay:
-    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14551, udp_target_port=14550, udp_broadcast_addr="255.255.255.255", gs_heartbeat_interval=1.0):
+    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14551, udp_target_port=14550, udp_broadcast_addr="255.255.255.255", udp_target_host=None, gs_heartbeat_interval=1.0):
         self.ws_host = ws_host
         self.ws_port = ws_port
         self.udp_bind_host = udp_bind_host
         self.udp_bind_port = udp_bind_port
         self.udp_target_port = udp_target_port
         self.udp_broadcast_addr = udp_broadcast_addr
+        # None preserves production LAN broadcast.  Simulation supplies a
+        # concrete loopback address so a relay reaches only its own DroneOS.
+        self.udp_target_host = udp_target_host
         self.gs_heartbeat_interval = gs_heartbeat_interval
         self.auth_token = os.getenv("RELAY_AUTH_TOKEN")
         self.net_secret = os.getenv("DRONE_NET_SECRET")
@@ -185,7 +188,7 @@ class UdpWebsocketRelay:
                 logger.debug(f"Forwarded WS msg ({msg_dict.get('msg_type')}) via Unicast to {addr}")
             else:
                 # Broadcast
-                addr = (self.udp_broadcast_addr, self.udp_target_port)
+                addr = (self.udp_target_host or self.udp_broadcast_addr, self.udp_target_port)
                 self.transport.sendto(data, addr)
                 logger.debug(f"Forwarded WS msg ({msg_dict.get('msg_type')}) via Broadcast to {addr}")
                 
@@ -206,7 +209,7 @@ class UdpWebsocketRelay:
             "status": "active",
         }
         data = json.dumps(self._sign_message_dict(msg)).encode("utf-8")
-        self.transport.sendto(data, (self.udp_broadcast_addr, self.udp_target_port))
+        self.transport.sendto(data, (self.udp_target_host or self.udp_broadcast_addr, self.udp_target_port))
         return True
 
     async def _relay_groundstation_heartbeat_loop(self):
@@ -254,15 +257,19 @@ if __name__ == "__main__":
     parser.add_argument("--ws-host", type=str, default="0.0.0.0", help="WebSocket host/interface to listen on")
     parser.add_argument("--ws-port", type=int, default=8080, help="WebSocket port to listen on")
     parser.add_argument("--udp-bind-port", type=int, default=14551, help="UDP port to bind for listening")
+    parser.add_argument("--udp-bind-host", type=str, default="0.0.0.0", help="UDP host/interface to bind")
     parser.add_argument("--udp-target-port", type=int, default=14550, help="UDP port of DroneOS to broadcast to")
+    parser.add_argument("--udp-target-host", type=str, default=None, help="Optional unicast host for DroneOS (used by simulation)")
     parser.add_argument("--gs-heartbeat-interval", type=float, default=1.0, help="Seconds between relay ground-station heartbeats while a WebSocket client is connected")
     args = parser.parse_args()
 
     relay = UdpWebsocketRelay(
         ws_host=args.ws_host,
         ws_port=args.ws_port,
+        udp_bind_host=args.udp_bind_host,
         udp_bind_port=args.udp_bind_port,
         udp_target_port=args.udp_target_port,
+        udp_target_host=args.udp_target_host,
         gs_heartbeat_interval=args.gs_heartbeat_interval
     )
     try:

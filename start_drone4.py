@@ -97,8 +97,13 @@ def main():
 
     # 3. Spawn Relay on default ports (WS 8080, UDP 14550/14551)
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
+    relay_args = sys.argv[1:]
+    if is_sim:
+        relay_args = ["--ws-host", "127.0.0.1", "--ws-port", "8083",
+                      "--udp-bind-host", "127.0.0.1", "--udp-bind-port", "14653",
+                      "--udp-target-host", "127.0.0.1", "--udp-target-port", "14553"]
     relay_proc = subprocess.Popen(
-        [sys.executable, str(relay_script)] + sys.argv[1:]
+        [sys.executable, str(relay_script)] + relay_args
     )
 
     if not is_sim:

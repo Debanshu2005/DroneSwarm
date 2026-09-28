@@ -11,6 +11,7 @@ class NetworkConfig(BaseModel):
     broadcast_address: str
     peer_host: Optional[str] = None
     peer_port: Optional[int] = None
+    peer_endpoints: List[tuple[str, int]] = []
     heartbeat_interval: float = 1.0
     telemetry_interval: float = 0.5
     connection_timeout: float = 10.0

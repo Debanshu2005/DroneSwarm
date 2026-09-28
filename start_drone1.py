@@ -82,8 +82,13 @@ def main():
     
     # 3. Spawn Relay manually
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
+    relay_args = sys.argv[1:]
+    if is_sim:
+        relay_args = ["--ws-host", "127.0.0.1", "--ws-port", "8080",
+                      "--udp-bind-host", "127.0.0.1", "--udp-bind-port", "14650",
+                      "--udp-target-host", "127.0.0.1", "--udp-target-port", "14550"]
     relay_proc = subprocess.Popen(
-        [sys.executable, str(relay_script)] + sys.argv[1:],
+        [sys.executable, str(relay_script)] + relay_args,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
