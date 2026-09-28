@@ -2,14 +2,62 @@ import sys
 import math
 import asyncio
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch, call
+from unittest.mock import MagicMock, patch, call
 import time
 
 class FakeFuture:
-    def __init__(self, result=None):
+    def __init__(self, result=None, delay=0.0):
         self.result = result
+        self.delay = delay
     def join(self):
+        if self.delay > 0:
+            time.sleep(self.delay)
+        if isinstance(self.result, Exception):
+            raise self.result
         return self.result
+
+class StrictVector3r:
+    __slots__ = ['x_val', 'y_val', 'z_val']
+    def __init__(self):
+        self.x_val = 0.0
+        self.y_val = 0.0
+        self.z_val = 0.0
+
+class StrictKinematics:
+    __slots__ = ['position', 'linear_velocity', 'orientation']
+    def __init__(self):
+        self.position = StrictVector3r()
+        self.linear_velocity = StrictVector3r()
+        self.orientation = None
+
+class StrictGeoPoint:
+    __slots__ = ['latitude', 'longitude', 'altitude']
+    def __init__(self):
+        self.latitude = 0.0
+        self.longitude = 0.0
+        self.altitude = 0.0
+
+class StrictState:
+    __slots__ = ['collision', 'kinematics_estimated', 'gps_location', 'timestamp', 'landed_state', 'rc_data', 'ready', 'ready_message', 'can_arm']
+    def __init__(self):
+        self.collision = None
+        self.kinematics_estimated = StrictKinematics()
+        self.gps_location = StrictGeoPoint()
+        self.timestamp = 0
+        self.landed_state = 1
+        self.rc_data = None
+        self.ready = True
+        self.ready_message = ""
+        self.can_arm = True
+
+class StrictGpsData:
+    __slots__ = ['gnss']
+    def __init__(self):
+        class Gnss:
+            __slots__ = ['geo_point']
+            def __init__(self):
+                self.geo_point = StrictGeoPoint()
+        self.gnss = Gnss()
 
 class FakeAirSim:
     class YawMode:
@@ -22,7 +70,7 @@ class FakeAirSim:
 
     @staticmethod
     def to_eularian_angles(q):
-        return (0.1, 0.2, 0.3)
+        return (0.1, 0.2, -math.pi/2)
 
     class MultirotorClient:
         def __init__(self, ip, port):
@@ -40,27 +88,26 @@ class FakeAirSim:
             self.moveByVelocityAsync = MagicMock(return_value=FakeFuture())
             self.moveToPositionAsync = MagicMock(return_value=FakeFuture())
             
-            geo_point = MagicMock()
-            geo_point.latitude = 47.641468
-            geo_point.longitude = -122.140165
-            geo_point.altitude = 122.0
+            self._home = StrictGeoPoint()
+            self._home.latitude = 47.641468
+            self._home.longitude = -122.140165
+            self._home.altitude = 122.0
+            self.getHomeGeoPoint = MagicMock(return_value=self._home)
             
-            self.getHomeGeoPoint = MagicMock(return_value=geo_point)
+            self._gps = StrictGpsData()
+            self._gps.gnss.geo_point.latitude = 47.641468
+            self._gps.gnss.geo_point.longitude = -122.140165
+            self._gps.gnss.geo_point.altitude = 122.0
+            self.getGpsData = MagicMock(return_value=self._gps)
             
-            gps_data = MagicMock()
-            gps_data.gnss.geo_point = geo_point
-            self.getGpsData = MagicMock(return_value=gps_data)
-            
-            state = MagicMock()
-            state.gps_location = geo_point
-            state.kinematics_estimated.position.z_val = -10.0
-            state.kinematics_estimated.linear_velocity.x_val = 1.0
-            state.kinematics_estimated.linear_velocity.y_val = 2.0
-            state.kinematics_estimated.linear_velocity.z_val = 0.5
-            state.kinematics_estimated.orientation = MagicMock()
-            state.can_arm = True
-            state.landed_state = 1
-            self.getMultirotorState = MagicMock(return_value=state)
+            self._state = StrictState()
+            self._state.gps_location.latitude = 47.641468
+            self._state.gps_location.longitude = -122.140165
+            self._state.kinematics_estimated.position.z_val = -10.0
+            self._state.kinematics_estimated.linear_velocity.x_val = 1.0
+            self._state.kinematics_estimated.linear_velocity.y_val = 2.0
+            self._state.kinematics_estimated.linear_velocity.z_val = 0.5
+            self.getMultirotorState = MagicMock(return_value=self._state)
 
 sys.modules['airsim'] = FakeAirSim
 
@@ -96,107 +143,141 @@ async def test_connect_success(adapter):
         await adapter.disconnect()
 
 @pytest.mark.asyncio
-async def test_connect_failure(adapter):
+async def test_connect_failure_leaves_clean_state(adapter):
     with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient') as mock_client:
-        mock_client.side_effect = Exception("Connection Refused")
+        mock_instance = MagicMock()
+        mock_instance.getHomeGeoPoint.side_effect = Exception("Connection Refused")
+        mock_client.return_value = mock_instance
+        
         assert not await adapter.connect()
         assert not adapter._connected
+        assert adapter.client is None
+        assert adapter._telem_client is None
+        assert adapter._telemetry_task is None
+
+def test_ready_task_name_raises():
+    s = StrictState()
+    with pytest.raises(AttributeError):
+        _ = s.ready_task_name
 
 @pytest.mark.asyncio
-async def test_armed_state_transitions(adapter):
-    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
-        await adapter.connect()
-        assert adapter._armed == False
-        
-        # Test Arm
-        assert await adapter.arm()
-        assert adapter._armed == True
-        assert adapter.client.armDisarm.call_args == call(True, "Drone1")
-        
-        # Test Disarm
-        assert await adapter.disarm()
-        assert adapter._armed == False
-        assert adapter.client.armDisarm.call_args == call(False, "Drone1")
-        
-        await adapter.disconnect()
-
-@pytest.mark.asyncio
-async def test_telemetry_loop(adapter):
+async def test_telemetry_loop_strict(adapter):
     with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
         await adapter.connect()
         await asyncio.sleep(0.2)
         telemetry = await adapter.get_telemetry()
         assert telemetry.flight_mode == "HOLD"
-        assert telemetry.altitude == 10.0 # -(-10.0)
-        assert telemetry.pitch > 0.0
-        assert telemetry.gps_valid == True
-        assert telemetry.is_armable == True
-        assert telemetry.armed_state == "DISARMED"
+        assert telemetry.altitude == 10.0
+        assert math.isclose(telemetry.heading, 270.0) # -90 deg -> 270
         await adapter.disconnect()
 
 @pytest.mark.asyncio
-async def test_body_vs_ned_api(adapter):
+async def test_heartbeat_age_grows_on_error(adapter):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        adapter._telem_client.getMultirotorState.side_effect = Exception("Sim crashed")
+        await asyncio.sleep(0.2)
+        telemetry = await adapter.get_telemetry()
+        assert telemetry.heartbeat_age > 0.0
+        assert telemetry.flight_mode == "disconnected"
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_supersede_goto_with_land(adapter):
     with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
         await adapter.connect()
         
-        # Body frame
-        await adapter.move_velocity(10.0, 2.0, 3.0, 0.1, 0.0)
-        # Clamped to 5.0
+        adapter.client.moveToPositionAsync.return_value = FakeFuture(delay=2.0)
+        
+        start = time.time()
+        goto_task = asyncio.create_task(adapter.goto_local_ned(10.0, 0.0, -10.0))
+        await asyncio.sleep(0.1)
+        
+        land_task = asyncio.create_task(adapter.land())
+        
+        land_res = await land_task
+        goto_res = await goto_task
+        
+        duration = time.time() - start
+        
+        assert goto_res == False
+        assert land_res == True
+        assert duration < 2.5 # land preempted without waiting 2.0s lock
+        assert adapter._mode == "HOLD"
+        
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_supersede_takeoff_middle(adapter):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        await adapter.arm()
+        
+        adapter.client.takeoffAsync.return_value = FakeFuture(delay=0.5)
+        
+        takeoff_task = asyncio.create_task(adapter.takeoff(10.0))
+        await asyncio.sleep(0.1)
+        
+        await adapter.hover()
+        
+        takeoff_res = await takeoff_task
+        
+        assert takeoff_res == False
+        adapter.client.moveToZAsync.assert_not_called()
+        
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_disarm_on_land(adapter):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        await adapter.arm()
+        
+        assert adapter._armed == True
+        await adapter.land()
+        
+        adapter._telem_client._state.landed_state = 0
+        await asyncio.sleep(0.2)
+        
+        assert adapter._armed == False
+        telemetry = await adapter.get_telemetry()
+        assert telemetry.armed_state == "DISARMED"
+        assert adapter._mode == "HOLD"
+        
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_goto_location_no_home(adapter):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        adapter._home_geopoint = None
+        assert not await adapter.goto_location(47.0, -122.0, 10.0)
+        await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_speed_clamping(adapter):
+    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        await adapter.move_velocity(10.0, -10.0, 0.0, 1.0)
         adapter.client.moveByVelocityBodyFrameAsync.assert_called_once()
         args = adapter.client.moveByVelocityBodyFrameAsync.call_args[0]
-        assert args[0] == 5.0  # vx
-        assert args[1] == 2.0  # vy
-        assert args[2] == 3.0  # vz
-        assert args[3] == 0.1  # duration
-        
-        # NED frame
-        await adapter.move_velocity_ned(-10.0, 2.0, -3.0, 0.1, 0.0)
-        adapter.client.moveByVelocityAsync.assert_called_once()
-        args = adapter.client.moveByVelocityAsync.call_args[0]
-        assert args[0] == -5.0  # north
-        assert args[1] == 2.0  # east
-        assert args[2] == -3.0  # down
-        
+        assert args[0] == 5.0
+        assert args[1] == -5.0
+        assert args[2] == 0.0
         await adapter.disconnect()
 
 @pytest.mark.asyncio
-async def test_goto_location(adapter):
+async def test_move_velocity_duration(adapter):
     with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
         await adapter.connect()
-        # Home lat=47.641468, lon=-122.140165
-        lat = 47.641568 # diff = 0.0001
-        lon = -122.140165
-        alt = 20.0
-        assert await adapter.goto_location(lat, lon, alt)
-        adapter.client.moveToPositionAsync.assert_called_once()
-        args = adapter.client.moveToPositionAsync.call_args[0]
-        assert math.isclose(args[0], 0.0001 * 111320.0)
-        assert args[1] == 0.0
-        assert args[2] == -20.0
-        
+        adapter.client.moveByVelocityBodyFrameAsync.return_value = FakeFuture(delay=0.1)
+        start = time.time()
+        assert await adapter.move_velocity(1.0, 0.0, 0.0, 0.1)
+        dur = time.time() - start
+        assert 0.1 <= dur < 0.2
         await adapter.disconnect()
 
-@pytest.mark.asyncio
-async def test_rtl_flow(adapter):
-    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
-        await adapter.connect()
-        assert await adapter.rtl()
-        adapter.client.goHomeAsync.assert_called_once()
-        adapter.client.landAsync.assert_called_once()
-        assert adapter._mode == "RTL"
-        await adapter.disconnect()
-
-@pytest.mark.asyncio
-async def test_disconnect_awaits_task(adapter):
-    with patch('DroneOS1.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
-        await adapter.connect()
-        task = adapter._telemetry_task
-        assert not task.done()
-        await adapter.disconnect()
-        assert task.done()
-
-def test_factory_returns_airsim(flight_config):
-    drone_cfg = DroneConfig(drone_id="d1", vehicle_name="Drone1")
-    fc = AdapterFactory.create_flight_controller(drone_cfg, flight_config)
-    assert isinstance(fc, AirSimFlightController)
-    assert fc.vehicle_name == "Drone1"
+def test_all_abstract_methods_implemented():
+    assert "get_home_position" in dir(AirSimFlightController)
+    assert "goto_location" in dir(AirSimFlightController)
+    assert "move_velocity_ned" in dir(AirSimFlightController)

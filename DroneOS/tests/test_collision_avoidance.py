@@ -54,3 +54,14 @@ def test_evaluate_threats_heading_independent():
         # Escape should be North (positive)
         assert north > 0.0
         assert abs(east) < 0.1
+
+def test_evaluate_threats_ignores_invalid_gps():
+    config = CollisionAvoidanceConfig(enabled=True, min_horizontal_distance=10.0, warning_distance=20.0, emergency_distance=5.0)
+    ca = StandardCollisionAvoidance(config)
+    self_telemetry = TelemetryData(flight_mode="GUIDED", latitude=0.0, longitude=0.0, altitude=10.0, heading=90.0, timestamp=100.0, gps_valid=True)
+    peer_telemetry = TelemetryData(flight_mode="GUIDED", latitude=-0.00005, longitude=0.0, altitude=10.0, heading=0.0, timestamp=100.0)
+    import time
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(time, 'time', lambda: 100.0)
+        state, correction, peer, dist = ca.evaluate_threats(self_telemetry, {"peer1": peer_telemetry})
+        assert state == "NORMAL"

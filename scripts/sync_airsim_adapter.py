@@ -9,6 +9,7 @@ def sync():
     files_to_sync = [
         ("DroneOS/adapters/airsim_adapter.py", "adapters/airsim_adapter.py"),
         ("DroneOS/tests/test_airsim_adapter.py", "tests/test_airsim_adapter.py"),
+        ("DroneOS/tests/test_collision_avoidance.py", "tests/test_collision_avoidance.py"),
     ]
 
     targets = ["DroneOS1", "DroneOS2", "DroneOS3"]
