@@ -31,7 +31,7 @@ from DroneOS2.shared.config.models import DroneConfig, NetworkConfig, FlightConf
 
 logger = setup_logger("DroneOS2_Main")
 
-class DroneOS2App:
+class DroneOSApp:
     def __init__(self):
         self._running = False
         self._active_tasks = set()
@@ -562,7 +562,7 @@ class DroneOS2App:
         logger.info("Shutdown complete.")
 
 if __name__ == "__main__":
-    app = DroneOS2App()
+    app = DroneOSApp()
     try:
         asyncio.run(app.run())
     except KeyboardInterrupt:
