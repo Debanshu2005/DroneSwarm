@@ -46,8 +46,10 @@ class CommandHandler:
     async def on_pipeline_intent_result(self, intent, success: bool) -> None:
         command_id = intent.params.get("_command_id")
         pending = self._pending_pipeline_commands.get(command_id)
-        if pending:
-            self._send_lifecycle(pending["sender_id"], pending["action"], "AIRSIM_RESULT", reason=f"success={bool(success)}", cmd_id=pending["cmd_id"])
+        if not pending:
+            return
+        self._send_lifecycle(pending["sender_id"], pending["action"], "AIRSIM_RESULT",
+                             reason=f"success={bool(success)}", cmd_id=pending["cmd_id"])
         if not pending["future"].done():
             pending["future"].set_result(bool(success))
 

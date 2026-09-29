@@ -264,13 +264,19 @@ class FlightPipeline:
             
             # 5. Command Writer
             if is_critical_manual_intent(winning_intent) and self.on_intent_dispatched:
-                await self.on_intent_dispatched(winning_intent)
+                try:
+                    await self.on_intent_dispatched(winning_intent)
+                except Exception:
+                    logger.exception("on_intent_dispatched callback failed")
             result = await self.command_writer.execute(safe_intent)
             if safe_intent.action != IntentAction.IDLE:
                 logger.info("FLIGHT_EXEC_RESULT %s vehicle=%s success=%s", safe_intent.action.value, getattr(self.fc, "vehicle_name", getattr(self.fc, "vehicle_id", "unknown")), bool(result))
             if is_critical_manual_intent(winning_intent):
                 if self.on_intent_result:
-                    await self.on_intent_result(winning_intent, result)
+                    try:
+                        await self.on_intent_result(winning_intent, result)
+                    except Exception:
+                        logger.exception("on_intent_result callback failed")
                 cleared = self.state_store.complete_intent(winning_intent)
                 logger.info(
                     "Critical manual %s completed success=%s cleared=%s",

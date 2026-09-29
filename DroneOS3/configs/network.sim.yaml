@@ -5,6 +5,7 @@ broadcast_address: "127.0.0.1"
 peer_host: null
 peer_port: null
 peer_endpoints:
+  - ["127.0.0.1", 14653]   # Drone4 relay input
   - ["127.0.0.1", 14550] # Drone1
   - ["127.0.0.1", 14551] # Drone2
   - ["127.0.0.1", 14552] # Drone3
