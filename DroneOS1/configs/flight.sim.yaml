@@ -6,9 +6,9 @@ max_velocity: 5.0
 pipeline_hz: 10.0
 collision_avoidance:
   enabled: true
-  min_horizontal_distance: 3.0
+  min_horizontal_distance: 2.0
   min_vertical_distance: 2.0
-  warning_distance: 6.0
+  warning_distance: 4.5
   emergency_distance: 1.5
   neighbor_timeout_sec: 3.0
   lookahead_sec: 3.0
@@ -18,7 +18,7 @@ collision_avoidance:
   ground_altitude_m: 0.5
 formation:
   velocity_gain: 1.0
-  min_formation_separation_m: 8.0
+  min_formation_separation_m: 3.0
 sim:
   battery_drain_multiplier: 0.0
   drop_gps: false

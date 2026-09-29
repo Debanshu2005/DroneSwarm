@@ -6,3 +6,4 @@ px4_connection_string: "serial:///dev/serial0:115200"
 airsim_host: "127.0.0.1"
 
 airsim_port: 41451
+

@@ -575,7 +575,12 @@ export default function DroneControlView({ setView }) {
                               <option value="GRID">GRID</option>
                               <option value="CIRCLE">CIR</option>
                            </select>
-                           <button className="d-btn h-btn text-btn" onClick={() => requestCommand(CommandAction.FORMATION_UPDATE, { type: formationType, spacing: formationSpacing })}>APPLY</button>
+                           <button className="d-btn h-btn text-btn" onClick={() => {
+                               const mem = Object.values(drones).filter(d => d.status === 'CONNECTED' || d.status === 'DEGRADED').map(d => d.id).sort();
+                               const sa = {};
+                               mem.forEach((id, idx) => { sa[id] = idx; });
+                               requestCommand(CommandAction.FORMATION_UPDATE, { type: formationType, spacing: formationSpacing, members: mem, slot_assignments: sa });
+                           }}>APPLY</button>
                        </div>
             
                        {/* Vertical / Yaw D-Pad */}
