@@ -1,11 +1,11 @@
 """
-Tests for Part A (landing latch) and Part B (collision avoidance CPA).
+Tests for collision avoidance (8f5b44c baseline) and pipeline priority.
 DroneOS1 instance (drone2).
 """
 import math
 import time
 import asyncio
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -20,9 +20,7 @@ from DroneOS1.core.flight_pipeline import Arbiter
 def _cfg(**kw) -> CollisionAvoidanceConfig:
     defaults = dict(
         enabled=True, min_horizontal_distance=6.0, min_vertical_distance=2.0,
-        warning_distance=10.0, emergency_distance=3.0, neighbor_timeout_sec=1.0,
-        lookahead_sec=3.0, avoidance_speed=4.0, emergency_speed=5.0,
-        max_peer_age_sec=1.0, ground_altitude_m=0.5,
+        warning_distance=10.0, emergency_distance=3.0, neighbor_timeout_sec=5.0,
     )
     defaults.update(kw)
     return CollisionAvoidanceConfig(**defaults)
@@ -37,52 +35,52 @@ def _telem(lat=0.0, lon=0.0, alt=10.0, vx=0.0, vy=0.0,
     )
 
 
-def test_head_on_cpa_avoidance():
+def test_avoidance_within_min_h_dist():
     ca = StandardCollisionAvoidance(_cfg(), drone_id="d2")
     now = time.time()
-    self_t = _telem(lat=0.0, lon=0.0, alt=10.0, vx=5.0, vy=0.0, ts=now)
-    peer_lat = 20.0 / 111320.0
-    peer_t = _telem(lat=peer_lat, lon=0.0, alt=10.0, vx=-5.0, vy=0.0, ts=now)
+    self_t = _telem(lat=0.0, lon=0.0, alt=10.0, ts=now)
+    peer_t = _telem(lat=-0.00005, lon=0.0, alt=10.0, ts=now)  # ~5.5m south
     state, correction, _, _ = ca.evaluate_threats(self_t, {"peer1": peer_t})
-    assert state in ("AVOIDANCE", "EMERGENCY")
+    assert state == "AVOIDANCE"
     assert correction is not None
-    assert correction["north"] < 0.0
+    assert correction["north"] > 0.0
+
+
+def test_emergency_within_emg_dist():
+    ca = StandardCollisionAvoidance(_cfg(), drone_id="d2")
+    now = time.time()
+    self_t = _telem(lat=0.0, lon=0.0, alt=10.0, ts=now)
+    peer_t = _telem(lat=-0.00002, lon=0.0, alt=10.0, ts=now)  # ~2.2m south
+    state, correction, _, _ = ca.evaluate_threats(self_t, {"peer1": peer_t})
+    assert state == "EMERGENCY"
+    assert correction is not None
 
 
 def test_stale_peer_ignored():
-    ca = StandardCollisionAvoidance(_cfg(max_peer_age_sec=1.0), drone_id="d2")
+    ca = StandardCollisionAvoidance(_cfg(neighbor_timeout_sec=2.0), drone_id="d2")
     now = time.time()
     self_t = _telem(lat=0.0, lon=0.0, alt=10.0, ts=now)
-    peer_lat = 2.0 / 111320.0
-    stale_t = _telem(lat=peer_lat, lon=0.0, alt=10.0, ts=now - 5.0)
-    state, _, _, _ = ca.evaluate_threats(self_t, {"stale": stale_t})
-    assert state == "NORMAL"
-    no_ts_t = _telem(lat=peer_lat, lon=0.0, alt=10.0, ts=None)
-    state2, _, _, _ = ca.evaluate_threats(self_t, {"nots": no_ts_t})
-    assert state2 == "NORMAL"
-
-
-def test_grounded_drones_normal():
-    ca = StandardCollisionAvoidance(_cfg(ground_altitude_m=0.5), drone_id="d2")
-    now = time.time()
-    self_t = _telem(lat=0.0, lon=0.0, alt=0.3, ts=now)
-    peer_lat = 5.0 / 111320.0
-    peer_t = _telem(lat=peer_lat, lon=0.0, alt=0.3, ts=now)
-    state, _, _, _ = ca.evaluate_threats(self_t, {"peer1": peer_t})
+    peer_t = _telem(lat=-0.00005, lon=0.0, alt=10.0, ts=now - 5.0)
+    state, _, _, _ = ca.evaluate_threats(self_t, {"stale": peer_t})
     assert state == "NORMAL"
 
 
-def test_three_drone_correction_not_toward_neighbors():
+def test_no_timestamp_peer_evaluated():
     ca = StandardCollisionAvoidance(_cfg(), drone_id="d2")
     now = time.time()
     self_t = _telem(lat=0.0, lon=0.0, alt=10.0, ts=now)
-    peer_a = _telem(lat=4.0 / 111320.0, lon=0.0, alt=10.0, ts=now)
-    peer_b = _telem(lat=-4.0 / 111320.0, lon=0.0, alt=10.0, ts=now)
-    state, correction, _, _ = ca.evaluate_threats(self_t, {"peerA": peer_a, "peerB": peer_b})
-    assert state in ("AVOIDANCE", "EMERGENCY")
-    assert correction is not None
-    mag = math.sqrt(correction["north"] ** 2 + correction["east"] ** 2)
-    assert mag > 0.1
+    peer_t = _telem(lat=-0.00005, lon=0.0, alt=10.0, ts=None)
+    state, correction, _, _ = ca.evaluate_threats(self_t, {"peer1": peer_t})
+    assert state == "AVOIDANCE"
+
+
+def test_vertically_separated_ignored():
+    ca = StandardCollisionAvoidance(_cfg(), drone_id="d2")
+    now = time.time()
+    self_t = _telem(lat=0.0, lon=0.0, alt=10.0, ts=now)
+    peer_t = _telem(lat=-0.00005, lon=0.0, alt=20.0, ts=now)
+    state, _, _, _ = ca.evaluate_threats(self_t, {"peer1": peer_t})
+    assert state == "NORMAL"
 
 
 def test_arbiter_landing_latch():
@@ -144,13 +142,7 @@ def test_adapter_hover_blocked_during_land():
     mock_client.hoverAsync.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
-# Test 9 – Pipeline: COLLISION intent beats FORMATION; CommandWriter calls
-#           move_velocity_ned
-# ---------------------------------------------------------------------------
-
 def test_pipeline_collision_beats_formation():
-    from unittest.mock import AsyncMock
     from DroneOS1.core.flight_pipeline import CommandWriter
 
     store = FlightStateStore()
@@ -181,58 +173,15 @@ def test_pipeline_collision_beats_formation():
     assert mock_fc.move_velocity_ned.call_args[0][1] == pytest.approx(0.5)
 
 
-# ---------------------------------------------------------------------------
-# Test 10 – Real CA (no mocks): formation peer on head-on trajectory triggers CA
-# ---------------------------------------------------------------------------
-
-def test_real_ca_formation_peer_not_exempt():
-    ca = StandardCollisionAvoidance(
-        _cfg(min_horizontal_distance=6.0, emergency_distance=3.0, lookahead_sec=3.0),
-        drone_id="d2"
-    )
+def test_formation_peer_not_exempt_from_ca():
+    """Formation peer inside min_h_dist must trigger AVOIDANCE — no filtering."""
+    ca = StandardCollisionAvoidance(_cfg(), drone_id="d2")
     now = time.time()
-    self_t = _telem(lat=0.0, lon=0.0, alt=10.0, vx=5.0, vy=0.0, ts=now)
-    peer_lat = 20.0 / 111320.0
-    peer_t = _telem(lat=peer_lat, lon=0.0, alt=10.0, vx=-5.0, vy=0.0, ts=now)
-
-    state, correction, peer_id, eff_dist = ca.evaluate_threats(
+    self_t = _telem(lat=0.0, lon=0.0, alt=10.0, ts=now)
+    peer_t = _telem(lat=-0.00005, lon=0.0, alt=10.0, ts=now)
+    state, correction, peer_id, _ = ca.evaluate_threats(
         self_t, {"formation_peer": peer_t}
     )
-    assert state in ("AVOIDANCE", "EMERGENCY"), (
-        f"Formation peer on head-on trajectory must trigger CA, got {state}"
-    )
+    assert state in ("AVOIDANCE", "EMERGENCY")
     assert correction is not None
     assert peer_id == "formation_peer"
-    assert correction["north"] < 0.0
-
-
-# ---------------------------------------------------------------------------
-# Test 11 – Formation peer in slot, closing, CA fires
-#           (would fail under old filtered_peer_telemetry)
-# ---------------------------------------------------------------------------
-
-def test_formation_peer_in_slot_closing_triggers_ca():
-    ca = StandardCollisionAvoidance(
-        _cfg(
-            min_horizontal_distance=6.0,
-            emergency_distance=3.0,
-            warning_distance=10.0,
-            lookahead_sec=3.0,
-            max_peer_age_sec=2.5,
-        ),
-        drone_id="d2"
-    )
-    now = time.time()
-    self_t = _telem(lat=0.0, lon=0.0, alt=10.0, vx=4.0, vy=0.0, ts=now)
-    peer_lat = 8.0 / 111320.0
-    peer_t = _telem(lat=peer_lat, lon=0.0, alt=10.0, vx=-4.0, vy=0.0, ts=now)
-
-    state, correction, peer_id, eff_dist = ca.evaluate_threats(
-        self_t, {"peer_in_slot": peer_t}
-    )
-    assert state in ("AVOIDANCE", "EMERGENCY"), (
-        f"Peer in formation slot closing head-on must trigger CA, got {state}. "
-        f"eff_dist={eff_dist:.2f}m"
-    )
-    assert correction is not None
-    assert peer_id == "peer_in_slot"

@@ -11,7 +11,7 @@ export default function SwarmView() {
   const armedDrones = Object.values(drones).filter(d => d?.telemetry?.armed_state === 'ARMED');
 
   const [selectedShape, setSelectedShape] = useState('Diamond');
-  const [spacingValue, setSpacingValue] = useState('5');
+  const [spacingValue, setSpacingValue] = useState('8');
   const { sendCommand } = useDroneContext();
 
   const handleApply = () => {
@@ -19,17 +19,28 @@ export default function SwarmView() {
       alert("No online drones available for formation.");
       return;
     }
-    
+
     const isAnyArmed = onlineDrones.some(d => d?.telemetry?.armed_state === 'ARMED');
     if (!isAnyArmed) {
       alert("No targeted drones are armed. Please arm at least one drone first.");
       return;
     }
-    
-    const targetIds = onlineDrones.map(d => d.id);
+
+    // Deterministic, stable slot assignment: sort IDs so every drone
+    // receives the same roster regardless of heartbeat timing.
+    const members = onlineDrones.map(d => d.id).sort();
+    const slot_assignments = {};
+    members.forEach((id, idx) => { slot_assignments[id] = idx; });
+
+    const targetIds = members;
     sendCommand(
-      'formation_update', // Assuming CommandAction.FORMATION_UPDATE resolves to 'formation_update'
-      { type: selectedShape.toUpperCase(), spacing: Number(spacingValue) || 5 },
+      'formation_update',
+      {
+        type: selectedShape.toUpperCase(),
+        spacing: Number(spacingValue) || 8,
+        members,
+        slot_assignments,
+      },
       targetIds
     );
   };
