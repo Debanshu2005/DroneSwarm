@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-09-29T09:34:21.977Z
+Generated: 2026-09-29T10:07:20.822Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -18,11 +18,11 @@ Structured manifest: workspace.json
 - Graphify graph: not available yet
 - Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: start_drone4.py
+- Active file in focus: DroneOS/core/formation_engine.py
 - Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
-- Suggested starting points: start_drone4.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
+- Suggested starting points: DroneOS/core/formation_engine.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
 ## Current Workspace
-- Active file: start_drone4.py
+- Active file: DroneOS/core/formation_engine.py
 - Tracked files in snapshot: 3817
 - Top-level areas: venv (1780), AirSim (1428), mobile (140), DroneOS (85), DroneOS1 (83), DroneOS2 (82), DroneOS3 (82), [root] (49)
 - Primary file types: .py (1920), [no extension] (219), .hpp (214), .uasset (179), .cpp (126), .png (126), .md (106), .h (98)
@@ -33,7 +33,7 @@ Structured manifest: workspace.json
 - Logged change events: 1
 - Change mix: save (1)
 - Remembered file snapshots: 1
-- Working tree summary: 17 modifieds, 1 untracked
+- Working tree summary: clean
 ## Tracked Snapshots
 - DroneOS/tests/test_terminal_controller.py | 246 lines | 8805 chars | hash be871eb34242
   Last snapshot: 2026-08-29T12:17:18.957Z
@@ -51,21 +51,9 @@ Structured manifest: workspace.json
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-09-29 9a56809 Update formation configuration and tests for improved separation handling
-- Working tree summary: 17 modifieds, 1 untracked
-- M DroneOS/adapters/airsim_adapter.py
-- M DroneOS/core/command_handler.py
-- M DroneOS/core/decision_engine.py
-- M DroneOS/core/flight_manager.py
-- M DroneOS/core/flight_pipeline.py
-- M DroneOS/core/swarm_manager.py
-- M DroneOS/shared/config/models.py
-- M DroneOS1/adapters/airsim_adapter.py
-- M DroneOS1/core/swarm_manager.py
-- M DroneOS1/shared/config/models.py
-- M DroneOS2/core/swarm_manager.py
-- M DroneOS2/shared/config/models.py
-- Additional git status lines were omitted for brevity.
+- HEAD: 2026-09-29 648e9d4 updated formations
+- Working tree summary: clean
+- Working tree: clean
 
 ## GitHub Snapshot
 GitHub Repository: Debanshu2005/DroneSwarm
@@ -73,8 +61,8 @@ Visibility: public | Default branch: main
 Stars: 0 | Forks: 0 | Open issues: 0
 
 Latest commit on main:
-- 9a56809 by Debanshu2005 on 2026-09-29
-  Update formation configuration and tests for improved separation handling - Increased default spacing in FormationConfig from 5.0 to 10.0 meters. - Added min_f…
+- 648e9d4 by Debanshu2005 on 2026-09-29
+  updated formations
 
 URL: https://github.com/Debanshu2005/DroneSwarm
 

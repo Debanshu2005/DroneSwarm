@@ -8,10 +8,6 @@ import time
 logger = setup_logger("FlightManager")
 
 class FlightManager:
-    """
-    High-level API for triggering intents or state changes.
-    Does not run background loops anymore.
-    """
     def __init__(self, flight_controller: IFlightController, state_store: FlightStateStore, min_srtl_altitude_m: float = 2.0):
         self.fc = flight_controller
         self.state_store = state_store
@@ -45,7 +41,6 @@ class FlightManager:
                 altitude = float(params["altitude_m"])
             except (ValueError, TypeError):
                 return False
-
         intent_params = {"altitude": altitude}
         if params:
             intent_params.update({k: v for k, v in params.items() if k.startswith("_")})
@@ -55,7 +50,6 @@ class FlightManager:
         return True
 
     def _pre_land_rtl_cleanup(self):
-        """Clear competing intents and set the landing latch before LAND/RTL."""
         self.formation_params = None
         if self.mission_manager is not None:
             try:
@@ -170,9 +164,45 @@ class FlightManager:
     async def formation_update(self, params: Dict[str, Any]) -> bool:
         if not self.swarm_manager:
             return False
+            
+        drone_id = getattr(self.swarm_manager, "identity", None)
+        drone_id = getattr(drone_id, "drone_id", "unknown") if drone_id else "unknown"
+        
+        slot_assignments = params.get("slot_assignments")
+        if not isinstance(slot_assignments, dict) or not slot_assignments or drone_id not in slot_assignments:
+            logger.warning("formation rejected: no slot for %s", drone_id)
+            return False
+            
+        try:
+            for k in list(slot_assignments.keys()):
+                slot_assignments[k] = int(slot_assignments[k])
+                
+            f_type_str = params.get("type", "V").upper()
+            from DroneOS2.core.formation_manager import FormationType
+            _ = FormationType(f_type_str)
+        except ValueError as e:
+            logger.warning("formation rejected: invalid parameters: %s", e)
+            return False
+
         self._active_navigation_frame = "GLOBAL_RELATIVE_ALT"
         self.formation_params = params
-        logger.info("Formation parameters updated: %s", params)
+        
+        slot = slot_assignments[drone_id]
+        logger.info(
+            "FORMATION_COMMAND_RECEIVED drone=%s type=%s spacing=%s slot=%s members=%s",
+            drone_id, params.get("type"), params.get("spacing"), slot,
+            params.get("members")
+        )
+        
+        logger.info(
+            "FORMATION_COMMAND_RECEIVED slot_map=%s",
+            slot_assignments
+        )
+        
+        logger.info(
+            "FORMATION_ACTIVE drone=%s slot=%s — params stored, FormationEngine will drive movement",
+            drone_id, slot
+        )
         return True
 
     def is_gps_dependent_navigation_active(self, telemetry=None) -> bool:

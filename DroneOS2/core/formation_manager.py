@@ -129,3 +129,13 @@ class FormationManager:
             return (-row * s, col * s, 0.0)
             
         return (0.0, 0.0, 0.0)
+
+def build_slot_assignments(drone_ids: list[str]) -> dict[str, int]:
+    """
+    Builds a slot assignment mapping for a list of drone IDs.
+    Returns a dict mapping drone_id -> slot index.
+    Slot 0 is the anchor.
+    This logic must remain perfectly consistent with the frontend (e.g. SwarmView.jsx).
+    """
+    members = sorted(set(drone_ids))
+    return {drone_id: index for index, drone_id in enumerate(members)}

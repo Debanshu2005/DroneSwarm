@@ -1,5 +1,5 @@
 """
-DroneOS/tests/test_formation_live.py
+DroneOS1/tests/test_formation_live.py
 
 New unit tests for the live formation execution path.
 Covers requirements A-J from the fix specification.
@@ -12,15 +12,15 @@ import time
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from DroneOS.core.formation_manager import (
+from DroneOS1.core.formation_manager import (
     FormationManager, FormationType, convert_local_offset_to_global, global_offset_local_m,
 )
-from DroneOS.core.formation_engine import FormationEngine, _DEFAULT_MIN_SEP_M, _ANCHOR_STALE_SEC
-from DroneOS.core.swarm_manager import PeerStateManager, SwarmMembership
-from DroneOS.shared.protocol.messages import TelemetryData, TelemetryMessage
-from DroneOS.core.intents import IntentSource, IntentAction, FlightIntent
-from DroneOS.core.flight_state import FlightStateStore
-from DroneOS.core.flight_pipeline import Arbiter, CommandWriter
+from DroneOS1.core.formation_engine import FormationEngine, _DEFAULT_MIN_SEP_M, _ANCHOR_STALE_SEC
+from DroneOS1.core.swarm_manager import PeerStateManager, SwarmMembership
+from DroneOS1.shared.protocol.messages import TelemetryData, TelemetryMessage
+from DroneOS1.core.intents import IntentSource, IntentAction, FlightIntent
+from DroneOS1.core.flight_state import FlightStateStore
+from DroneOS1.core.flight_pipeline import Arbiter, CommandWriter
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ def _make_engine(my_id, peers=None, min_sep=None):
 
 def test_formation_update_activates_state():
     """FlightManager.formation_update stores params and returns True."""
-    from DroneOS.core.flight_manager import FlightManager
+    from DroneOS1.core.flight_manager import FlightManager
     fc = MagicMock()
     fc.config = MagicMock()
     store = FlightStateStore()

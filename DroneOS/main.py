@@ -122,6 +122,7 @@ class DroneOSApp:
         self.terminal_controller.network = self.network
         self.swarm_manager = SwarmMembership(self.node_id)
         self.command_handler.swarm_manager = self.swarm_manager
+        self.terminal_controller.swarm_manager = self.swarm_manager
         # Update heartbeat timeout safely
         self.swarm_manager.heartbeat_mgr.timeout_sec = self.network_cfg.connection_timeout
         
@@ -479,6 +480,7 @@ class DroneOSApp:
 
     async def run(self) -> None:
         logger.info(f"Starting DroneOS Node: {self.node_id}")
+        logger.info("STARTUP package=DroneOS drone_id=%s", self.node_id)
         self._running = True
         self._install_signal_handlers()
         

@@ -229,8 +229,8 @@ def test_separation_limits_velocity_when_too_close():
     assert engine._my_slot(params) == 2
 
     # Velocity must be reduced (peer is 3m away in direction of travel)
-    if intent.action == IntentAction.MOVE_VELOCITY:
-        mag = math.hypot(intent.params["vx"], intent.params["vy"])
+    if intent.action == IntentAction.MOVE_VELOCITY_NED:
+        mag = math.hypot(intent.params["north"], intent.params["east"])
         assert mag < 2.0, (
             f"Velocity {mag:.3f} m/s not reduced despite peer at 3m < min_sep={min_sep}m"
         )
@@ -269,8 +269,8 @@ def test_separation_reduces_velocity_proportionally():
 
     assert engine._my_slot(params) == 2
 
-    if intent.action == IntentAction.MOVE_VELOCITY:
-        mag = math.hypot(intent.params["vx"], intent.params["vy"])
+    if intent.action == IntentAction.MOVE_VELOCITY_NED:
+        mag = math.hypot(intent.params["north"], intent.params["east"])
         # scale_factor = 4/8 = 0.5, so mag should be <= 1.0 (half of speed=2.0)
         assert mag <= 1.0 + 1e-6, (
             f"Velocity {mag:.3f} m/s exceeds expected scaled limit at dist=4m, min_sep=8m"
@@ -312,8 +312,8 @@ def test_normal_movement_when_safely_separated():
     telem = _telem(lat=40.0 + 5.0 / 111320, lon=-75.0)
     intent = engine.compute_intent(telem, {}, params)
 
-    assert intent.action == IntentAction.MOVE_VELOCITY
-    mag = math.hypot(intent.params["vx"], intent.params["vy"])
+    assert intent.action == IntentAction.MOVE_VELOCITY_NED
+    mag = math.hypot(intent.params["north"], intent.params["east"])
     assert mag > 0.01, "Expected non-zero velocity when peers are safely separated"
 
 
@@ -322,7 +322,7 @@ def test_normal_movement_when_safely_separated():
 # ---------------------------------------------------------------------------
 
 def test_missing_slot_returns_hover(caplog):
-    """A drone not in slot_assignments must return HOVER and log FORMATION_NO_SLOT."""
+    """A drone not in slot_assignments must return IDLE and log FORMATION_NO_SLOT."""
     import logging
     peers = {"drone1": _peer()}
     engine = _make_engine("drone_unknown", peers)
@@ -332,8 +332,9 @@ def test_missing_slot_returns_hover(caplog):
     with caplog.at_level(logging.WARNING, logger="FormationEngine"):
         intent = engine.compute_intent(_telem(), {}, params)
 
-    assert intent.action == IntentAction.HOVER
-    assert intent.source == IntentSource.FORMATION
+    assert intent.action == IntentAction.IDLE
+    assert intent.source == IntentSource.IDLE
+    assert intent.source == IntentSource.IDLE
     assert "FORMATION_NO_SLOT" in caplog.text
 
 
@@ -362,7 +363,7 @@ def test_collision_beats_formation():
     store = FlightStateStore()
 
     formation_intent = FlightIntent(
-        IntentSource.FORMATION, IntentAction.MOVE_VELOCITY, ttl_seconds=5.0,
+        IntentSource.IDLE, IntentAction.MOVE_VELOCITY_NED, ttl_seconds=5.0,
         params={"vx": 1.0, "vy": 0.0, "vz": 0.0, "yaw_rate": 0.0}
     )
     collision_intent = FlightIntent(
@@ -395,8 +396,8 @@ def test_speed_clamp():
     telem = _telem(lat=41.0, lon=-75.0)
     intent = engine.compute_intent(telem, {}, params)
 
-    assert intent.action == IntentAction.MOVE_VELOCITY
-    mag = math.hypot(intent.params["vx"], intent.params["vy"])
+    assert intent.action == IntentAction.MOVE_VELOCITY_NED
+    mag = math.hypot(intent.params["north"], intent.params["east"])
     assert mag <= 0.3 + 1e-6
 
 
@@ -420,23 +421,23 @@ def test_ned_directions():
     anchor.lat = 40.001
     anchor.lon = -75.0
     intent = engine.compute_intent(_telem(lat=40.0, lon=-75.0), {}, params)
-    assert intent.params["vx"] > 0
-    assert abs(intent.params["vy"]) < 1e-4
+    assert intent.params["north"] > 0
+    assert abs(intent.params["east"]) < 1e-4
 
     anchor.lat = 39.999
     anchor.lon = -75.0
     intent = engine.compute_intent(_telem(lat=40.0, lon=-75.0), {}, params)
-    assert intent.params["vx"] < 0
-    assert abs(intent.params["vy"]) < 1e-4
+    assert intent.params["north"] < 0
+    assert abs(intent.params["east"]) < 1e-4
 
     anchor.lat = 40.0
     anchor.lon = -74.999
     intent = engine.compute_intent(_telem(lat=40.0, lon=-75.0), {}, params)
-    assert abs(intent.params["vx"]) < 1e-4
-    assert intent.params["vy"] > 0
+    assert abs(intent.params["north"]) < 1e-4
+    assert intent.params["east"] > 0
 
     anchor.lat = 40.0
     anchor.lon = -75.001
     intent = engine.compute_intent(_telem(lat=40.0, lon=-75.0), {}, params)
-    assert abs(intent.params["vx"]) < 1e-4
-    assert intent.params["vy"] < 0
+    assert abs(intent.params["north"]) < 1e-4
+    assert intent.params["east"] < 0

@@ -258,7 +258,7 @@ async def main():
     assert min_expected >= MIN_FORMATION_SEPARATION_M, (
         f"Formation geometry {min_expected:.2f}m < min_sep {MIN_FORMATION_SEPARATION_M}m"
     )
-    print(f"  Minimum expected: {min_expected:.2f}m  ✓\n")
+    print(f"  Minimum expected: {min_expected:.2f}m  OK\n")
 
     formation_params = {
         "type": FORMATION_TYPE,
@@ -401,7 +401,7 @@ async def main():
             did_move = moved > 0.5
             if not did_move:
                 all_moved = False
-            print(f"  {rt.drone_id}: moved {moved_str} {'✓' if did_move else '✗ DID NOT MOVE'}")
+            print(f"  {rt.drone_id}: moved {moved_str} {'OK' if did_move else '✗ DID NOT MOVE'}")
         else:
             print(f"  {rt.drone_id}: insufficient position history")
             all_moved = False
@@ -430,7 +430,7 @@ async def main():
 
     passed = all_moved and len(sep_violations) == 0
     if passed:
-        print("\n✓ END-TO-END FORMATION TEST PASSED")
+        print("\nOK END-TO-END FORMATION TEST PASSED")
         sys.exit(0)
     else:
         if not all_moved:

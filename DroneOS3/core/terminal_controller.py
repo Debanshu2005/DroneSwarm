@@ -178,12 +178,43 @@ class TerminalController:
             return await self.command_handler.handle_command(msg)
             
         elif task.action == TaskAction.FORMATION:
+            if not getattr(self, "swarm_manager", None):
+                logger.error("Terminal controller missing swarm_manager reference")
+                return False
+                
+            timeout = getattr(self.swarm_manager.heartbeat_mgr, "timeout_sec", 5.0)
+            now = time.time()
+            active_peers = set()
+            for pid in self.swarm_manager.registry.get_all_peers():
+                p = self.swarm_manager.registry.get_peer(pid)
+                if p and (now - p.last_seen) <= timeout:
+                    active_peers.add(pid)
+                    
+            members = sorted(active_peers | {self.node_id})
+            from DroneOS3.core.formation_manager import build_slot_assignments
+            slot_assignments = build_slot_assignments(members)
+            
+            f_type = task.params.get("type", "V")
+            spacing = task.params.get("spacing", 10.0)
+            
             msg = ControlMessage(
                 action=CommandAction.FORMATION_UPDATE,
-                params={"type": task.params.get("type", "CIRCLE"), "spacing": task.params.get("spacing", 5.0)},
+                params={"type": f_type, "spacing": spacing, "members": members, "slot_assignments": slot_assignments},
                 sender_id=sender_id,
-                timestamp=time.time()
+                timestamp=now
             )
+            
+            for pid in members:
+                if pid != self.node_id:
+                    remote_msg = ControlMessage(
+                        action=CommandAction.FORMATION_UPDATE,
+                        params={"type": f_type, "spacing": spacing, "members": members, "slot_assignments": slot_assignments},
+                        sender_id=sender_id,
+                        target_id=pid,
+                        timestamp=now
+                    )
+                    asyncio.create_task(self.network.broadcast_message(remote_msg))
+                    
             return await self.command_handler.handle_command(msg)
             
         elif task.action == TaskAction.HOVER:

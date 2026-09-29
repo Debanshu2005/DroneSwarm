@@ -164,16 +164,41 @@ class FlightManager:
     async def formation_update(self, params: Dict[str, Any]) -> bool:
         if not self.swarm_manager:
             return False
-        self._active_navigation_frame = "GLOBAL_RELATIVE_ALT"
-        self.formation_params = params
+            
         drone_id = getattr(self.swarm_manager, "identity", None)
         drone_id = getattr(drone_id, "drone_id", "unknown") if drone_id else "unknown"
-        slot = (params.get("slot_assignments") or {}).get(drone_id, "?")
+        
+        slot_assignments = params.get("slot_assignments")
+        if not isinstance(slot_assignments, dict) or not slot_assignments or drone_id not in slot_assignments:
+            logger.warning("formation rejected: no slot for %s", drone_id)
+            return False
+            
+        try:
+            for k in list(slot_assignments.keys()):
+                slot_assignments[k] = int(slot_assignments[k])
+                
+            f_type_str = params.get("type", "V").upper()
+            from DroneOS.core.formation_manager import FormationType
+            _ = FormationType(f_type_str)
+        except ValueError as e:
+            logger.warning("formation rejected: invalid parameters: %s", e)
+            return False
+
+        self._active_navigation_frame = "GLOBAL_RELATIVE_ALT"
+        self.formation_params = params
+        
+        slot = slot_assignments[drone_id]
         logger.info(
             "FORMATION_COMMAND_RECEIVED drone=%s type=%s spacing=%s slot=%s members=%s",
             drone_id, params.get("type"), params.get("spacing"), slot,
             params.get("members")
         )
+        
+        logger.info(
+            "FORMATION_COMMAND_RECEIVED slot_map=%s",
+            slot_assignments
+        )
+        
         logger.info(
             "FORMATION_ACTIVE drone=%s slot=%s — params stored, FormationEngine will drive movement",
             drone_id, slot

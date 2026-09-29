@@ -24,6 +24,10 @@ class FormationEngine:
     # ------------------------------------------------------------------
 
     def _my_slot(self, params: dict) -> int:
+        """
+        Return this drone's slot index from the explicit slot_assignments map.
+        Returns -1 if this drone has no assignment.
+        """
         slot_assignments = params.get("slot_assignments", {})
         my_id = self.swarm_manager.identity.drone_id
         if my_id not in slot_assignments:
@@ -45,17 +49,20 @@ class FormationEngine:
         for drone_id, slot in slot_assignments.items():
             if int(slot) == 0:
                 return drone_id
+        # Fallback: first member alphabetically
         members = params.get("members")
         if members:
             return sorted(members)[0]
         return self.swarm_manager.identity.drone_id
 
     def _min_separation_m(self) -> float:
+        """Read min_formation_separation_m from config, or use default."""
         if self.config and getattr(self.config, "formation", None):
             return float(getattr(self.config.formation, "min_formation_separation_m", _DEFAULT_MIN_SEP_M))
         return _DEFAULT_MIN_SEP_M
 
     def _peer_horizontal_dist(self, my_lat, my_lon, peer) -> float:
+        """Flat-earth horizontal distance in metres from self to a peer object."""
         if peer.lat is None or peer.lon is None:
             return float("inf")
         dn, de = global_offset_local_m(my_lat, my_lon, peer.lat, peer.lon)
@@ -66,6 +73,10 @@ class FormationEngine:
     # ------------------------------------------------------------------
 
     def get_expected_positions(self, current_telemetry, params: dict) -> dict:
+        """
+        Returns {drone_id: (lat, lon)} for every member in the assignment,
+        computed from the anchor position and each drone's slot offset.
+        """
         f_type_str = params.get("type", "V").upper()
         try:
             f_type = FormationType(f_type_str)
@@ -84,6 +95,7 @@ class FormationEngine:
         my_id = self.swarm_manager.identity.drone_id
         now = time.time()
 
+        # Resolve anchor position
         if anchor_id == my_id:
             if not current_telemetry.gps_valid or current_telemetry.latitude is None:
                 return {}
@@ -128,8 +140,11 @@ class FormationEngine:
         my_slot = self._my_slot(params)
 
         if my_slot < 0:
-            logger.warning("FORMATION_NO_SLOT drone=%s", my_id)
-            return FlightIntent(IntentSource.FORMATION, IntentAction.HOVER, ttl_seconds=1.0)
+            now = time.time()
+            if not hasattr(self, "_last_no_slot_warn") or (now - self._last_no_slot_warn) > 5.0:
+                logger.warning("FORMATION_NO_SLOT drone=%s", my_id)
+                self._last_no_slot_warn = now
+            return FlightIntent(IntentSource.IDLE, IntentAction.IDLE)
 
         total = self._total_drones(params)
         anchor_id = self._anchor_id(params)
@@ -160,6 +175,7 @@ class FormationEngine:
             logger.warning("Anchor %s position stale or missing. Hovering.", anchor_id)
             return FlightIntent(IntentSource.FORMATION, IntentAction.HOVER, ttl_seconds=1.0)
 
+        # Compute slot offset (primary target)
         dx_north, dy_east, _ = self.form_mgr.get_offset(my_slot, total)
 
         # Repulsion correction (secondary, capped at 15% of spacing)
@@ -183,7 +199,7 @@ class FormationEngine:
                 neighbor_offsets,
                 radius=repulsion_radius_m,
                 gain=0.5,
-                max_displacement=spacing * 0.15,
+                max_displacement=spacing * 0.15,   # cap at 15% of spacing
             )
             dx_north += rep_n
             dy_east += rep_e
@@ -199,6 +215,13 @@ class FormationEngine:
             current_telemetry.latitude, current_telemetry.longitude,
             target_lat, target_lon
         )
+        
+        dist_to_target = math.hypot(error_north, error_east)
+        if not hasattr(self, "_last_formation_log") or (now - self._last_formation_log) >= 1.0:
+            anchor_age = now - anchor_peer.last_position_time
+            logger.info("FORMATION_STATUS slot=%s anchor_id=%s anchor_age=%.2f dist_to_target=%.2f",
+                        my_slot, anchor_id, anchor_age, dist_to_target)
+            self._last_formation_log = now
 
         kp = 1.0
         if self.config and getattr(self.config, "formation", None):
@@ -215,6 +238,11 @@ class FormationEngine:
 
         # ------------------------------------------------------------------
         # Formation separation safety layer (secondary, does NOT change slot)
+        # ------------------------------------------------------------------
+        # Check actual physical distance to each formation peer.
+        # If any peer is closer than min_formation_separation_m, scale down
+        # the velocity toward that peer to prevent unsafe convergence.
+        # This never reassigns slots — it only limits approach speed.
         # ------------------------------------------------------------------
         min_sep = self._min_separation_m()
         slot_assignments = params.get("slot_assignments", {})
@@ -240,6 +268,7 @@ class FormationEngine:
 
             if dist < min_sep:
                 too_close = True
+                # Compute unit vector from self toward peer
                 dn, de = global_offset_local_m(
                     current_telemetry.latitude, current_telemetry.longitude,
                     peer.lat, peer.lon
@@ -248,8 +277,12 @@ class FormationEngine:
                 if peer_dist < 1e-6:
                     continue
 
+                # Dot product of velocity with direction toward peer
                 dot = (vx * dn + vy * de) / peer_dist
+
                 if dot > 0:
+                    # Velocity has a component toward the too-close peer.
+                    # Scale it down proportionally: 0 at dist=0, 1 at dist=min_sep.
                     scale_factor = max(0.0, dist / min_sep)
                     vx *= scale_factor
                     vy *= scale_factor
@@ -260,6 +293,7 @@ class FormationEngine:
                     )
 
         if too_close and math.hypot(vx, vy) < 1e-4:
+            # Fully blocked — hover rather than drift
             return FlightIntent(IntentSource.FORMATION, IntentAction.HOVER, ttl_seconds=1.0)
 
         logger.info(

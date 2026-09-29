@@ -140,8 +140,11 @@ class FormationEngine:
         my_slot = self._my_slot(params)
 
         if my_slot < 0:
-            logger.warning("FORMATION_NO_SLOT drone=%s", my_id)
-            return FlightIntent(IntentSource.FORMATION, IntentAction.HOVER, ttl_seconds=1.0)
+            now = time.time()
+            if not hasattr(self, "_last_no_slot_warn") or (now - self._last_no_slot_warn) > 5.0:
+                logger.warning("FORMATION_NO_SLOT drone=%s", my_id)
+                self._last_no_slot_warn = now
+            return FlightIntent(IntentSource.IDLE, IntentAction.IDLE)
 
         total = self._total_drones(params)
         anchor_id = self._anchor_id(params)
@@ -212,6 +215,13 @@ class FormationEngine:
             current_telemetry.latitude, current_telemetry.longitude,
             target_lat, target_lon
         )
+        
+        dist_to_target = math.hypot(error_north, error_east)
+        if not hasattr(self, "_last_formation_log") or (now - self._last_formation_log) >= 1.0:
+            anchor_age = now - anchor_peer.last_position_time
+            logger.info("FORMATION_STATUS slot=%s anchor_id=%s anchor_age=%.2f dist_to_target=%.2f",
+                        my_slot, anchor_id, anchor_age, dist_to_target)
+            self._last_formation_log = now
 
         kp = 1.0
         if self.config and getattr(self.config, "formation", None):

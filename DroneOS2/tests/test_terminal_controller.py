@@ -247,6 +247,11 @@ async def test_takeoff_arm_timeout(terminal_controller, mocks):
 @pytest.mark.asyncio
 async def test_formation_update(terminal_controller, mocks):
     command_handler, flight_controller = mocks
+    from unittest.mock import MagicMock
+    terminal_controller.swarm_manager = MagicMock()
+    terminal_controller.swarm_manager.registry.get_all_peers.return_value = []
+    terminal_controller.swarm_manager.heartbeat_mgr.timeout_sec = 100.0
+    terminal_controller.network = AsyncMock()
     
     # "form circle spacing 5"
     await terminal_controller.process_text("form circle spacing 5m", sender_id="test-1")
@@ -257,3 +262,4 @@ async def test_formation_update(terminal_controller, mocks):
     assert call_args.action == CommandAction.FORMATION_UPDATE
     assert call_args.params["type"] == "CIRCLE"
     assert call_args.params["spacing"] == 5.0
+

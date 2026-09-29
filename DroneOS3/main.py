@@ -29,9 +29,9 @@ from DroneOS3.core.diagnostics import ConfigurationValidator, SystemHealthReport
 from DroneOS3.shared.config.loader import load_yaml_config
 from DroneOS3.shared.config.models import DroneConfig, NetworkConfig, FlightConfig
 
-logger = setup_logger("DroneOS_Main")
+logger = setup_logger("DroneOS3_Main")
 
-class DroneOSApp:
+class DroneOS3App:
     def __init__(self):
         self._running = False
         self._active_tasks = set()
@@ -122,6 +122,7 @@ class DroneOSApp:
         self.terminal_controller.network = self.network
         self.swarm_manager = SwarmMembership(self.node_id)
         self.command_handler.swarm_manager = self.swarm_manager
+        self.terminal_controller.swarm_manager = self.swarm_manager
         # Update heartbeat timeout safely
         self.swarm_manager.heartbeat_mgr.timeout_sec = self.network_cfg.connection_timeout
         
@@ -478,16 +479,17 @@ class DroneOSApp:
             await asyncio.sleep(1.0)
 
     async def run(self) -> None:
-        logger.info(f"Starting DroneOS Node: {self.node_id}")
+        logger.info(f"Starting DroneOS3 Node: {self.node_id}")
+        logger.info("STARTUP package=DroneOS3 drone_id=%s", self.node_id)
         self._running = True
         self._install_signal_handlers()
         
         try:
             connected = await self.flight_controller.connect()
             if not connected:
-                logger.error("Could not connect to flight controller initially. Will continue starting DroneOS and retry later.")
+                logger.error("Could not connect to flight controller initially. Will continue starting DroneOS3 and retry later.")
         except Exception as e:
-            logger.error(f"Flight controller connection error during startup: {e}. DroneOS will continue.")
+            logger.error(f"Flight controller connection error during startup: {e}. DroneOS3 will continue.")
 
         await self.network.start()
         
@@ -523,32 +525,11 @@ class DroneOSApp:
             capabilities=self.swarm_manager.identity.capabilities
         )
         self._dispatch_task(self.network.broadcast_message(join_msg))
-
+        
         identity_msg = self.swarm_manager.identity.get_identity_message()
         self._dispatch_task(self.network.broadcast_message(identity_msg))
-
-        async def _delayed_rejoin():
-            """Re-announce after 3 s so peers that started simultaneously and missed
-            the initial broadcast still register this drone before flight."""
-            await asyncio.sleep(3.0)
-            if not self._running:
-                return
-            import time as _time
-            rejoin = DroneJoinMessage(
-                sender_id=self.node_id,
-                timestamp=_time.time(),
-                drone_ip=self.network_cfg.host,
-                drone_port=self.network_cfg.port,
-                capabilities=self.swarm_manager.identity.capabilities
-            )
-            await self.network.broadcast_message(rejoin)
-            reident = self.swarm_manager.identity.get_identity_message()
-            await self.network.broadcast_message(reident)
-            logger.info(f"[{self.node_id}] Re-announced JOIN after delayed startup window.")
-
-        self._dispatch_task(_delayed_rejoin())
         
-        logger.info("DroneOS is running. Press Ctrl+C to stop.")
+        logger.info("DroneOS3 is running. Press Ctrl+C to stop.")
         
         try:
             while self._running:
@@ -581,7 +562,7 @@ class DroneOSApp:
         logger.info("Shutdown complete.")
 
 if __name__ == "__main__":
-    app = DroneOSApp()
+    app = DroneOS3App()
     try:
         asyncio.run(app.run())
     except KeyboardInterrupt:
@@ -592,4 +573,4 @@ if __name__ == "__main__":
         # Note: In a full implementation, we would await app.stop() gracefully
         # but since asyncio.run is closing, we just log here. 
         # App internal loop catches the cancel.
-        logger.info("DroneOS shutdown complete.")
+        logger.info("DroneOS3 shutdown complete.")
