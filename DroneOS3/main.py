@@ -522,9 +522,30 @@ class DroneOSApp:
             capabilities=self.swarm_manager.identity.capabilities
         )
         self._dispatch_task(self.network.broadcast_message(join_msg))
-        
+
         identity_msg = self.swarm_manager.identity.get_identity_message()
         self._dispatch_task(self.network.broadcast_message(identity_msg))
+
+        async def _delayed_rejoin():
+            """Re-announce after 3 s so peers that started simultaneously and missed
+            the initial broadcast still register this drone before flight."""
+            await asyncio.sleep(3.0)
+            if not self._running:
+                return
+            import time as _time
+            rejoin = DroneJoinMessage(
+                sender_id=self.node_id,
+                timestamp=_time.time(),
+                drone_ip=self.network_cfg.host,
+                drone_port=self.network_cfg.port,
+                capabilities=self.swarm_manager.identity.capabilities
+            )
+            await self.network.broadcast_message(rejoin)
+            reident = self.swarm_manager.identity.get_identity_message()
+            await self.network.broadcast_message(reident)
+            logger.info(f"[{self.node_id}] Re-announced JOIN after delayed startup window.")
+
+        self._dispatch_task(_delayed_rejoin())
         
         logger.info("DroneOS is running. Press Ctrl+C to stop.")
         

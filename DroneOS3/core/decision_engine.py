@@ -59,13 +59,15 @@ class LocalDecisionEngine:
             return
             
         # 1. Collect peer telemetry (exclude self)
+        # Use telemetry presence (not is_active) so disarmed-but-reachable peers
+        # are still visible to collision avoidance.
         peer_telemetry = {}
         my_id = self.swarm.identity.drone_id
         for peer_id in self.swarm.registry.get_all_peers():
             if peer_id == my_id:
                 continue  # Never compare against ourselves
             state = self.swarm.registry.get_peer(peer_id)
-            if state and state.is_active and state.telemetry:
+            if state and state.telemetry is not None:
                 peer_telemetry[peer_id] = state.telemetry
 
         # 1.5 Filter formation peers from collision avoidance

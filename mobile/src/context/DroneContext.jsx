@@ -162,8 +162,16 @@ export const DroneProvider = ({ children }) => {
     
     // Add default configured connection for backward compatibility or dev (if no others exist)
     if (wsUrl && Object.keys(manager.connections).length === 0) {
-      const [ip, portStr] = wsUrl.replace('ws://', '').split(':');
-      manager.addConnection(ip, portStr ? parseInt(portStr) : 8080);
+      const isDefaultPiUrl = wsUrl.includes('swarmos-pi.local') || wsUrl.endsWith(':8080');
+      if (isDefaultPiUrl && window.location.hostname === 'localhost') {
+        // Running locally against the sim: auto-connect to all 4 relay ports
+        // and enable test/sim mode so the header shows SIMULATION/SITL correctly
+        [8081, 8082, 8083, 8084].forEach(port => manager.addConnection('127.0.0.1', port));
+        setTestMode(true);
+      } else {
+        const [ip, portStr] = wsUrl.replace('ws://', '').split(':');
+        manager.addConnection(ip, portStr ? parseInt(portStr) : 8080);
+      }
     }
 
     manager.onConnectionChange = (url, status, detail = {}) => {

@@ -80,7 +80,7 @@ class CommandWriter:
                     await self.fc.kill()
             
             elif intent.action == IntentAction.IDLE:
-                return
+                return True  # Nothing to do — not a failure
                     
             elif intent.action == IntentAction.HOVER:
                 logger.info("FC invoking hover")
@@ -220,7 +220,8 @@ class FlightPipeline:
             if is_critical_manual_intent(winning_intent) and self.on_intent_dispatched:
                 await self.on_intent_dispatched(winning_intent)
             result = await self.command_writer.execute(safe_intent)
-            logger.info("FLIGHT_EXEC_RESULT %s vehicle=%s success=%s", safe_intent.action.value, getattr(self.fc, "vehicle_name", getattr(self.fc, "vehicle_id", "unknown")), bool(result))
+            if safe_intent.action != IntentAction.IDLE:
+                logger.info("FLIGHT_EXEC_RESULT %s vehicle=%s success=%s", safe_intent.action.value, getattr(self.fc, "vehicle_name", getattr(self.fc, "vehicle_id", "unknown")), bool(result))
             if is_critical_manual_intent(winning_intent):
                 if self.on_intent_result:
                     await self.on_intent_result(winning_intent, result)

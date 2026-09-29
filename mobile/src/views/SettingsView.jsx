@@ -58,6 +58,25 @@ export default function SettingsView() {
                   if (!newIp || !newPort || !wsManager) return;
                   wsManager.addConnection(newIp, parseInt(newPort));
                }}>+ ADD DRONE</button>
+
+               {/* Simulation quick-connect */}
+               <div style={{borderTop: '1px solid var(--border)', paddingTop: '12px', marginTop: '4px'}}>
+                  <div style={{fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600}}>QUICK CONNECT</div>
+                  <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
+                     <button className="secondary-btn" style={{fontSize: '12px', padding: '6px 12px'}} onClick={() => {
+                        if (!wsManager) return;
+                        [8081, 8082, 8083, 8084].forEach(port => wsManager.addConnection('127.0.0.1', port));
+                     }}>
+                        🖥 Simulation (localhost 8081–8084)
+                     </button>
+                     <button className="secondary-btn" style={{fontSize: '12px', padding: '6px 12px'}} onClick={() => {
+                        if (!wsManager) return;
+                        wsManager.addConnection('swarmos-pi.local', 8080);
+                     }}>
+                        📡 Production Pi (:8080)
+                     </button>
+                  </div>
+               </div>
             </div>
 
             <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
