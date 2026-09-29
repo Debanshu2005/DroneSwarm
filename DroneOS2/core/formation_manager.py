@@ -135,7 +135,9 @@ def build_slot_assignments(drone_ids: list[str]) -> dict[str, int]:
     Builds a slot assignment mapping for a list of drone IDs.
     Returns a dict mapping drone_id -> slot index.
     Slot 0 is the anchor.
-    This logic must remain perfectly consistent with the frontend (e.g. SwarmView.jsx).
+
+    MUST stay consistent with mobile/src/utils/formation.js buildFormationParams().
+    Both sort IDs and assign slots by ascending sorted index.
     """
     members = sorted(set(drone_ids))
     return {drone_id: index for index, drone_id in enumerate(members)}

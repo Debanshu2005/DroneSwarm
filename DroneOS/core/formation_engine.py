@@ -11,6 +11,8 @@ _ANCHOR_STALE_SEC = 3.0
 _DEFAULT_SPACING = 10.0
 _DEFAULT_MIN_SEP_M = 8.0
 _FORMATION_STARTUP_GRACE_SEC = 5.0  # grace period before anchor-missing becomes a WARNING
+# Rate-limit period for high-frequency per-tick INFO logs (seconds).
+_LOG_RATE_SEC = 1.0
 
 
 class FormationEngine:
@@ -20,10 +22,20 @@ class FormationEngine:
         self.config = config
         self.form_mgr = FormationManager()
         self._formation_activated_at: float = 0.0  # time.time() when formation was first entered
+        # Rate-limit timestamps keyed by log tag.
+        self._log_ts: dict = {}
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _rl(self, tag: str, now: float) -> bool:
+        """Return True when the caller should emit the log (rate-limited to 1/s)."""
+        last = self._log_ts.get(tag, 0.0)
+        if now - last >= _LOG_RATE_SEC:
+            self._log_ts[tag] = now
+            return True
+        return False
 
     def _my_slot(self, params: dict) -> int:
         """
@@ -70,6 +82,26 @@ class FormationEngine:
         dn, de = global_offset_local_m(my_lat, my_lon, peer.lat, peer.lon)
         return math.hypot(dn, de)
 
+    def _anchor_relative_offset(self, slot: int, total: int) -> tuple:
+        """
+        Compute the NED offset of `slot` relative to the anchor (slot 0).
+
+        For squadron shapes (V, LINE, COLUMN, etc.) slot 0 has offset (0, 0, 0),
+        so this returns get_offset(slot) unchanged.
+
+        For assembly shapes (CIRCLE, SQUARE) slot 0 has a non-zero ring position.
+        Subtracting the anchor's own ring offset makes followers position themselves
+        relative to the anchor's ACTUAL GPS position rather than the ring center,
+        so the anchor ends up ON the ring instead of at its center.
+        """
+        slot_off = self.form_mgr.get_offset(slot, total)
+        anchor_off = self.form_mgr.get_offset(0, total)
+        return (
+            slot_off[0] - anchor_off[0],
+            slot_off[1] - anchor_off[1],
+            slot_off[2] - anchor_off[2],
+        )
+
     # ------------------------------------------------------------------
     # Public API used by DecisionEngine (CA diagnostics)
     # ------------------------------------------------------------------
@@ -77,7 +109,8 @@ class FormationEngine:
     def get_expected_positions(self, current_telemetry, params: dict) -> dict:
         """
         Returns {drone_id: (lat, lon)} for every member in the assignment,
-        computed from the anchor position and each drone's slot offset.
+        computed from the anchor position and each drone's anchor-relative slot offset.
+        Uses _anchor_relative_offset so CIRCLE and SQUARE place the anchor on the ring.
         """
         f_type_str = params.get("type", "V").upper()
         try:
@@ -116,7 +149,7 @@ class FormationEngine:
 
         expected = {}
         for drone_id, slot in slot_assignments.items():
-            dx_n, dy_e, _ = self.form_mgr.get_offset(int(slot), total)
+            dx_n, dy_e, _ = self._anchor_relative_offset(int(slot), total)
             t_lat, t_lon, _ = convert_local_offset_to_global(anchor_lat, anchor_lon, anchor_alt, dx_n, dy_e)
             expected[drone_id] = (t_lat, t_lon)
         return expected
@@ -151,16 +184,15 @@ class FormationEngine:
         my_slot = self._my_slot(params)
 
         if my_slot < 0:
-            now = time.time()
-            if not hasattr(self, "_last_no_slot_warn") or (now - self._last_no_slot_warn) > 5.0:
+            if self._rl("no_slot", now):
                 logger.warning("FORMATION_NO_SLOT drone=%s", my_id)
-                self._last_no_slot_warn = now
             return FlightIntent(IntentSource.IDLE, IntentAction.IDLE)
 
         total = self._total_drones(params)
         anchor_id = self._anchor_id(params)
 
-        logger.info("FORMATION_ASSIGNMENT drone=%s slot=%d", my_id, my_slot)
+        if self._rl("assignment", now):
+            logger.info("FORMATION_ASSIGNMENT drone=%s slot=%d", my_id, my_slot)
 
         if not current_telemetry.gps_valid:
             logger.warning("Formation engine waiting: GPS invalid.")
@@ -169,6 +201,11 @@ class FormationEngine:
         # Anchor should follow manual or mission commands, not be forced to hover.
         # By returning IDLE here, the anchor's arbiter will fall back to MANUAL/MISSION intents.
         if my_id == anchor_id:
+            if self._rl("anchor_status", now):
+                logger.info(
+                    "FORMATION_STATUS drone=%s type=%s slot=0 anchor=%s target_err_m=0.00 speed_mps=0.00",
+                    my_id, f_type_str, anchor_id
+                )
             return FlightIntent(IntentSource.IDLE, IntentAction.IDLE)
 
         anchor_peer = self.swarm_manager.registry.get_peer(anchor_id)
@@ -184,16 +221,22 @@ class FormationEngine:
         if not anchor_pos_valid:
             in_grace = (now - self._formation_activated_at) < _FORMATION_STARTUP_GRACE_SEC
             if in_grace:
-                logger.debug(
-                    "Anchor %s position not yet available (startup grace %.1fs remaining). Hovering.",
-                    anchor_id, _FORMATION_STARTUP_GRACE_SEC - (now - self._formation_activated_at)
-                )
+                # Log at INFO once per second during startup grace so it is visible.
+                if self._rl("grace", now):
+                    logger.info(
+                        "Anchor %s position not yet available (startup grace %.1fs remaining). Hovering.",
+                        anchor_id, _FORMATION_STARTUP_GRACE_SEC - (now - self._formation_activated_at)
+                    )
             else:
                 logger.warning("Anchor %s position stale or missing. Hovering.", anchor_id)
             return FlightIntent(IntentSource.FORMATION, IntentAction.HOVER, ttl_seconds=1.0)
 
-        # Compute slot offset (primary target)
-        dx_north, dy_east, _ = self.form_mgr.get_offset(my_slot, total)
+        # Compute anchor-relative slot offset.
+        # This fixes CIRCLE and SQUARE: followers target anchor_pos + relative_offset
+        # so the anchor stays on the ring and does not end up at the ring center.
+        # Squadron shapes (V, LINE, COLUMN, etc.) have anchor offset (0,0), so
+        # _anchor_relative_offset returns the same value as get_offset for them.
+        dx_north, dy_east, _ = self._anchor_relative_offset(my_slot, total)
 
         # Repulsion correction (secondary, capped at 15% of spacing)
         if current_telemetry.latitude is not None and current_telemetry.longitude is not None:
@@ -232,13 +275,8 @@ class FormationEngine:
             current_telemetry.latitude, current_telemetry.longitude,
             target_lat, target_lon
         )
-        
+
         dist_to_target = math.hypot(error_north, error_east)
-        if not hasattr(self, "_last_formation_log") or (now - self._last_formation_log) >= 1.0:
-            anchor_age = now - anchor_peer.last_position_time
-            logger.info("FORMATION_STATUS slot=%s anchor_id=%s anchor_age=%.2f dist_to_target=%.2f",
-                        my_slot, anchor_id, anchor_age, dist_to_target)
-            self._last_formation_log = now
 
         kp = 1.0
         if self.config and getattr(self.config, "formation", None):
@@ -252,6 +290,16 @@ class FormationEngine:
             scale = speed / magnitude
             vx *= scale
             vy *= scale
+
+        # Once-per-second FORMATION_STATUS line for this follower drone.
+        if self._rl("status", now):
+            anchor_age = now - anchor_peer.last_position_time
+            logger.info(
+                "FORMATION_STATUS drone=%s type=%s slot=%d anchor=%s "
+                "target_err_m=%.2f speed_mps=%.2f anchor_age=%.2fs",
+                my_id, f_type_str, my_slot, anchor_id,
+                dist_to_target, math.hypot(vx, vy), anchor_age
+            )
 
         # ------------------------------------------------------------------
         # Formation separation safety layer (secondary, does NOT change slot)
@@ -313,10 +361,11 @@ class FormationEngine:
             # Fully blocked — hover rather than drift
             return FlightIntent(IntentSource.FORMATION, IntentAction.HOVER, ttl_seconds=1.0)
 
-        logger.info(
-            "FORMATION_TARGET drone=%s slot=%d north=%.3f east=%.3f vx=%.3f vy=%.3f",
-            my_id, my_slot, target_lat, target_lon, vx, vy
-        )
+        if self._rl("intent", now):
+            logger.info(
+                "FORMATION_INTENT drone=%s slot=%d action=MOVE_VELOCITY_NED north=%.3f east=%.3f",
+                my_id, my_slot, vx, vy
+            )
 
         return FlightIntent(
             IntentSource.FORMATION,

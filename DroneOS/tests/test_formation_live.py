@@ -32,7 +32,7 @@ SLOTS_4   = {"drone1": 0, "drone2": 1, "drone3": 2, "drone4": 3}
 
 V_PARAMS = {
     "type": "V",
-    "spacing": 10.0,
+    "spacing": 20.0,   # must be >= 1.5 * max(min_sep=8m, min_ca=2m) = 12.0m
     "members": MEMBERS_4,
     "slot_assignments": SLOTS_4,
     "speed": 2.0,
@@ -92,7 +92,7 @@ def test_formation_update_activates_state():
     assert result is True
     assert fm.formation_params is not None
     assert fm.formation_params["type"] == "V"
-    assert fm.formation_params["spacing"] == 10.0
+    assert fm.formation_params["spacing"] == 20.0
 
 
 # ---------------------------------------------------------------------------

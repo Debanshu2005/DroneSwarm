@@ -15,6 +15,7 @@ import { CommandAction } from '../protocol/messages';
 import { useDeviceLocation } from '../hooks/useDeviceLocation';
 import { DEFAULT_MAP_CENTER, resolveAirspaceZone } from '../utils/airspace';
 import AirspaceZonePanel from '../components/AirspaceZonePanel';
+import { buildFormationParams } from '../utils/formation';
 
 
 // Fix Leaflet's default icon path issues in React
@@ -87,7 +88,9 @@ export default function DroneControlView({ setView }) {
 
   // Formation defaults
   const [formationType, setFormationType] = useState('V');
-  const [formationSpacing, setFormationSpacing] = useState(2.0);
+  const [formationSpacing, setFormationSpacing] = useState(10.0);
+  // Minimum viable spacing = 1.5 * max(min_formation_sep=8m, min_ca_dist=2m) = 12.0m (matches backend default).
+  const FORMATION_MIN_SPACING = 12.0;
 
   // Speed defaults to 0.10 m/s
   const [movementSpeed, setMovementSpeed] = useState(0.10);
@@ -575,11 +578,22 @@ export default function DroneControlView({ setView }) {
                               <option value="GRID">GRID</option>
                               <option value="CIRCLE">CIR</option>
                            </select>
-                           <button className="d-btn h-btn text-btn" onClick={() => {
-                               const mem = Object.values(drones).filter(d => d.status === 'CONNECTED' || d.status === 'DEGRADED').map(d => d.id).sort();
-                               const sa = {};
-                               mem.forEach((id, idx) => { sa[id] = idx; });
-                               requestCommand(CommandAction.FORMATION_UPDATE, { type: formationType, spacing: formationSpacing, members: mem, slot_assignments: sa });
+                           {formationSpacing < FORMATION_MIN_SPACING && (
+                             <div className="mini-val" style={{color:'var(--danger)',fontSize:'9px'}}>
+                               min {FORMATION_MIN_SPACING}m
+                             </div>
+                           )}
+                           <button
+                             className="d-btn h-btn text-btn"
+                             disabled={formationSpacing < FORMATION_MIN_SPACING}
+                             title={formationSpacing < FORMATION_MIN_SPACING ? `Spacing must be >= ${FORMATION_MIN_SPACING}m` : 'Apply formation'}
+                             onClick={() => {
+                               const fp = buildFormationParams(
+                                 Object.values(drones),
+                                 formationType,
+                                 formationSpacing
+                               );
+                               requestCommand(CommandAction.FORMATION_UPDATE, fp);
                            }}>APPLY</button>
                        </div>
             

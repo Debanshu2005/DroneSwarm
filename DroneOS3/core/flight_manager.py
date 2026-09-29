@@ -16,6 +16,8 @@ class FlightManager:
         self._min_srtl_altitude_m = min_srtl_altitude_m
         self.formation_params = None
         self.mission_manager = None  # set by main after construction
+        # Last rejection reason for FORMATION_UPDATE; read by CommandHandler to surface in app.
+        self.last_rejection_reason: str = ""
 
     def set_swarm_manager(self, swarm_manager):
         self.swarm_manager = swarm_manager
@@ -163,25 +165,56 @@ class FlightManager:
 
     async def formation_update(self, params: Dict[str, Any]) -> bool:
         if not self.swarm_manager:
+            self.last_rejection_reason = "formation rejected: swarm_manager not available"
             return False
-            
+
         drone_id = getattr(self.swarm_manager, "identity", None)
         drone_id = getattr(drone_id, "drone_id", "unknown") if drone_id else "unknown"
-        
+
         slot_assignments = params.get("slot_assignments")
         if not isinstance(slot_assignments, dict) or not slot_assignments or drone_id not in slot_assignments:
-            logger.warning("formation rejected: no slot for %s", drone_id)
+            reason = f"formation rejected: no slot for {drone_id}"
+            logger.warning(reason)
+            self.last_rejection_reason = reason
             return False
-            
+
         try:
             for k in list(slot_assignments.keys()):
                 slot_assignments[k] = int(slot_assignments[k])
-                
+
             f_type_str = params.get("type", "V").upper()
             from DroneOS3.core.formation_manager import FormationType
             _ = FormationType(f_type_str)
-        except ValueError as e:
-            logger.warning("formation rejected: invalid parameters: %s", e)
+        except (ValueError, TypeError, AttributeError) as e:
+            reason = f"formation rejected: invalid parameters: {e}"
+            logger.warning(reason)
+            self.last_rejection_reason = reason
+            return False
+
+        # Spacing guard: reject if spacing < 1.5 * max(min_formation_separation_m, min_horizontal_distance).
+        try:
+            spacing = float(params.get("spacing", 0.0))
+            cfg = getattr(self, "_flight_config", None)
+            min_sep = 8.0
+            min_ca = 2.0
+            if cfg is not None:
+                if getattr(cfg, "formation", None):
+                    min_sep = float(getattr(cfg.formation, "min_formation_separation_m", min_sep))
+                if getattr(cfg, "collision_avoidance", None):
+                    min_ca = float(getattr(cfg.collision_avoidance, "min_horizontal_distance", min_ca))
+            min_viable = 1.5 * max(min_sep, min_ca)
+            if spacing < min_viable:
+                reason = (
+                    f"formation rejected: spacing {spacing:.1f}m is below minimum {min_viable:.1f}m "
+                    f"(1.5 x max(sep={min_sep:.1f}m, ca={min_ca:.1f}m))"
+                )
+                logger.warning(reason)
+                self.last_rejection_reason = reason
+                return False
+        except (TypeError, ValueError) as e:
+            reason = f"formation rejected: invalid spacing value: {e}"
+            logger.warning(reason)
+            self.last_rejection_reason = reason
             return False
 
         self._active_navigation_frame = "GLOBAL_RELATIVE_ALT"

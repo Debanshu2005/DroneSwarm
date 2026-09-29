@@ -35,37 +35,27 @@ class CommandHandler:
         self.expected_peer_count = int(expected_count) if expected_count.isdigit() else 0
         self._processed_cmds = []
         self._pending_pipeline_commands = {}
-        # Set by the node after FlightManager construction.  Keeping this
-        # optional preserves the lightweight unit-test constructor.
         self.flight_manager = None
 
     async def on_pipeline_intent_dispatched(self, intent) -> None:
-        """Called by FlightPipeline immediately before invoking the FC."""
         command_id = intent.params.get("_command_id")
         pending = self._pending_pipeline_commands.get(command_id)
-        if not pending:
-            return
-        self._send_lifecycle(
-            pending["sender_id"], pending["action"], "AIRSIM_DISPATCHED", cmd_id=pending["cmd_id"]
-        )
+        if pending:
+            self._send_lifecycle(pending["sender_id"], pending["action"], "AIRSIM_DISPATCHED", cmd_id=pending["cmd_id"])
 
     async def on_pipeline_intent_result(self, intent, success: bool) -> None:
-        """Called by FlightPipeline after the FC method returns."""
         command_id = intent.params.get("_command_id")
         pending = self._pending_pipeline_commands.get(command_id)
         if not pending:
             return
-        self._send_lifecycle(
-            pending["sender_id"], pending["action"], "AIRSIM_RESULT",
-            reason=f"success={bool(success)}", cmd_id=pending["cmd_id"]
-        )
+        self._send_lifecycle(pending["sender_id"], pending["action"], "AIRSIM_RESULT",
+                             reason=f"success={bool(success)}", cmd_id=pending["cmd_id"])
         if not pending["future"].done():
             pending["future"].set_result(bool(success))
 
     async def _cancel_pending_pipeline_command(self, command_id: str) -> None:
-        manager = self.flight_manager
-        if manager:
-            await manager.cancel_critical_command(command_id)
+        if self.flight_manager:
+            await self.flight_manager.cancel_critical_command(command_id)
 
     def _validate_peer_arm_gate(self) -> str:
         if not self.require_peers_before_arm:
@@ -212,6 +202,9 @@ class CommandHandler:
             
             critical_actions = [CommandAction.ARM, CommandAction.TAKEOFF, CommandAction.LAND, CommandAction.RTL]
             pipeline_actions = {CommandAction.TAKEOFF, CommandAction.LAND, CommandAction.RTL}
+            # FORMATION_UPDATE stores params and activates the FormationEngine;
+            # it does NOT mean flight movement has completed — use FORMATION_ACTIVE.
+            formation_actions = {CommandAction.FORMATION_UPDATE}
             is_critical = message.action in critical_actions
             await_pipeline_result = message.action in pipeline_actions
             
@@ -235,15 +228,20 @@ class CommandHandler:
             pipeline_command_id = message.cmd_id or f"pipeline-{time.monotonic_ns()}"
             if await_pipeline_result:
                 import asyncio
-                self._pending_pipeline_commands[pipeline_command_id] = {
-                    "future": asyncio.get_running_loop().create_future(),
-                    "sender_id": message.sender_id,
-                    "action": message.action,
-                    "cmd_id": message.cmd_id,
-                }
+                self._pending_pipeline_commands[pipeline_command_id] = {"future": asyncio.get_running_loop().create_future(), "sender_id": message.sender_id, "action": message.action, "cmd_id": message.cmd_id}
                 params["_command_id"] = pipeline_command_id
             try:
                 self._send_lifecycle(message.sender_id, message.action, "SENDING", cmd_id=message.cmd_id)
+
+                # Log formation params to make rejections self-explanatory in the drone log.
+                if message.action == CommandAction.FORMATION_UPDATE:
+                    logger.info(
+                        "FORMATION_PARAMS type=%s spacing=%s members=%s slot_assignments=%s",
+                        (message.params or {}).get("type"),
+                        (message.params or {}).get("spacing"),
+                        (message.params or {}).get("members"),
+                        (message.params or {}).get("slot_assignments"),
+                    )
                 
                 # Use asyncio.wait_for to handle TIMEOUT
                 import asyncio
@@ -258,21 +256,23 @@ class CommandHandler:
 
                 if not success:
                     logger.warning(f"Command {message.action.value} failed to execute properly.")
+                    # For FORMATION_UPDATE read the specific reason from FlightManager so the
+                    # app can show it rather than the generic rejection text.
                     error_text = f"{message.action.name} rejected by FlightManager."
-                    if message.action == CommandAction.ARM:
+                    if message.action == CommandAction.FORMATION_UPDATE and self.flight_manager:
+                        fm_reason = getattr(self.flight_manager, "last_rejection_reason", "")
+                        if fm_reason:
+                            error_text = fm_reason
+                    elif message.action == CommandAction.ARM:
                         error_text = "ARM rejected by Pixhawk; check Pixhawk pre-arm checks."
                     self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=error_text, cmd_id=message.cmd_id)
                     if is_critical:
                         self._active_critical_command = None
                     self._pending_pipeline_commands.pop(pipeline_command_id, None)
                     return False
-
                 if await_pipeline_result:
                     try:
-                        result = await asyncio.wait_for(
-                            asyncio.shield(self._pending_pipeline_commands[pipeline_command_id]["future"]),
-                            timeout=15.0,
-                        )
+                        result = await asyncio.wait_for(asyncio.shield(self._pending_pipeline_commands[pipeline_command_id]["future"]), timeout=15.0)
                     except asyncio.TimeoutError:
                         self._send_lifecycle(message.sender_id, message.action, "TIMEOUT", reason="Flight-controller dispatch timed out.", cmd_id=message.cmd_id)
                         await self._cancel_pending_pipeline_command(pipeline_command_id)
@@ -280,7 +280,6 @@ class CommandHandler:
                         if is_critical:
                             self._active_critical_command = None
                         return False
-
                     self._pending_pipeline_commands.pop(pipeline_command_id, None)
                     if not result:
                         self._send_lifecycle(message.sender_id, message.action, "FAILED", reason="Flight-controller returned failure.", cmd_id=message.cmd_id)
@@ -288,7 +287,9 @@ class CommandHandler:
                             self._active_critical_command = None
                         return False
                 
-                self._send_lifecycle(message.sender_id, message.action, "ACCEPTED", cmd_id=message.cmd_id)
+                # FORMATION_UPDATE: params stored, engine is now active — not "movement complete"
+                final_stage = "FORMATION_ACTIVE" if message.action in formation_actions else "ACCEPTED"
+                self._send_lifecycle(message.sender_id, message.action, final_stage, cmd_id=message.cmd_id)
                 if is_critical:
                     self._active_critical_command = None
                 return True

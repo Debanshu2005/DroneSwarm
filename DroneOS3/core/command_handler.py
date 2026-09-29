@@ -202,6 +202,9 @@ class CommandHandler:
             
             critical_actions = [CommandAction.ARM, CommandAction.TAKEOFF, CommandAction.LAND, CommandAction.RTL]
             pipeline_actions = {CommandAction.TAKEOFF, CommandAction.LAND, CommandAction.RTL}
+            # FORMATION_UPDATE stores params and activates the FormationEngine;
+            # it does NOT mean flight movement has completed — use FORMATION_ACTIVE.
+            formation_actions = {CommandAction.FORMATION_UPDATE}
             is_critical = message.action in critical_actions
             await_pipeline_result = message.action in pipeline_actions
             
@@ -229,6 +232,16 @@ class CommandHandler:
                 params["_command_id"] = pipeline_command_id
             try:
                 self._send_lifecycle(message.sender_id, message.action, "SENDING", cmd_id=message.cmd_id)
+
+                # Log formation params to make rejections self-explanatory in the drone log.
+                if message.action == CommandAction.FORMATION_UPDATE:
+                    logger.info(
+                        "FORMATION_PARAMS type=%s spacing=%s members=%s slot_assignments=%s",
+                        (message.params or {}).get("type"),
+                        (message.params or {}).get("spacing"),
+                        (message.params or {}).get("members"),
+                        (message.params or {}).get("slot_assignments"),
+                    )
                 
                 # Use asyncio.wait_for to handle TIMEOUT
                 import asyncio
@@ -243,8 +256,14 @@ class CommandHandler:
 
                 if not success:
                     logger.warning(f"Command {message.action.value} failed to execute properly.")
+                    # For FORMATION_UPDATE read the specific reason from FlightManager so the
+                    # app can show it rather than the generic rejection text.
                     error_text = f"{message.action.name} rejected by FlightManager."
-                    if message.action == CommandAction.ARM:
+                    if message.action == CommandAction.FORMATION_UPDATE and self.flight_manager:
+                        fm_reason = getattr(self.flight_manager, "last_rejection_reason", "")
+                        if fm_reason:
+                            error_text = fm_reason
+                    elif message.action == CommandAction.ARM:
                         error_text = "ARM rejected by Pixhawk; check Pixhawk pre-arm checks."
                     self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=error_text, cmd_id=message.cmd_id)
                     if is_critical:
@@ -268,7 +287,9 @@ class CommandHandler:
                             self._active_critical_command = None
                         return False
                 
-                self._send_lifecycle(message.sender_id, message.action, "ACCEPTED", cmd_id=message.cmd_id)
+                # FORMATION_UPDATE: params stored, engine is now active — not "movement complete"
+                final_stage = "FORMATION_ACTIVE" if message.action in formation_actions else "ACCEPTED"
+                self._send_lifecycle(message.sender_id, message.action, final_stage, cmd_id=message.cmd_id)
                 if is_critical:
                     self._active_critical_command = None
                 return True

@@ -232,6 +232,16 @@ class CommandHandler:
                 params["_command_id"] = pipeline_command_id
             try:
                 self._send_lifecycle(message.sender_id, message.action, "SENDING", cmd_id=message.cmd_id)
+
+                # Log formation params to make rejections self-explanatory in the drone log.
+                if message.action == CommandAction.FORMATION_UPDATE:
+                    logger.info(
+                        "FORMATION_PARAMS type=%s spacing=%s members=%s slot_assignments=%s",
+                        (message.params or {}).get("type"),
+                        (message.params or {}).get("spacing"),
+                        (message.params or {}).get("members"),
+                        (message.params or {}).get("slot_assignments"),
+                    )
                 
                 # Use asyncio.wait_for to handle TIMEOUT
                 import asyncio
@@ -246,8 +256,14 @@ class CommandHandler:
 
                 if not success:
                     logger.warning(f"Command {message.action.value} failed to execute properly.")
+                    # For FORMATION_UPDATE read the specific reason from FlightManager so the
+                    # app can show it rather than the generic rejection text.
                     error_text = f"{message.action.name} rejected by FlightManager."
-                    if message.action == CommandAction.ARM:
+                    if message.action == CommandAction.FORMATION_UPDATE and self.flight_manager:
+                        fm_reason = getattr(self.flight_manager, "last_rejection_reason", "")
+                        if fm_reason:
+                            error_text = fm_reason
+                    elif message.action == CommandAction.ARM:
                         error_text = "ARM rejected by Pixhawk; check Pixhawk pre-arm checks."
                     self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=error_text, cmd_id=message.cmd_id)
                     if is_critical:

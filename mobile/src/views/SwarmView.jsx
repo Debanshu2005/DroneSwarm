@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDroneContext } from '../context/DroneContext';
 import { Network, ArrowRight } from 'lucide-react';
+import { buildFormationParams } from '../utils/formation';
 
 export default function SwarmView() {
   const { drones, swarmState } = useDroneContext();
@@ -26,22 +27,17 @@ export default function SwarmView() {
       return;
     }
 
-    // Deterministic, stable slot assignment: sort IDs so every drone
-    // receives the same roster regardless of heartbeat timing.
-    const members = onlineDrones.map(d => d.id).sort();
-    const slot_assignments = {};
-    members.forEach((id, idx) => { slot_assignments[id] = idx; });
-
-    const targetIds = members;
+    // Use the shared helper so slot assignment logic stays in sync with
+    // DroneOS/core/formation_manager.py build_slot_assignments().
+    const fp = buildFormationParams(
+      Object.values(drones),
+      selectedShape,
+      spacingValue
+    );
     sendCommand(
       'formation_update',
-      {
-        type: selectedShape.toUpperCase(),
-        spacing: Number(spacingValue) || 10,
-        members,
-        slot_assignments,
-      },
-      targetIds
+      fp,
+      fp.members
     );
   };
 

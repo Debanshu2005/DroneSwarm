@@ -99,6 +99,7 @@ class DroneOSApp:
         self.state_store = FlightStateStore()
         
         self.flight_manager = FlightManager(self.flight_controller, self.state_store)
+        self.flight_manager._flight_config = self.flight_cfg
         # Safety & Failsafe Module
         self.safety_module = SafetyModule(self.flight_controller, self.state_store, config=self.flight_cfg)
         self.health_monitor = HealthMonitor(timeout_seconds=self.network_cfg.connection_timeout)
@@ -528,6 +529,26 @@ class DroneOSApp:
         
         identity_msg = self.swarm_manager.identity.get_identity_message()
         self._dispatch_task(self.network.broadcast_message(identity_msg))
+
+        # Re-announce JOIN and identity 3 s after startup so simultaneously started
+        # drones that were not yet listening register each other.
+        async def _delayed_rejoin() -> None:
+            await asyncio.sleep(3.0)
+            from DroneOS3.shared.protocol.messages import DroneJoinMessage, DroneIdentityMessage
+            import time as _time
+            rejoin_msg = DroneJoinMessage(
+                sender_id=self.node_id,
+                timestamp=_time.time(),
+                drone_ip=self.network_cfg.host,
+                drone_port=self.network_cfg.port,
+                capabilities=self.swarm_manager.identity.capabilities
+            )
+            self._dispatch_task(self.network.broadcast_message(rejoin_msg))
+            reid_msg = self.swarm_manager.identity.get_identity_message()
+            self._dispatch_task(self.network.broadcast_message(reid_msg))
+            logger.info("Delayed rejoin announced for %s", self.node_id)
+
+        self._dispatch_task(_delayed_rejoin())
         
         logger.info("DroneOS3 is running. Press Ctrl+C to stop.")
         
