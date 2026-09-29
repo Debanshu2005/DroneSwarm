@@ -10,6 +10,7 @@ logger = setup_logger("FormationEngine")
 _ANCHOR_STALE_SEC = 3.0
 _DEFAULT_SPACING = 10.0
 _DEFAULT_MIN_SEP_M = 8.0
+_FORMATION_STARTUP_GRACE_SEC = 5.0  # grace period before anchor-missing becomes a WARNING
 
 
 class FormationEngine:
@@ -18,6 +19,7 @@ class FormationEngine:
         self.state_store = state_store
         self.config = config
         self.form_mgr = FormationManager()
+        self._formation_activated_at: float = 0.0  # time.time() when formation was first entered
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -124,6 +126,15 @@ class FormationEngine:
     # ------------------------------------------------------------------
 
     def compute_intent(self, current_telemetry, peer_telemetry, params: dict) -> FlightIntent:
+        now = time.time()
+
+        # Track when this drone first entered the current formation session.
+        # Reset whenever params change (new formation command received).
+        params_key = (params.get("type"), tuple(sorted(params.get("slot_assignments", {}).items())))
+        if not hasattr(self, "_last_params_key") or self._last_params_key != params_key:
+            self._last_params_key = params_key
+            self._formation_activated_at = now
+
         f_type_str = params.get("type", "V").upper()
         try:
             f_type = FormationType(f_type_str)
@@ -160,7 +171,6 @@ class FormationEngine:
         if my_id == anchor_id:
             return FlightIntent(IntentSource.IDLE, IntentAction.IDLE)
 
-        now = time.time()
         anchor_peer = self.swarm_manager.registry.get_peer(anchor_id)
         anchor_pos_valid = (
             anchor_peer is not None
@@ -172,7 +182,14 @@ class FormationEngine:
         )
 
         if not anchor_pos_valid:
-            logger.warning("Anchor %s position stale or missing. Hovering.", anchor_id)
+            in_grace = (now - self._formation_activated_at) < _FORMATION_STARTUP_GRACE_SEC
+            if in_grace:
+                logger.debug(
+                    "Anchor %s position not yet available (startup grace %.1fs remaining). Hovering.",
+                    anchor_id, _FORMATION_STARTUP_GRACE_SEC - (now - self._formation_activated_at)
+                )
+            else:
+                logger.warning("Anchor %s position stale or missing. Hovering.", anchor_id)
             return FlightIntent(IntentSource.FORMATION, IntentAction.HOVER, ttl_seconds=1.0)
 
         # Compute slot offset (primary target)

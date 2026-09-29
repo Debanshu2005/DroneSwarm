@@ -438,7 +438,7 @@ export const DroneProvider = ({ children }) => {
     targets.forEach(id => {
        // Prevent duplicate pending commands (unless MOVE which is streamable)
        const currentState = drones[id]?.commandState;
-       if (currentState && currentState.state === 'SENDING' && currentState.action === action && action !== CommandAction.MOVE) {
+       if (currentState && currentState.state === 'SENDING' && currentState.action === action && action !== CommandAction.MOVE && action !== 'formation_update') {
            console.warn(`Command ${action} is already pending for ${id}. Deduplicating.`);
            return;
        }
