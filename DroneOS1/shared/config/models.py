@@ -58,6 +58,7 @@ class FlightConfig(BaseModel):
     airsim_port: int
     airsim_timeout: float = 5.0
     airsim_retry_count: int = 3
+    formation: Optional[FormationConfig] = None
     collision_avoidance: Optional[CollisionAvoidanceConfig] = None
     safety_limits: Optional[SafetyLimitsConfig] = None
     smart_rtl: Optional[SmartRtlConfig] = None

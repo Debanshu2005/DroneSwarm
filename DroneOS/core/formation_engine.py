@@ -293,7 +293,7 @@ class FormationEngine:
 
         return FlightIntent(
             IntentSource.FORMATION,
-            IntentAction.MOVE_VELOCITY,
+            IntentAction.MOVE_VELOCITY_NED,
             ttl_seconds=1.0,
-            params={"vx": vx, "vy": vy, "vz": 0.0, "yaw_rate": 0.0}
+            params={"north": vx, "east": vy, "down": 0.0, "yaw_rate": 0.0}
         )
