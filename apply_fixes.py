@@ -1,3 +1,24 @@
+"""
+Master fix script - run from PhoneOS_Swarm root.
+Writes all changed files for Part A and Part B across all four instances.
+"""
+import os, sys
+
+INSTANCES = ["DroneOS", "DroneOS1", "DroneOS2", "DroneOS3"]
+
+def pkg(inst):
+    return inst  # import prefix equals folder name
+
+def write(path, content):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(content)
+    print(f"  WROTE {path}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PART A-1 + PART B-1 : shared/config/models.py  (CollisionAvoidanceConfig)
+# ─────────────────────────────────────────────────────────────────────────────
+MODELS_TEMPLATE = '''\
 from typing import Optional, List
 from pydantic import BaseModel
 
@@ -107,3 +128,9 @@ class AppConfig(BaseModel):
     mission: Optional[MissionConfig] = None
     movement: Optional[MovementConfig] = None
     formation: Optional[FormationConfig] = None
+'''
+
+for inst in INSTANCES:
+    write(f"{inst}/shared/config/models.py", MODELS_TEMPLATE)
+
+print("models.py done")

@@ -9,24 +9,45 @@ from DroneOS2.core.flight_state import is_critical_manual_intent
 
 logger = setup_logger("FlightPipeline")
 
+_latch_log_time: float = 0.0
+
+
 class Arbiter:
     @staticmethod
-    def select_winner(intents: dict[IntentSource, FlightIntent]) -> FlightIntent:
-        valid_intents = []
-        for source, intent in intents.items():
-            if not intent.is_expired():
-                valid_intents.append(intent)
+    def select_winner(intents: dict, state_store: FlightStateStore = None) -> FlightIntent:
+        valid_intents = [i for i in intents.values() if not i.is_expired()]
 
         if not valid_intents:
             return FlightIntent(IntentSource.IDLE, IntentAction.IDLE)
 
-        protective_intents = [intent for intent in valid_intents if intent.source in {IntentSource.SAFETY, IntentSource.COLLISION}]
-        if protective_intents:
-            return max(protective_intents, key=lambda intent: intent.source)
-        critical_manual = [intent for intent in valid_intents if is_critical_manual_intent(intent)]
+        latched = state_store is not None and state_store.is_landing_latched()
+
+        if latched:
+            global _latch_log_time
+            allowed = []
+            for intent in valid_intents:
+                if intent.source == IntentSource.SAFETY:
+                    allowed.append(intent)
+                elif is_critical_manual_intent(intent):
+                    allowed.append(intent)
+                else:
+                    now = time.monotonic()
+                    if now - _latch_log_time > 1.0:
+                        logger.debug(
+                            "LANDING_LATCH ignoring source=%s action=%s",
+                            intent.source.name, intent.action.value
+                        )
+                        _latch_log_time = now
+            valid_intents = allowed if allowed else [FlightIntent(IntentSource.IDLE, IntentAction.IDLE)]
+
+        protective = [i for i in valid_intents if i.source in {IntentSource.SAFETY, IntentSource.COLLISION}]
+        if protective:
+            return max(protective, key=lambda i: i.source)
+
+        critical_manual = [i for i in valid_intents if is_critical_manual_intent(i)]
         if critical_manual:
             return critical_manual[0]
-        # Sort by IntentSource enum value (highest wins)
+
         valid_intents.sort(key=lambda i: i.source, reverse=True)
         return valid_intents[0]
 
@@ -84,7 +105,16 @@ class CommandWriter:
                     
             elif intent.action == IntentAction.HOVER:
                 logger.info("FC invoking hover")
-                result = await self.fc.hover()
+                force = (intent.source == IntentSource.SAFETY)
+                if force and hasattr(self.fc, "hover"):
+                    import inspect
+                    sig = inspect.signature(self.fc.hover)
+                    if "force" in sig.parameters:
+                        result = await self.fc.hover(force=True)
+                    else:
+                        result = await self.fc.hover()
+                else:
+                    result = await self.fc.hover()
                 logger.info("FC invoke hover returned success=%s", result)
                 return bool(result)
                 
@@ -197,8 +227,8 @@ class FlightPipeline:
                 
             # 3. Arbitrate
             intents = self.state_store.get_intents()
-            winning_intent = self.arbiter.select_winner(intents)
-            
+            winning_intent = self.arbiter.select_winner(intents, self.state_store)
+
             winning_key = (winning_intent.source, winning_intent.action)
             if winning_key != self.last_winning_key:
                 self.last_winning_key = winning_key

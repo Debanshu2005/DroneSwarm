@@ -18,11 +18,16 @@ class NetworkConfig(BaseModel):
 
 class CollisionAvoidanceConfig(BaseModel):
     enabled: bool = True
-    min_horizontal_distance: float = 3.0
+    min_horizontal_distance: float = 6.0
     min_vertical_distance: float = 2.0
-    warning_distance: float = 6.0
-    emergency_distance: float = 1.5
-    neighbor_timeout_sec: float = 3.0
+    warning_distance: float = 10.0
+    emergency_distance: float = 3.0
+    neighbor_timeout_sec: float = 1.0
+    lookahead_sec: float = 3.0
+    avoidance_speed: float = 4.0
+    emergency_speed: float = 5.0
+    max_peer_age_sec: float = 1.0
+    ground_altitude_m: float = 0.5
 
 class SafetyLimitsConfig(BaseModel):
     max_horizontal_velocity: float = 5.0
@@ -60,7 +65,7 @@ class SafetyConfig(BaseModel):
 class LoggingConfig(BaseModel):
     level: str = "INFO"
     log_file: str = "logs/droneos.log"
-    max_bytes: int = 10485760 # 10MB
+    max_bytes: int = 10485760
     backup_count: int = 5
 
 class GSUIConfig(BaseModel):
@@ -92,7 +97,7 @@ class GSConfig(BaseModel):
     ui: GSUIConfig
     network: NetworkConfig
     logging: LoggingConfig
-    
+
 class AppConfig(BaseModel):
     drone: Optional[DroneConfig] = None
     network: Optional[NetworkConfig] = None

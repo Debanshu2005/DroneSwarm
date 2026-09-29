@@ -1,19 +1,30 @@
+import os, sys
+INSTANCES = ["DroneOS", "DroneOS1", "DroneOS2", "DroneOS3"]
+
+def write(path, content):
+    import os
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(content)
+    print(f"  WROTE {path}")
+
+FLIGHT_STATE_TEMPLATE = '''\
 import threading
 import time
 from typing import Dict
-from DroneOS1.shared.protocol.messages import TelemetryData
-from DroneOS1.core.intents import FlightIntent, IntentSource, IntentAction
-from DroneOS1.shared.utils.logger import setup_logger
+from {pkg}.shared.protocol.messages import TelemetryData
+from {pkg}.core.intents import FlightIntent, IntentSource, IntentAction
+from {pkg}.shared.utils.logger import setup_logger
 
 logger = setup_logger("FlightStateStore")
-CRITICAL_MANUAL_ACTIONS = {IntentAction.TAKEOFF, IntentAction.LAND, IntentAction.RTL}
+CRITICAL_MANUAL_ACTIONS = {{IntentAction.TAKEOFF, IntentAction.LAND, IntentAction.RTL}}
 
 def is_critical_manual_intent(intent: FlightIntent) -> bool:
     return intent.source == IntentSource.MANUAL and intent.action in CRITICAL_MANUAL_ACTIONS
 
 class SwarmState:
     def __init__(self):
-        self.peer_telemetry: Dict[str, TelemetryData] = {}
+        self.peer_telemetry: Dict[str, TelemetryData] = {{}}
         self.lock = threading.Lock()
 
     def update_peer(self, peer_id: str, telemetry: TelemetryData):
@@ -37,7 +48,7 @@ class FlightStateStore:
             velocity_x=None, velocity_y=None, velocity_z=None, flight_mode="disconnected"
         )
         self.swarm_state = SwarmState()
-        self.active_intents: Dict[IntentSource, FlightIntent] = {}
+        self.active_intents: Dict[IntentSource, FlightIntent] = {{}}
         self.intent_lock = threading.Lock()
 
         self.smart_rtl_active: bool = False
@@ -96,3 +107,9 @@ class FlightStateStore:
                 self.active_intents.pop(intent.source, None)
                 return True
         return False
+'''
+
+for inst in INSTANCES:
+    write(f"{inst}/core/flight_state.py", FLIGHT_STATE_TEMPLATE.format(pkg=inst))
+
+print("flight_state.py done")

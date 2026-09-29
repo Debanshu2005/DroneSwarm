@@ -373,8 +373,10 @@ class AirSimFlightController(IFlightController):
             logger.error(f"AirSim RTL failed: {e}")
             return False
 
-    async def hover(self) -> bool:
+    async def hover(self, force: bool = False) -> bool:
         if not self._connected or self.client is None: return False
+        if self._mode in ("LAND", "RTL") and not force:
+            return True
         try:
             async with self._cmd_lock:
                 self._cmd_seq += 1

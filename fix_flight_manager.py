@@ -1,7 +1,17 @@
-from DroneOS2.core.interfaces import IFlightController
-from DroneOS2.shared.utils.logger import setup_logger
-from DroneOS2.core.intents import FlightIntent, IntentSource, IntentAction
-from DroneOS2.core.flight_state import FlightStateStore
+import os
+INSTANCES = ["DroneOS", "DroneOS1", "DroneOS2", "DroneOS3"]
+
+def write(path, content):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(content)
+    print(f"  WROTE {path}")
+
+FM_TEMPLATE = '''\
+from {pkg}.core.interfaces import IFlightController
+from {pkg}.shared.utils.logger import setup_logger
+from {pkg}.core.intents import FlightIntent, IntentSource, IntentAction
+from {pkg}.core.flight_state import FlightStateStore
 from typing import Dict, Any
 import time
 
@@ -46,9 +56,9 @@ class FlightManager:
             except (ValueError, TypeError):
                 return False
 
-        intent_params = {"altitude": altitude}
+        intent_params = {{"altitude": altitude}}
         if params:
-            intent_params.update({k: v for k, v in params.items() if k.startswith("_")})
+            intent_params.update({{k: v for k, v in params.items() if k.startswith("_")}})
         intent = FlightIntent(IntentSource.MANUAL, IntentAction.TAKEOFF, ttl_seconds=30.0, params=intent_params)
         self.state_store.submit_intent(intent)
         logger.info("Takeoff intent submitted for %sm.", altitude)
@@ -69,14 +79,14 @@ class FlightManager:
 
     async def land(self, params: Dict[str, Any] = None) -> bool:
         self._pre_land_rtl_cleanup()
-        intent = FlightIntent(IntentSource.MANUAL, IntentAction.LAND, ttl_seconds=15.0, params=params or {})
+        intent = FlightIntent(IntentSource.MANUAL, IntentAction.LAND, ttl_seconds=15.0, params=params or {{}})
         self.state_store.submit_intent(intent)
         logger.info("Land intent submitted.")
         return True
 
     async def rtl(self, params: Dict[str, Any] = None) -> bool:
         self._pre_land_rtl_cleanup()
-        intent = FlightIntent(IntentSource.MANUAL, IntentAction.RTL, ttl_seconds=15.0, params=params or {})
+        intent = FlightIntent(IntentSource.MANUAL, IntentAction.RTL, ttl_seconds=15.0, params=params or {{}})
         self.state_store.submit_intent(intent)
         logger.info("RTL intent submitted.")
         return True
@@ -128,7 +138,7 @@ class FlightManager:
         yaw_rate = float(params.get("yaw_rate", 0.0))
         intent = FlightIntent(
             IntentSource.MANUAL, IntentAction.MOVE_VELOCITY, ttl_seconds=0.5,
-            params={"vx": vx, "vy": vy, "vz": vz, "yaw_rate": yaw_rate}
+            params={{"vx": vx, "vy": vy, "vz": vz, "yaw_rate": yaw_rate}}
         )
         self.state_store.submit_intent(intent)
         return True
@@ -142,7 +152,7 @@ class FlightManager:
             return False
         intent = FlightIntent(
             IntentSource.MANUAL, IntentAction.GOTO, ttl_seconds=5.0,
-            params={"lat": lat, "lon": lon, "alt": alt, "yaw": 0.0}
+            params={{"lat": lat, "lon": lon, "alt": alt, "yaw": 0.0}}
         )
         self.state_store.submit_intent(intent)
         return True
@@ -156,7 +166,7 @@ class FlightManager:
             return False
         intent = FlightIntent(
             IntentSource.MANUAL, IntentAction.GOTO_NED, ttl_seconds=5.0,
-            params={"north": north, "east": east, "down": down, "yaw": params.get("yaw", 0.0)}
+            params={{"north": north, "east": east, "down": down, "yaw": params.get("yaw", 0.0)}}
         )
         self.state_store.submit_intent(intent)
         return True
@@ -181,4 +191,10 @@ class FlightManager:
         if self._active_navigation_frame == "LOCAL_NED":
             return False
         mode = getattr(telemetry, "flight_mode", "") or ""
-        return mode.upper() in {"AUTO", "MISSION", "GUIDED", "LOITER", "RTL", "HOLD", "POSCTL", "POSITION", "OFFBOARD"}
+        return mode.upper() in {{"AUTO", "MISSION", "GUIDED", "LOITER", "RTL", "HOLD", "POSCTL", "POSITION", "OFFBOARD"}}
+'''
+
+for inst in INSTANCES:
+    write(f"{inst}/core/flight_manager.py", FM_TEMPLATE.format(pkg=inst))
+
+print("flight_manager.py done")

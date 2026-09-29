@@ -18,15 +18,14 @@ class FlightManager:
         self.swarm_manager = None
         self._active_navigation_frame = None
         self._min_srtl_altitude_m = min_srtl_altitude_m
-        
-        # We need a reference to the formation engine to feed it params when active
         self.formation_params = None
+        self.mission_manager = None  # set by main after construction
 
     def set_swarm_manager(self, swarm_manager):
         self.swarm_manager = swarm_manager
 
     async def arm(self, params: Dict[str, Any] = None) -> bool:
-        # State change, not continuous movement
+        self.state_store.clear_landing_latch()
         success = await self.fc.arm()
         if success:
             logger.info("Drone arm command accepted.")
@@ -39,39 +38,50 @@ class FlightManager:
         return success
 
     async def takeoff(self, params: Dict[str, Any] = None) -> bool:
-        # Note: armed_state check removed — the AirSim adapter auto-arms internally
-        # during takeoff. Gating here caused silent rejections when the command arrived
-        # before the first telemetry poll completed (armed_state still None/DISARMED).
+        self.state_store.clear_landing_latch()
         altitude = getattr(self.fc.config, "takeoff_altitude", 5.0) if hasattr(self.fc, "config") else 5.0
-        if params and 'altitude_m' in params:
+        if params and "altitude_m" in params:
             try:
-                altitude = float(params['altitude_m'])
+                altitude = float(params["altitude_m"])
             except (ValueError, TypeError):
                 return False
 
         intent_params = {"altitude": altitude}
         if params:
-            intent_params.update({key: value for key, value in params.items() if key.startswith("_")})
-        # TTL increased to 30 s to cover slow AirSim takeoffAsync + moveToZAsync
+            intent_params.update({k: v for k, v in params.items() if k.startswith("_")})
         intent = FlightIntent(IntentSource.MANUAL, IntentAction.TAKEOFF, ttl_seconds=30.0, params=intent_params)
         self.state_store.submit_intent(intent)
-        logger.info(f"Takeoff intent submitted for {altitude}m.")
+        logger.info("Takeoff intent submitted for %sm.", altitude)
         return True
 
+    def _pre_land_rtl_cleanup(self):
+        """Clear competing intents and set the landing latch before LAND/RTL."""
+        self.formation_params = None
+        if self.mission_manager is not None:
+            try:
+                self.mission_manager.abort_mission()
+            except Exception:
+                pass
+        self.state_store.clear_intent(IntentSource.FORMATION)
+        self.state_store.clear_intent(IntentSource.MISSION)
+        self.state_store.clear_intent(IntentSource.COLLISION)
+        self.state_store.set_landing_latch()
+
     async def land(self, params: Dict[str, Any] = None) -> bool:
+        self._pre_land_rtl_cleanup()
         intent = FlightIntent(IntentSource.MANUAL, IntentAction.LAND, ttl_seconds=15.0, params=params or {})
         self.state_store.submit_intent(intent)
         logger.info("Land intent submitted.")
         return True
 
     async def rtl(self, params: Dict[str, Any] = None) -> bool:
+        self._pre_land_rtl_cleanup()
         intent = FlightIntent(IntentSource.MANUAL, IntentAction.RTL, ttl_seconds=15.0, params=params or {})
         self.state_store.submit_intent(intent)
         logger.info("RTL intent submitted.")
         return True
 
     async def cancel_critical_command(self, command_id: str) -> bool:
-        """Release a queued critical command that never reached the FC."""
         manual_intent = self.state_store.get_intents().get(IntentSource.MANUAL)
         if manual_intent and manual_intent.params.get("_command_id") == command_id:
             cleared = self.state_store.complete_intent(manual_intent)
@@ -82,21 +92,16 @@ class FlightManager:
     async def smart_rtl(self, params: Dict[str, Any] = None) -> bool:
         telemetry = self.state_store.local_telemetry
         if telemetry.altitude is None or telemetry.altitude < self._min_srtl_altitude_m:
-            logger.error(f"SRTL rejected: altitude too low")
+            logger.error("SRTL rejected: altitude too low")
             return False
-
         home = await self.fc.get_home_position()
         if home is None:
             logger.error("SRTL rejected: home position not available.")
             return False
-            
         home_lat, home_lon, _ = home
-        
-        # Initiate the Smart RTL Engine state
         self.state_store.smart_rtl_active = True
         self.state_store.smart_rtl_target = (home_lat, home_lon, telemetry.altitude)
         self.state_store.smart_rtl_start_time = time.monotonic()
-        
         logger.info("Smart RTL initiated.")
         return True
 
@@ -104,9 +109,8 @@ class FlightManager:
         intent = FlightIntent(IntentSource.MANUAL, IntentAction.HOVER, ttl_seconds=2.0)
         self.state_store.submit_intent(intent)
         return True
-        
+
     async def stop(self, params: Dict[str, Any] = None) -> bool:
-        # Clear all manual intents to fall back to idle/hover
         self.state_store.clear_intent(IntentSource.MANUAL)
         self.state_store.clear_intent(IntentSource.FORMATION)
         self.state_store.clear_intent(IntentSource.MISSION)
@@ -116,19 +120,14 @@ class FlightManager:
     async def move(self, params: Dict[str, Any]) -> bool:
         self._active_navigation_frame = "LOCAL_NED"
         telemetry = self.state_store.local_telemetry
-        if getattr(telemetry, 'armed_state', None) != "ARMED":
+        if getattr(telemetry, "armed_state", None) != "ARMED":
             return False
-            
-        vx = float(params.get('vx', 0.0))
-        vy = float(params.get('vy', 0.0))
-        vz = float(params.get('vz', 0.0))
-        yaw_rate = float(params.get('yaw_rate', 0.0))
-        
-        # Emit intent with short TTL (acts as deadman switch)
+        vx = float(params.get("vx", 0.0))
+        vy = float(params.get("vy", 0.0))
+        vz = float(params.get("vz", 0.0))
+        yaw_rate = float(params.get("yaw_rate", 0.0))
         intent = FlightIntent(
-            IntentSource.MANUAL, 
-            IntentAction.MOVE_VELOCITY, 
-            ttl_seconds=0.5, 
+            IntentSource.MANUAL, IntentAction.MOVE_VELOCITY, ttl_seconds=0.5,
             params={"vx": vx, "vy": vy, "vz": vz, "yaw_rate": yaw_rate}
         )
         self.state_store.submit_intent(intent)
@@ -136,16 +135,13 @@ class FlightManager:
 
     async def goto(self, params: Dict[str, Any]) -> bool:
         self._active_navigation_frame = "GLOBAL_RELATIVE_ALT"
-        lat = params.get('lat')
-        lon = params.get('lon')
-        alt = params.get('alt')
+        lat = params.get("lat")
+        lon = params.get("lon")
+        alt = params.get("alt")
         if lat is None or lon is None or alt is None:
             return False
-            
         intent = FlightIntent(
-            IntentSource.MANUAL, 
-            IntentAction.GOTO, 
-            ttl_seconds=5.0, 
+            IntentSource.MANUAL, IntentAction.GOTO, ttl_seconds=5.0,
             params={"lat": lat, "lon": lon, "alt": alt, "yaw": 0.0}
         )
         self.state_store.submit_intent(intent)
@@ -153,23 +149,20 @@ class FlightManager:
 
     async def goto_local(self, params: Dict[str, Any]) -> bool:
         self._active_navigation_frame = "LOCAL_NED"
-        north = params.get('north')
-        east = params.get('east')
-        down = params.get('down')
+        north = params.get("north")
+        east = params.get("east")
+        down = params.get("down")
         if north is None or east is None or down is None:
             return False
-            
         intent = FlightIntent(
-            IntentSource.MANUAL, 
-            IntentAction.GOTO_NED, 
-            ttl_seconds=5.0, 
-            params={"north": north, "east": east, "down": down, "yaw": params.get('yaw', 0.0)}
+            IntentSource.MANUAL, IntentAction.GOTO_NED, ttl_seconds=5.0,
+            params={"north": north, "east": east, "down": down, "yaw": params.get("yaw", 0.0)}
         )
         self.state_store.submit_intent(intent)
         return True
 
     async def set_mode(self, params: Dict[str, Any]) -> bool:
-        mode = params.get('mode')
+        mode = params.get("mode")
         if not mode:
             return False
         return await self.fc.set_mode(mode)
@@ -177,10 +170,9 @@ class FlightManager:
     async def formation_update(self, params: Dict[str, Any]) -> bool:
         if not self.swarm_manager:
             return False
-            
         self._active_navigation_frame = "GLOBAL_RELATIVE_ALT"
-        self.formation_params = params # Store params for the decision engine/formation engine to pick up
-        logger.info(f"Formation parameters updated: {params}")
+        self.formation_params = params
+        logger.info("Formation parameters updated: %s", params)
         return True
 
     def is_gps_dependent_navigation_active(self, telemetry=None) -> bool:
@@ -190,5 +182,3 @@ class FlightManager:
             return False
         mode = getattr(telemetry, "flight_mode", "") or ""
         return mode.upper() in {"AUTO", "MISSION", "GUIDED", "LOITER", "RTL", "HOLD", "POSCTL", "POSITION", "OFFBOARD"}
-
-

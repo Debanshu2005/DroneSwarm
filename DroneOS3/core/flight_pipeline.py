@@ -11,7 +11,7 @@ logger = setup_logger("FlightPipeline")
 
 class Arbiter:
     @staticmethod
-    def select_winner(intents: dict[IntentSource, FlightIntent]) -> FlightIntent:
+    def select_winner(intents: dict[IntentSource, FlightIntent], state_store=None) -> FlightIntent:
         valid_intents = []
         for source, intent in intents.items():
             if not intent.is_expired():
@@ -20,13 +20,22 @@ class Arbiter:
         if not valid_intents:
             return FlightIntent(IntentSource.IDLE, IntentAction.IDLE)
 
+        latched = state_store is not None and state_store.is_landing_latched()
+        if latched:
+            filtered = [i for i in valid_intents if i.source == IntentSource.SAFETY or is_critical_manual_intent(i)]
+            if filtered:
+                safety = [i for i in filtered if i.source == IntentSource.SAFETY]
+                if safety:
+                    return max(safety, key=lambda i: i.source)
+                return filtered[0]
+            return FlightIntent(IntentSource.IDLE, IntentAction.IDLE)
+
         protective_intents = [intent for intent in valid_intents if intent.source in {IntentSource.SAFETY, IntentSource.COLLISION}]
         if protective_intents:
             return max(protective_intents, key=lambda intent: intent.source)
         critical_manual = [intent for intent in valid_intents if is_critical_manual_intent(intent)]
         if critical_manual:
             return critical_manual[0]
-        # Sort by IntentSource enum value (highest wins)
         valid_intents.sort(key=lambda i: i.source, reverse=True)
         return valid_intents[0]
 
