@@ -140,8 +140,10 @@ class FormationEngine:
             logger.warning("Formation engine waiting: GPS invalid.")
             return FlightIntent(IntentSource.FORMATION, IntentAction.HOVER, ttl_seconds=1.0)
 
+        # Anchor should follow manual or mission commands, not be forced to hover.
+        # By returning IDLE here, the anchor's arbiter will fall back to MANUAL/MISSION intents.
         if my_id == anchor_id:
-            return FlightIntent(IntentSource.FORMATION, IntentAction.HOVER, ttl_seconds=1.0)
+            return FlightIntent(IntentSource.IDLE, IntentAction.IDLE)
 
         now = time.time()
         anchor_peer = self.swarm_manager.registry.get_peer(anchor_id)

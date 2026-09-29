@@ -136,15 +136,24 @@ export default function SwarmView() {
                   <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px'}}>
                      {onlineDrones.map(d => {
                         const isFormCmd = d.commandState?.action === 'formation_update';
-                        const stateColor = isFormCmd && d.commandState?.state === 'ACCEPTED' ? 'var(--success)' :
-                                           isFormCmd && d.commandState?.state === 'REJECTED' ? 'var(--danger)' :
-                                           isFormCmd && d.commandState?.state === 'SENDING' ? 'var(--warning)' : 'var(--text-muted)';
+                        const stage = isFormCmd ? d.commandState?.state : null;
+                        const stateColor = !isFormCmd ? 'var(--text-muted)' :
+                                           stage === 'FORMATION_ACTIVE' ? 'var(--success)' :
+                                           stage === 'MOVING'           ? '#00bfff' :
+                                           stage === 'ACCEPTED'         ? 'var(--success)' :
+                                           stage === 'REJECTED'         ? 'var(--danger)' :
+                                           stage === 'SENDING'          ? 'var(--warning)' :
+                                           stage === 'BACKEND_RECEIVED' ? 'var(--warning)' : 'var(--text-muted)';
+                        const stateLabel = !isFormCmd ? 'IDLE' :
+                                           stage === 'FORMATION_ACTIVE' ? 'ACTIVE' :
+                                           stage === 'ACCEPTED'         ? 'ACTIVE' :
+                                           stage || 'IDLE';
                         
                         return (
                            <div key={d.id} style={{fontSize: '11px', display: 'flex', justifyContent: 'space-between', padding: '4px 8px', background: 'var(--surface)', borderRadius: '4px'}}>
                               <span>{d.id}</span>
                               <span style={{color: stateColor, fontWeight: 600}}>
-                                 {isFormCmd ? d.commandState.state : 'IDLE'}
+                                 {isFormCmd ? stateLabel : 'IDLE'}
                               </span>
                            </div>
                         );

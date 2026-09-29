@@ -41,6 +41,12 @@ class SimFaultConfig(BaseModel):
     drop_gps: bool = False
     battery_drain_multiplier: float = 0.0
 
+class FormationConfig(BaseModel):
+    default_formation: str = "V"
+    spacing: float = 10.0
+    velocity_gain: float = 1.0
+    min_formation_separation_m: float = 8.0
+
 class FlightConfig(BaseModel):
     adapter_type: str
     takeoff_altitude: float
@@ -56,6 +62,7 @@ class FlightConfig(BaseModel):
     safety_limits: Optional[SafetyLimitsConfig] = None
     smart_rtl: Optional[SmartRtlConfig] = None
     sim: Optional[SimFaultConfig] = None
+    formation: Optional[FormationConfig] = None
 
 class SafetyConfig(BaseModel):
     low_battery_threshold: float = 20.0
@@ -87,12 +94,6 @@ class MovementConfig(BaseModel):
     max_horizontal_velocity: float = 15.0
     max_vertical_velocity: float = 3.0
     max_yaw_rate: float = 45.0
-
-class FormationConfig(BaseModel):
-    default_formation: str = "V"
-    spacing: float = 10.0
-    velocity_gain: float = 1.0
-    min_formation_separation_m: float = 8.0
 
 class GSConfig(BaseModel):
     ui: GSUIConfig

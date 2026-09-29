@@ -249,12 +249,27 @@ class FlightPipeline:
                 except Exception:
                     logger.exception("on_intent_dispatched callback failed")
 
+            # Formation-specific exec trace
+            if winning_intent.source.name == "FORMATION" and winning_intent.action.value != "IDLE":
+                vehicle = getattr(self.fc, "vehicle_name", getattr(self.fc, "vehicle_id", "unknown"))
+                logger.info(
+                    "FORMATION_EXEC drone=%s action=%s source=FORMATION vehicle=%s params=%s",
+                    vehicle, winning_intent.action.value, vehicle, winning_intent.params
+                )
+
             result = await self.command_writer.execute(safe_intent)
             if safe_intent.action != IntentAction.IDLE:
                 logger.info("FLIGHT_EXEC_RESULT %s vehicle=%s success=%s",
                             safe_intent.action.value,
                             getattr(self.fc, "vehicle_name", getattr(self.fc, "vehicle_id", "unknown")),
                             bool(result))
+
+            if winning_intent.source.name == "FORMATION" and winning_intent.action.value != "IDLE":
+                vehicle = getattr(self.fc, "vehicle_name", getattr(self.fc, "vehicle_id", "unknown"))
+                logger.info(
+                    "FORMATION_EXEC_RESULT drone=%s action=%s success=%s",
+                    vehicle, winning_intent.action.value, bool(result)
+                )
 
             if is_critical_manual_intent(winning_intent):
                 if self.on_intent_result:

@@ -141,10 +141,53 @@ class LocalDecisionEngine:
 
         # 4. Proceed with Formation Execution
         if self.nav.flight_manager.formation_params:
+            params = self.nav.flight_manager.formation_params
+            slot_assignments = params.get("slot_assignments", {})
+            my_slot = slot_assignments.get(my_id, "?")
+            logger.info("FORMATION_ACTIVE drone=%s slot=%s", my_id, my_slot)
+
+            # Log anchor telemetry
+            anchor_id = None
+            for did, s in slot_assignments.items():
+                if int(s) == 0:
+                    anchor_id = did
+                    break
+            if anchor_id and anchor_id != my_id:
+                anchor_peer = self.swarm.registry.get_peer(anchor_id)
+                if anchor_peer and anchor_peer.last_position_time is not None:
+                    age = time.time() - anchor_peer.last_position_time
+                    logger.info(
+                        "FORMATION_ANCHOR drone=%s anchor=%s lat=%s lon=%s age=%.3fs",
+                        my_id, anchor_id, anchor_peer.lat, anchor_peer.lon, age
+                    )
+                else:
+                    logger.warning(
+                        "FORMATION_ANCHOR drone=%s anchor=%s MISSING or no position",
+                        my_id, anchor_id
+                    )
+
+            # Log peer telemetry ages
+            formation_members = params.get("members", list(slot_assignments.keys()))
+            now = time.time()
+            peer_ages = []
+            for pid in formation_members:
+                if pid == my_id:
+                    continue
+                p = self.swarm.registry.get_peer(pid)
+                if p and p.last_position_time is not None:
+                    peer_ages.append(f"{pid}:{now - p.last_position_time:.2f}s")
+                else:
+                    peer_ages.append(f"{pid}:MISSING")
+            logger.info("FORMATION_PEERS drone=%s peers=%s", my_id, ",".join(peer_ages) if peer_ages else "none")
+
             intent = self.formation_engine.compute_intent(
                 current_telemetry,
                 peer_telemetry,
-                self.nav.flight_manager.formation_params
+                params
+            )
+            logger.info(
+                "FORMATION_INTENT drone=%s slot=%s action=%s params=%s",
+                my_id, my_slot, intent.action.value, intent.params
             )
             if intent:
                 self.state_store.submit_intent(intent)

@@ -166,7 +166,18 @@ class FlightManager:
             return False
         self._active_navigation_frame = "GLOBAL_RELATIVE_ALT"
         self.formation_params = params
-        logger.info("Formation parameters updated: %s", params)
+        drone_id = getattr(self.swarm_manager, "identity", None)
+        drone_id = getattr(drone_id, "drone_id", "unknown") if drone_id else "unknown"
+        slot = (params.get("slot_assignments") or {}).get(drone_id, "?")
+        logger.info(
+            "FORMATION_COMMAND_RECEIVED drone=%s type=%s spacing=%s slot=%s members=%s",
+            drone_id, params.get("type"), params.get("spacing"), slot,
+            params.get("members")
+        )
+        logger.info(
+            "FORMATION_ACTIVE drone=%s slot=%s — params stored, FormationEngine will drive movement",
+            drone_id, slot
+        )
         return True
 
     def is_gps_dependent_navigation_active(self, telemetry=None) -> bool:

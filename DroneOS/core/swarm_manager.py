@@ -120,6 +120,13 @@ class PeerSynchronization:
         peer = self.registry.get_peer(msg.sender_id)
         if peer:
             peer.telemetry = msg.telemetry
+            # Also update position fields used by FormationEngine anchor checks
+            t = msg.telemetry
+            if t and getattr(t, 'gps_valid', False) and t.latitude is not None and t.longitude is not None:
+                peer.lat = t.latitude
+                peer.lon = t.longitude
+                peer.alt = t.altitude
+                peer.last_position_time = time.time()
 
 class SwarmMembership:
     """

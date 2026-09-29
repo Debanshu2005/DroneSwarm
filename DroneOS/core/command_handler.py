@@ -202,6 +202,9 @@ class CommandHandler:
             
             critical_actions = [CommandAction.ARM, CommandAction.TAKEOFF, CommandAction.LAND, CommandAction.RTL]
             pipeline_actions = {CommandAction.TAKEOFF, CommandAction.LAND, CommandAction.RTL}
+            # FORMATION_UPDATE stores params and activates the FormationEngine;
+            # it does NOT mean flight movement has completed — use FORMATION_ACTIVE.
+            formation_actions = {CommandAction.FORMATION_UPDATE}
             is_critical = message.action in critical_actions
             await_pipeline_result = message.action in pipeline_actions
             
@@ -268,7 +271,9 @@ class CommandHandler:
                             self._active_critical_command = None
                         return False
                 
-                self._send_lifecycle(message.sender_id, message.action, "ACCEPTED", cmd_id=message.cmd_id)
+                # FORMATION_UPDATE: params stored, engine is now active — not "movement complete"
+                final_stage = "FORMATION_ACTIVE" if message.action in formation_actions else "ACCEPTED"
+                self._send_lifecycle(message.sender_id, message.action, final_stage, cmd_id=message.cmd_id)
                 if is_critical:
                     self._active_critical_command = None
                 return True
