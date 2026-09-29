@@ -127,7 +127,8 @@ class DroneOSApp:
         
         # New Autonomous Subsystems
         self.collision_avoidance = StandardCollisionAvoidance(
-            config=self.flight_cfg.collision_avoidance
+            config=self.flight_cfg.collision_avoidance,
+            drone_id=self.node_id
         )
         self.navigation_manager = NavigationManager(self.flight_manager, self.state_store)
         self.mission_manager = MissionManager(

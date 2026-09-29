@@ -11,6 +11,11 @@ collision_avoidance:
   warning_distance: 6.0
   emergency_distance: 1.5
   neighbor_timeout_sec: 3.0
+  lookahead_sec: 3.0
+  avoidance_speed: 4.0
+  emergency_speed: 5.0
+  max_peer_age_sec: 2.5
+  ground_altitude_m: 0.5
 sim:
   battery_drain_multiplier: 0.0
   drop_gps: false

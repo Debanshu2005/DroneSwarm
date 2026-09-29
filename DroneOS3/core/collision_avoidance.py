@@ -104,12 +104,17 @@ class StandardCollisionAvoidance(ICollisionAvoidance):
             if alt_diff > self.min_v_dist:
                 continue
 
-            # Age-compensated CPA (relative velocity of peer w.r.t. self)
+            # Age-compensated position: extrapolate peer forward by telemetry age (capped 1s)
             age_capped = min(age, 1.0)
             peer_vx = (peer_t.velocity_x or 0.0)
             peer_vy = (peer_t.velocity_y or 0.0)
-            rel_vx = (peer_vx - my_vx) + age_capped * peer_vx
-            rel_vy = (peer_vy - my_vy) + age_capped * peer_vy
+            north_m += peer_vx * age_capped
+            east_m += peer_vy * age_capped
+            dist = math.sqrt(north_m ** 2 + east_m ** 2)
+
+            # CPA: relative velocity of peer w.r.t. self
+            rel_vx = peer_vx - my_vx
+            rel_vy = peer_vy - my_vy
             rel_speed_sq = rel_vx ** 2 + rel_vy ** 2
 
             if rel_speed_sq > 1e-6:
@@ -118,6 +123,7 @@ class StandardCollisionAvoidance(ICollisionAvoidance):
                 cpa_n = north_m + rel_vx * t_cpa
                 cpa_e = east_m + rel_vy * t_cpa
                 eff_dist = math.sqrt(cpa_n ** 2 + cpa_e ** 2)
+                eff_dist = min(dist, eff_dist) if t_cpa > 0 else dist
             else:
                 eff_dist = dist
 
@@ -139,12 +145,13 @@ class StandardCollisionAvoidance(ICollisionAvoidance):
                     logger.warning("CA WARNING peer=%s dist=%.1fm cpa=%.1fm", peer_id, dist, eff_dist)
                     self._last_warn[peer_id] = now
 
+            any_threat = True
+            if eff_dist < min_dist_found:
+                min_dist_found = eff_dist
+                worst_state = state
+                threat_peer = peer_id
+
             if state in ("AVOIDANCE", "EMERGENCY"):
-                any_threat = True
-                if eff_dist < min_dist_found:
-                    min_dist_found = eff_dist
-                    worst_state = state
-                    threat_peer = peer_id
 
                 # Repulsion weight: stronger when closer
                 weight = 1.0 / max(eff_dist, 0.1)
@@ -167,11 +174,14 @@ class StandardCollisionAvoidance(ICollisionAvoidance):
                 sum_down += rep_d
 
         if not any_threat:
-            return worst_state, None, threat_peer, min_dist_found
+            return "NORMAL", None, None, 0.0
 
         # Normalise and scale to avoidance/emergency speed
         mag = math.sqrt(sum_north ** 2 + sum_east ** 2)
         speed = self.emergency_speed if worst_state == "EMERGENCY" else self.avoidance_speed
+
+        if worst_state == "WARNING":
+            return "WARNING", None, threat_peer, min_dist_found
         if mag > 1e-6:
             scale = speed / mag
             out_n = sum_north * scale

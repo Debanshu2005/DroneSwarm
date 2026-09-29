@@ -5,7 +5,7 @@ DroneOS2 instance (drone3).
 import math
 import time
 import asyncio
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -127,7 +127,8 @@ def test_adapter_hover_blocked_during_land():
     mock_client = MagicMock()
     fc.client = mock_client
 
-    result = asyncio.get_event_loop().run_until_complete(fc.hover())
+    loop = asyncio.new_event_loop()
+    result = loop.run_until_complete(fc.hover())
     assert result is True
     mock_client.hoverAsync.assert_not_called()
 
@@ -137,6 +138,101 @@ def test_adapter_hover_blocked_during_land():
     async def _run_force():
         return await fc.hover(force=True)
 
-    result2 = asyncio.get_event_loop().run_until_complete(_run_force())
+    result2 = loop.run_until_complete(_run_force())
+    loop.close()
     assert result2 is True
     mock_client.hoverAsync.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Test 9 – Pipeline: COLLISION intent beats FORMATION; CommandWriter calls
+#           move_velocity_ned
+# ---------------------------------------------------------------------------
+
+def test_pipeline_collision_beats_formation():
+    from unittest.mock import AsyncMock
+    from DroneOS2.core.flight_pipeline import CommandWriter
+
+    store = FlightStateStore()
+    formation_intent = FlightIntent(
+        IntentSource.FORMATION, IntentAction.MOVE_VELOCITY_NED, ttl_seconds=5.0,
+        params={"north": 1.0, "east": 0.0, "down": 0.0, "duration": 1.0}
+    )
+    collision_intent = FlightIntent(
+        IntentSource.COLLISION, IntentAction.MOVE_VELOCITY_NED, ttl_seconds=1.0,
+        params={"north": -4.0, "east": 0.5, "down": 0.0, "duration": 1.0}
+    )
+    store.submit_intent(formation_intent)
+    store.submit_intent(collision_intent)
+
+    winner = Arbiter.select_winner(store.get_intents(), store)
+    assert winner.source == IntentSource.COLLISION
+    assert winner.action == IntentAction.MOVE_VELOCITY_NED
+
+    mock_fc = MagicMock()
+    mock_fc.move_velocity_ned = AsyncMock(return_value=True)
+
+    loop = asyncio.new_event_loop()
+    result = loop.run_until_complete(CommandWriter(mock_fc).execute(winner))
+    loop.close()
+    assert result is True
+    mock_fc.move_velocity_ned.assert_called_once()
+    assert mock_fc.move_velocity_ned.call_args[0][0] == pytest.approx(-4.0)
+    assert mock_fc.move_velocity_ned.call_args[0][1] == pytest.approx(0.5)
+
+
+# ---------------------------------------------------------------------------
+# Test 10 – Real CA (no mocks): formation peer on head-on trajectory triggers CA
+# ---------------------------------------------------------------------------
+
+def test_real_ca_formation_peer_not_exempt():
+    ca = StandardCollisionAvoidance(
+        _cfg(min_horizontal_distance=6.0, emergency_distance=3.0, lookahead_sec=3.0),
+        drone_id="d3"
+    )
+    now = time.time()
+    self_t = _telem(lat=0.0, lon=0.0, alt=10.0, vx=5.0, vy=0.0, ts=now)
+    peer_lat = 20.0 / 111320.0
+    peer_t = _telem(lat=peer_lat, lon=0.0, alt=10.0, vx=-5.0, vy=0.0, ts=now)
+
+    state, correction, peer_id, eff_dist = ca.evaluate_threats(
+        self_t, {"formation_peer": peer_t}
+    )
+    assert state in ("AVOIDANCE", "EMERGENCY"), (
+        f"Formation peer on head-on trajectory must trigger CA, got {state}"
+    )
+    assert correction is not None
+    assert peer_id == "formation_peer"
+    assert correction["north"] < 0.0
+
+
+# ---------------------------------------------------------------------------
+# Test 11 – Formation peer in slot, closing, CA fires
+#           (would fail under old filtered_peer_telemetry)
+# ---------------------------------------------------------------------------
+
+def test_formation_peer_in_slot_closing_triggers_ca():
+    ca = StandardCollisionAvoidance(
+        _cfg(
+            min_horizontal_distance=6.0,
+            emergency_distance=3.0,
+            warning_distance=10.0,
+            lookahead_sec=3.0,
+            max_peer_age_sec=2.5,
+        ),
+        drone_id="d3"
+    )
+    now = time.time()
+    self_t = _telem(lat=0.0, lon=0.0, alt=10.0, vx=4.0, vy=0.0, ts=now)
+    peer_lat = 8.0 / 111320.0
+    peer_t = _telem(lat=peer_lat, lon=0.0, alt=10.0, vx=-4.0, vy=0.0, ts=now)
+
+    state, correction, peer_id, eff_dist = ca.evaluate_threats(
+        self_t, {"peer_in_slot": peer_t}
+    )
+    assert state in ("AVOIDANCE", "EMERGENCY"), (
+        f"Peer in formation slot closing head-on must trigger CA, got {state}. "
+        f"eff_dist={eff_dist:.2f}m"
+    )
+    assert correction is not None
+    assert peer_id == "peer_in_slot"

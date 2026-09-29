@@ -41,31 +41,35 @@ class MockNav:
 
 @pytest.mark.asyncio
 async def test_formation_mate_within_tolerance():
+    """
+    Formation peer correctly in its slot must STILL be passed to CA.
+    CA is a hard safety layer — formation membership never exempts a peer.
+    This test previously asserted the old broken behaviour (peer filtered out).
+    The correct behaviour is that the peer IS evaluated by CA.
+    """
     engine = LocalDecisionEngine(Mock(), MockSwarm(), Mock(), Mock(), Mock(), Mock())
     engine.nav = MockNav()
     engine.safety.is_failsafe_active = False
     engine.nav.flight_manager.formation_params = {'type': 'V', 'spacing': 2.0, 'repulsion_radius_m': 2.5}
-    
+
     current_telemetry = TelemetryData(flight_mode="HOLD")
     current_telemetry.gps_valid = True
     current_telemetry.latitude = 37.0
     current_telemetry.longitude = -122.0
-    
-    # Mock CA returning a threat by default if not filtered
+
     engine.ca.evaluate_threats = MagicMock(return_value=("AVOIDANCE", None, "drone2", 1.0))
-    
-    # Mock Formation Engine expected positions
     engine.formation_engine.get_expected_positions = MagicMock(return_value={"drone2": (37.00001, -122.00001)})
-    
-    # Peer within tolerance (very close to expected)
+
     peer2 = MockPeer(37.00001, -122.00001, 10.0)
     engine.swarm.registry.peers = {"drone2": peer2}
-    
+
     await engine.evaluate_tick(current_telemetry)
-    
-    # The filtered peer_telemetry should be empty, so evaluate_threats should be called with {}
+
+    # Formation peer MUST be passed to CA — no filtering by formation membership.
     args, kwargs = engine.ca.evaluate_threats.call_args
-    assert "drone2" not in args[1]
+    assert "drone2" in args[1], (
+        "Formation peer must be visible to CA regardless of slot position"
+    )
 
 @pytest.mark.asyncio
 async def test_formation_mate_beyond_tolerance():

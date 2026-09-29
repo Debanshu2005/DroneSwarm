@@ -26,7 +26,7 @@ class CollisionAvoidanceConfig(BaseModel):
     lookahead_sec: float = 3.0
     avoidance_speed: float = 4.0
     emergency_speed: float = 5.0
-    max_peer_age_sec: float = 1.0
+    max_peer_age_sec: float = 2.5
     ground_altitude_m: float = 0.5
 
 class SafetyLimitsConfig(BaseModel):
