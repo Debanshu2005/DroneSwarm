@@ -8,6 +8,8 @@ from DroneOS.core.intents import FlightIntent, IntentSource, IntentAction
 logger = setup_logger("FormationEngine")
 
 _ANCHOR_STALE_SEC = 3.0
+_DEFAULT_SPACING = 10.0
+_DEFAULT_MIN_SEP_M = 8.0
 
 
 class FormationEngine:
@@ -53,6 +55,19 @@ class FormationEngine:
             return sorted(members)[0]
         return self.swarm_manager.identity.drone_id
 
+    def _min_separation_m(self) -> float:
+        """Read min_formation_separation_m from config, or use default."""
+        if self.config and getattr(self.config, "formation", None):
+            return float(getattr(self.config.formation, "min_formation_separation_m", _DEFAULT_MIN_SEP_M))
+        return _DEFAULT_MIN_SEP_M
+
+    def _peer_horizontal_dist(self, my_lat, my_lon, peer) -> float:
+        """Flat-earth horizontal distance in metres from self to a peer object."""
+        if peer.lat is None or peer.lon is None:
+            return float("inf")
+        dn, de = global_offset_local_m(my_lat, my_lon, peer.lat, peer.lon)
+        return math.hypot(dn, de)
+
     # ------------------------------------------------------------------
     # Public API used by DecisionEngine (CA diagnostics)
     # ------------------------------------------------------------------
@@ -68,7 +83,7 @@ class FormationEngine:
         except ValueError:
             return {}
 
-        spacing = float(params.get("spacing", 8.0))
+        spacing = float(params.get("spacing", _DEFAULT_SPACING))
         self.form_mgr.set_formation(f_type, spacing)
 
         slot_assignments = params.get("slot_assignments", {})
@@ -116,7 +131,7 @@ class FormationEngine:
             logger.error("Invalid formation type: %s", f_type_str)
             return FlightIntent(IntentSource.FORMATION, IntentAction.HOVER, ttl_seconds=1.0)
 
-        spacing = float(params.get("spacing", 8.0))
+        spacing = float(params.get("spacing", _DEFAULT_SPACING))
         speed = float(params.get("speed", 2.0))
         repulsion_radius_m = float(params.get("repulsion_radius_m", spacing * 0.4))
         self.form_mgr.set_formation(f_type, spacing)
@@ -159,7 +174,7 @@ class FormationEngine:
         # Compute slot offset (primary target)
         dx_north, dy_east, _ = self.form_mgr.get_offset(my_slot, total)
 
-        # Repulsion correction (secondary, capped)
+        # Repulsion correction (secondary, capped at 15% of spacing)
         if current_telemetry.latitude is not None and current_telemetry.longitude is not None:
             neighbor_offsets = []
             slot_assignments = params.get("slot_assignments", {})
@@ -209,6 +224,66 @@ class FormationEngine:
             scale = speed / magnitude
             vx *= scale
             vy *= scale
+
+        # ------------------------------------------------------------------
+        # Formation separation safety layer (secondary, does NOT change slot)
+        # ------------------------------------------------------------------
+        # Check actual physical distance to each formation peer.
+        # If any peer is closer than min_formation_separation_m, scale down
+        # the velocity toward that peer to prevent unsafe convergence.
+        # This never reassigns slots — it only limits approach speed.
+        # ------------------------------------------------------------------
+        min_sep = self._min_separation_m()
+        slot_assignments = params.get("slot_assignments", {})
+        too_close = False
+
+        for p_id in slot_assignments:
+            if p_id == my_id:
+                continue
+            peer = self.swarm_manager.registry.get_peer(p_id)
+            if not (peer and peer.last_position_time is not None
+                    and (now - peer.last_position_time) < _ANCHOR_STALE_SEC
+                    and peer.lat is not None and peer.lon is not None):
+                continue
+
+            dist = self._peer_horizontal_dist(
+                current_telemetry.latitude, current_telemetry.longitude, peer
+            )
+
+            logger.debug(
+                "FORMATION_SEPARATION drone=%s peer=%s distance=%.2fm min=%.2fm",
+                my_id, p_id, dist, min_sep
+            )
+
+            if dist < min_sep:
+                too_close = True
+                # Compute unit vector from self toward peer
+                dn, de = global_offset_local_m(
+                    current_telemetry.latitude, current_telemetry.longitude,
+                    peer.lat, peer.lon
+                )
+                peer_dist = math.hypot(dn, de)
+                if peer_dist < 1e-6:
+                    continue
+
+                # Dot product of velocity with direction toward peer
+                dot = (vx * dn + vy * de) / peer_dist
+
+                if dot > 0:
+                    # Velocity has a component toward the too-close peer.
+                    # Scale it down proportionally: 0 at dist=0, 1 at dist=min_sep.
+                    scale_factor = max(0.0, dist / min_sep)
+                    vx *= scale_factor
+                    vy *= scale_factor
+                    logger.warning(
+                        "FORMATION_STABILIZE drone=%s reason=too_close peer=%s "
+                        "dist=%.2fm min=%.2fm action=LIMIT_VELOCITY scale=%.3f",
+                        my_id, p_id, dist, min_sep, scale_factor
+                    )
+
+        if too_close and math.hypot(vx, vy) < 1e-4:
+            # Fully blocked — hover rather than drift
+            return FlightIntent(IntentSource.FORMATION, IntentAction.HOVER, ttl_seconds=1.0)
 
         logger.info(
             "FORMATION_TARGET drone=%s slot=%d north=%.3f east=%.3f vx=%.3f vy=%.3f",

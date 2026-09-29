@@ -11,7 +11,7 @@ export default function SwarmView() {
   const armedDrones = Object.values(drones).filter(d => d?.telemetry?.armed_state === 'ARMED');
 
   const [selectedShape, setSelectedShape] = useState('Diamond');
-  const [spacingValue, setSpacingValue] = useState('8');
+  const [spacingValue, setSpacingValue] = useState('10');
   const { sendCommand } = useDroneContext();
 
   const handleApply = () => {
@@ -37,7 +37,7 @@ export default function SwarmView() {
       'formation_update',
       {
         type: selectedShape.toUpperCase(),
-        spacing: Number(spacingValue) || 8,
+        spacing: Number(spacingValue) || 10,
         members,
         slot_assignments,
       },

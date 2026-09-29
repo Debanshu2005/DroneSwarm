@@ -16,6 +16,9 @@ collision_avoidance:
   emergency_speed: 5.0
   max_peer_age_sec: 2.5
   ground_altitude_m: 0.5
+formation:
+  velocity_gain: 1.0
+  min_formation_separation_m: 8.0
 sim:
   battery_drain_multiplier: 0.0
   drop_gps: false

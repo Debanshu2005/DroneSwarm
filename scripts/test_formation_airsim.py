@@ -16,6 +16,7 @@ Acceptance criteria:
   - Each drone logs FORMATION_TARGET with a unique coordinate.
   - Heartbeat timing does not cause slot reshuffling.
   - All four drones reach their V-formation slots within GOTO_TIMEOUT seconds.
+  - No pair of drones violates MIN_FORMATION_SEPARATION_M during formation hold.
 """
 import asyncio
 import importlib
@@ -28,10 +29,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 FORMATION_TYPE = "V"
-SPACING_M = 8.0
+SPACING_M = 10.0
 TAKEOFF_ALT = 10.0
 GOTO_TIMEOUT = 60.0
 ARRIVAL_RADIUS_M = 2.0
+HOLD_SECONDS = 8.0          # observe formation for this long after all arrive
+MIN_FORMATION_SEPARATION_M = 8.0   # must match configs/flight.sim.yaml
 
 # (DroneOS package, AirSim vehicle name)
 DRONES = [
@@ -69,6 +72,14 @@ def compute_slot_offsets(slot_assignments, formation_type, spacing):
         drone_id: mgr.get_offset(slot, total)[:2]
         for drone_id, slot in slot_assignments.items()
     }
+
+
+def haversine_m(lat1, lon1, lat2, lon2):
+    """Flat-earth horizontal distance in metres."""
+    R = 6371000.0
+    dn = (lat2 - lat1) * (math.pi / 180.0) * R
+    de = (lon2 - lon1) * (math.pi / 180.0) * R * math.cos(math.radians((lat1 + lat2) / 2))
+    return math.hypot(dn, de)
 
 
 # ---------------------------------------------------------------------------
@@ -133,9 +144,7 @@ async def goto_slot(vehicle, fc, drone_id, slot, dx_north, dy_east):
     target_lat = home_lat + dlat
     target_lon = home_lon + dlon
 
-    print(
-        f"FORMATION_ASSIGNMENT drone={drone_id} slot={slot}"
-    )
+    print(f"FORMATION_ASSIGNMENT drone={drone_id} slot={slot}")
     print(
         f"FORMATION_TARGET drone={drone_id} slot={slot} "
         f"north={dx_north:+.2f}m east={dy_east:+.2f}m "
@@ -190,7 +199,7 @@ async def rtl_and_disconnect(vehicle, fc):
     await fc.disconnect()
 
 
-async def run_drone(pkg, vehicle, drone_id, slot, dx_north, dy_east, results):
+async def run_drone(pkg, vehicle, drone_id, slot, dx_north, dy_east, results, positions):
     try:
         fc = await connect_one(pkg, vehicle)
         ok = await arm_and_takeoff(vehicle, fc)
@@ -205,8 +214,12 @@ async def run_drone(pkg, vehicle, drone_id, slot, dx_north, dy_east, results):
         ok = await goto_slot(vehicle, fc, drone_id, slot, dx_north, dy_east)
         results[drone_id] = "PASS" if ok else f"FAIL: goto slot {slot}"
 
-        # Hold slot for observation
-        await asyncio.sleep(5.0)
+        # Hold slot for observation — record final position
+        await asyncio.sleep(HOLD_SECONDS)
+        t = await fc.get_telemetry()
+        if t.latitude is not None:
+            positions[drone_id] = (t.latitude, t.longitude)
+
         await rtl_and_disconnect(vehicle, fc)
 
     except Exception as exc:
@@ -219,9 +232,6 @@ async def run_drone(pkg, vehicle, drone_id, slot, dx_north, dy_east, results):
 # ---------------------------------------------------------------------------
 
 async def main():
-    drone_ids = [d[0].replace("DroneOS", "drone").replace("drone", "drone")
-                 for d in DRONES]
-    # Map package names to logical drone IDs
     pkg_to_id = {
         "DroneOS":  "drone1",
         "DroneOS1": "drone2",
@@ -234,6 +244,7 @@ async def main():
     offsets = compute_slot_offsets(slot_assignments, FORMATION_TYPE, SPACING_M)
 
     print(f"\nFormation: {FORMATION_TYPE}  spacing={SPACING_M}m  drones={len(DRONES)}")
+    print(f"min_formation_separation_m: {MIN_FORMATION_SEPARATION_M}m")
     print(f"Slot assignments (stable, heartbeat-independent):")
     for drone_id in members:
         slot = slot_assignments[drone_id]
@@ -241,22 +252,51 @@ async def main():
         print(f"  {drone_id} -> slot {slot}  offset ({dn:+.2f}m N, {de:+.2f}m E)")
     print()
 
-    # Verify all targets are distinct
+    # Verify all targets are distinct and pairwise distances are adequate
     coords = list(offsets.values())
+    drone_id_list = list(offsets.keys())
+    print("Expected pairwise slot distances:")
+    min_expected = float("inf")
     for i in range(len(coords)):
         for j in range(i + 1, len(coords)):
             dist = math.sqrt((coords[i][0]-coords[j][0])**2 + (coords[i][1]-coords[j][1])**2)
+            min_expected = min(min_expected, dist)
+            print(f"  {drone_id_list[i]} <-> {drone_id_list[j]}: {dist:.2f}m")
             assert dist > 0.01, f"Slots {i} and {j} have identical offsets!"
-    print("✓ All four slot offsets are distinct\n")
+    print(f"  Minimum expected: {min_expected:.2f}m\n")
+    assert min_expected >= MIN_FORMATION_SEPARATION_M, (
+        f"Formation geometry produces {min_expected:.2f}m minimum separation, "
+        f"below min_formation_separation_m={MIN_FORMATION_SEPARATION_M}m"
+    )
+    print(f"✓ All four slot offsets are distinct and >= {MIN_FORMATION_SEPARATION_M}m apart\n")
 
     results = {}
+    positions = {}
     tasks = []
     for (pkg, vehicle), drone_id in zip(DRONES, drone_ids):
         slot = slot_assignments[drone_id]
         dn, de = offsets[drone_id]
-        tasks.append(run_drone(pkg, vehicle, drone_id, slot, dn, de, results))
+        tasks.append(run_drone(pkg, vehicle, drone_id, slot, dn, de, results, positions))
 
     await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Measure actual pairwise distances during formation hold
+    print("\n--- Actual pairwise distances during formation hold ---")
+    sep_violations = []
+    pos_ids = list(positions.keys())
+    for i in range(len(pos_ids)):
+        for j in range(i + 1, len(pos_ids)):
+            id_a, id_b = pos_ids[i], pos_ids[j]
+            lat_a, lon_a = positions[id_a]
+            lat_b, lon_b = positions[id_b]
+            dist = haversine_m(lat_a, lon_a, lat_b, lon_b)
+            violation = dist < MIN_FORMATION_SEPARATION_M
+            if violation:
+                sep_violations.append((id_a, id_b, dist))
+            print(
+                f"  {id_a} <-> {id_b}: {dist:.2f}m"
+                + (" *** VIOLATION ***" if violation else "")
+            )
 
     print("\n--- Results ---")
     all_pass = True
@@ -267,6 +307,12 @@ async def main():
             all_pass = False
         slot = slot_assignments[drone_id]
         print(f"  {drone_id} (slot {slot}): {r}")
+
+    if sep_violations:
+        print(f"\n✗ Separation violations: {sep_violations}")
+        all_pass = False
+    else:
+        print(f"\n✓ No separation violations (min={MIN_FORMATION_SEPARATION_M}m)")
 
     if all_pass:
         print("\n✓ Formation smoke test PASSED — all four drones reached assigned slots")

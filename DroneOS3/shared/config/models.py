@@ -90,8 +90,9 @@ class MovementConfig(BaseModel):
 
 class FormationConfig(BaseModel):
     default_formation: str = "V"
-    spacing: float = 5.0
+    spacing: float = 10.0
     velocity_gain: float = 1.0
+    min_formation_separation_m: float = 8.0
 
 class GSConfig(BaseModel):
     ui: GSUIConfig
