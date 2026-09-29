@@ -34,6 +34,26 @@ class CommandHandler:
         expected_count = os.getenv("EXPECTED_PEER_COUNT", "")
         self.expected_peer_count = int(expected_count) if expected_count.isdigit() else 0
         self._processed_cmds = []
+        self._pending_pipeline_commands = {}
+        self.flight_manager = None
+
+    async def on_pipeline_intent_dispatched(self, intent) -> None:
+        command_id = intent.params.get("_command_id")
+        pending = self._pending_pipeline_commands.get(command_id)
+        if pending:
+            self._send_lifecycle(pending["sender_id"], pending["action"], "AIRSIM_DISPATCHED", cmd_id=pending["cmd_id"])
+
+    async def on_pipeline_intent_result(self, intent, success: bool) -> None:
+        command_id = intent.params.get("_command_id")
+        pending = self._pending_pipeline_commands.get(command_id)
+        if pending:
+            self._send_lifecycle(pending["sender_id"], pending["action"], "AIRSIM_RESULT", reason=f"success={bool(success)}", cmd_id=pending["cmd_id"])
+        if not pending["future"].done():
+            pending["future"].set_result(bool(success))
+
+    async def _cancel_pending_pipeline_command(self, command_id: str) -> None:
+        if self.flight_manager:
+            await self.flight_manager.cancel_critical_command(command_id)
 
     def _validate_peer_arm_gate(self) -> str:
         if not self.require_peers_before_arm:
@@ -179,7 +199,9 @@ class CommandHandler:
             self._send_lifecycle(message.sender_id, message.action, "BACKEND_RECEIVED", cmd_id=message.cmd_id)
             
             critical_actions = [CommandAction.ARM, CommandAction.TAKEOFF, CommandAction.LAND, CommandAction.RTL]
+            pipeline_actions = {CommandAction.TAKEOFF, CommandAction.LAND, CommandAction.RTL}
             is_critical = message.action in critical_actions
+            await_pipeline_result = message.action in pipeline_actions
             
             if is_critical:
                 if getattr(self, '_active_critical_command', None) is not None:
@@ -197,7 +219,12 @@ class CommandHandler:
                     self._active_critical_command = None
                 return False
 
-            params = message.params or {}
+            params = dict(message.params or {})
+            pipeline_command_id = message.cmd_id or f"pipeline-{time.monotonic_ns()}"
+            if await_pipeline_result:
+                import asyncio
+                self._pending_pipeline_commands[pipeline_command_id] = {"future": asyncio.get_running_loop().create_future(), "sender_id": message.sender_id, "action": message.action, "cmd_id": message.cmd_id}
+                params["_command_id"] = pipeline_command_id
             try:
                 self._send_lifecycle(message.sender_id, message.action, "SENDING", cmd_id=message.cmd_id)
                 
@@ -220,7 +247,24 @@ class CommandHandler:
                     self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=error_text, cmd_id=message.cmd_id)
                     if is_critical:
                         self._active_critical_command = None
+                    self._pending_pipeline_commands.pop(pipeline_command_id, None)
                     return False
+                if await_pipeline_result:
+                    try:
+                        result = await asyncio.wait_for(asyncio.shield(self._pending_pipeline_commands[pipeline_command_id]["future"]), timeout=15.0)
+                    except asyncio.TimeoutError:
+                        self._send_lifecycle(message.sender_id, message.action, "TIMEOUT", reason="Flight-controller dispatch timed out.", cmd_id=message.cmd_id)
+                        await self._cancel_pending_pipeline_command(pipeline_command_id)
+                        self._pending_pipeline_commands.pop(pipeline_command_id, None)
+                        if is_critical:
+                            self._active_critical_command = None
+                        return False
+                    self._pending_pipeline_commands.pop(pipeline_command_id, None)
+                    if not result:
+                        self._send_lifecycle(message.sender_id, message.action, "FAILED", reason="Flight-controller returned failure.", cmd_id=message.cmd_id)
+                        if is_critical:
+                            self._active_critical_command = None
+                        return False
                 
                 self._send_lifecycle(message.sender_id, message.action, "ACCEPTED", cmd_id=message.cmd_id)
                 if is_critical:
@@ -236,6 +280,9 @@ class CommandHandler:
                     self.error_learning.report_error(self.node_id, "COMMAND_HANDLER", error_msg)
                 if is_critical:
                     self._active_critical_command = None
+                if await_pipeline_result:
+                    await self._cancel_pending_pipeline_command(pipeline_command_id)
+                self._pending_pipeline_commands.pop(pipeline_command_id, None)
                 return False
         else:
             logger.warning(f"No handler registered for command: {message.action.value}")

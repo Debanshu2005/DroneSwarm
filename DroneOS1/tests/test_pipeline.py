@@ -178,6 +178,20 @@ async def test_command_handler_does_not_accept_failed_pipeline_result():
     assert await handler.handle_command(message) is False
     assert stages == ["BACKEND_RECEIVED", "SENDING", "AIRSIM_DISPATCHED", "AIRSIM_RESULT", "FAILED"]
 
+
+@pytest.mark.asyncio
+async def test_command_writer_propagates_flight_controller_failure():
+    """A false FC result must reach the pipeline instead of being discarded."""
+    mock_airsim_adapter = AsyncMock(spec=AirSimFlightController)
+    mock_airsim_adapter.land.return_value = False
+
+    result = await CommandWriter(mock_airsim_adapter).execute(
+        FlightIntent(IntentSource.MANUAL, IntentAction.LAND)
+    )
+
+    assert result is False
+    mock_airsim_adapter.land.assert_awaited_once_with()
+
 def test_intent_expiration():
     arbiter = Arbiter()
     

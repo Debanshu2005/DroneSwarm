@@ -35,6 +35,9 @@ class CommandHandler:
         self.expected_peer_count = int(expected_count) if expected_count.isdigit() else 0
         self._processed_cmds = []
         self._pending_pipeline_commands = {}
+        # Set by the node after FlightManager construction.  Keeping this
+        # optional preserves the lightweight unit-test constructor.
+        self.flight_manager = None
 
     async def on_pipeline_intent_dispatched(self, intent) -> None:
         """Called by FlightPipeline immediately before invoking the FC."""
@@ -58,6 +61,11 @@ class CommandHandler:
         )
         if not pending["future"].done():
             pending["future"].set_result(bool(success))
+
+    async def _cancel_pending_pipeline_command(self, command_id: str) -> None:
+        manager = self.flight_manager
+        if manager:
+            await manager.cancel_critical_command(command_id)
 
     def _validate_peer_arm_gate(self) -> str:
         if not self.require_peers_before_arm:
@@ -267,6 +275,7 @@ class CommandHandler:
                         )
                     except asyncio.TimeoutError:
                         self._send_lifecycle(message.sender_id, message.action, "TIMEOUT", reason="Flight-controller dispatch timed out.", cmd_id=message.cmd_id)
+                        await self._cancel_pending_pipeline_command(pipeline_command_id)
                         self._pending_pipeline_commands.pop(pipeline_command_id, None)
                         if is_critical:
                             self._active_critical_command = None
@@ -293,6 +302,8 @@ class CommandHandler:
                     self.error_learning.report_error(self.node_id, "COMMAND_HANDLER", error_msg)
                 if is_critical:
                     self._active_critical_command = None
+                if await_pipeline_result:
+                    await self._cancel_pending_pipeline_command(pipeline_command_id)
                 self._pending_pipeline_commands.pop(pipeline_command_id, None)
                 return False
         else:

@@ -114,6 +114,7 @@ class DroneOSApp:
             error_learning=self.error_learning
         )
         self.command_handler.network = self.network
+        self.command_handler.flight_manager = self.flight_manager
         from DroneOS1.core.terminal_controller import TerminalController
         self.terminal_controller = TerminalController(
             self.command_handler, self.flight_controller, self.node_id

@@ -58,9 +58,12 @@ class LocalDecisionEngine:
             logger.debug("DecisionEngine suspended: Safety failsafe is active.")
             return
             
-        # 1. Collect peer telemetry
+        # 1. Collect peer telemetry (exclude self)
         peer_telemetry = {}
+        my_id = self.swarm.identity.drone_id
         for peer_id in self.swarm.registry.get_all_peers():
+            if peer_id == my_id:
+                continue  # Never compare against ourselves
             state = self.swarm.registry.get_peer(peer_id)
             if state and state.is_active and state.telemetry:
                 peer_telemetry[peer_id] = state.telemetry
@@ -113,8 +116,11 @@ class LocalDecisionEngine:
                     self.state_store.submit_intent(intent)
                 return
             elif state == "EMERGENCY":
-                logger.critical(log_str + " | action: EMERGENCY_HOVER")
-                intent = FlightIntent(IntentSource.COLLISION, IntentAction.HOVER, ttl_seconds=1.0)
+                logger.critical(log_str + " | action: EMERGENCY_EVASIVE_MOVE")
+                if correction:
+                    intent = FlightIntent(IntentSource.COLLISION, IntentAction.MOVE_VELOCITY_NED, ttl_seconds=1.0, params=correction)
+                else:
+                    intent = FlightIntent(IntentSource.COLLISION, IntentAction.HOVER, ttl_seconds=1.0)
                 self.state_store.submit_intent(intent)
                 return
 

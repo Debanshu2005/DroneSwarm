@@ -39,22 +39,21 @@ class FlightManager:
         return success
 
     async def takeoff(self, params: Dict[str, Any] = None) -> bool:
-        telemetry = self.state_store.local_telemetry
-        if getattr(telemetry, 'armed_state', None) != "ARMED":
-            logger.error("Cannot takeoff: Drone telemetry indicates it is not ARMED.")
-            return False
-            
+        # Note: armed_state check removed — the AirSim adapter auto-arms internally
+        # during takeoff. Gating here caused silent rejections when the command arrived
+        # before the first telemetry poll completed (armed_state still None/DISARMED).
         altitude = getattr(self.fc.config, "takeoff_altitude", 5.0) if hasattr(self.fc, "config") else 5.0
         if params and 'altitude_m' in params:
             try:
                 altitude = float(params['altitude_m'])
             except (ValueError, TypeError):
                 return False
-                
+
         intent_params = {"altitude": altitude}
         if params:
             intent_params.update({key: value for key, value in params.items() if key.startswith("_")})
-        intent = FlightIntent(IntentSource.MANUAL, IntentAction.TAKEOFF, ttl_seconds=15.0, params=intent_params)
+        # TTL increased to 30 s to cover slow AirSim takeoffAsync + moveToZAsync
+        intent = FlightIntent(IntentSource.MANUAL, IntentAction.TAKEOFF, ttl_seconds=30.0, params=intent_params)
         self.state_store.submit_intent(intent)
         logger.info(f"Takeoff intent submitted for {altitude}m.")
         return True
@@ -70,6 +69,15 @@ class FlightManager:
         self.state_store.submit_intent(intent)
         logger.info("RTL intent submitted.")
         return True
+
+    async def cancel_critical_command(self, command_id: str) -> bool:
+        """Release a queued critical command that never reached the FC."""
+        manual_intent = self.state_store.get_intents().get(IntentSource.MANUAL)
+        if manual_intent and manual_intent.params.get("_command_id") == command_id:
+            cleared = self.state_store.complete_intent(manual_intent)
+            logger.warning("Cancelled undispatched critical command id=%s cleared=%s", command_id, cleared)
+            return cleared
+        return False
 
     async def smart_rtl(self, params: Dict[str, Any] = None) -> bool:
         telemetry = self.state_store.local_telemetry

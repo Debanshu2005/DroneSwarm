@@ -89,19 +89,18 @@ class StandardCollisionAvoidance(ICollisionAvoidance):
                     min_dist_found = dist
                     worst_state = state
                     threat_peer = peer_id
-                    
-                    if state == "AVOIDANCE":
-                        # Simple repel vector (move away from peer)
-                        bearing = math.atan2(
-                            math.sin(delta_lambda) * math.cos(phi2),
-                            math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(delta_lambda)
-                        )
-                        # Opposite direction
-                        escape_bearing = bearing + math.pi
-                        
-                        north = 2.0 * math.cos(escape_bearing)
-                        east = 2.0 * math.sin(escape_bearing)
-                        down = 0.0 
-                        best_correction = {"north": north, "east": east, "down": down, "duration": 1.0}
+
+                    # Compute repulsion vector for both AVOIDANCE and EMERGENCY.
+                    # EMERGENCY uses a stronger escape speed (4 m/s vs 2 m/s).
+                    bearing = math.atan2(
+                        math.sin(delta_lambda) * math.cos(phi2),
+                        math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(delta_lambda)
+                    )
+                    escape_bearing = bearing + math.pi
+                    speed = 4.0 if state == "EMERGENCY" else 2.0
+                    north = speed * math.cos(escape_bearing)
+                    east = speed * math.sin(escape_bearing)
+                    down = 0.0
+                    best_correction = {"north": north, "east": east, "down": down, "duration": 1.0}
 
         return worst_state, best_correction, threat_peer, min_dist_found

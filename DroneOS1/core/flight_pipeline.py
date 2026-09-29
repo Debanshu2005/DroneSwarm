@@ -242,17 +242,20 @@ class FlightPipeline:
                     winning_intent.source.name,
                     winning_intent.action.value,
                 )
+                logger.info(
+                    "ARBITER winner source=%s action=%s",
+                    winning_intent.source.name,
+                    winning_intent.action.value,
+                )
                 if is_critical_manual_intent(winning_intent):
+                    logger.warning("CRITICAL_PREEMPT active action=%s", winning_intent.action.value)
                     preempted = [
                         source.name for source, intent in intents.items()
                         if source in {IntentSource.FORMATION, IntentSource.MISSION} and not intent.is_expired()
                     ]
                     if preempted:
-                        logger.warning(
-                            "Critical manual %s preempts active %s control.",
-                            winning_intent.action.value,
-                            ", ".join(preempted),
-                        )
+                        for source in preempted:
+                            logger.warning("CRITICAL_PREEMPT suppressing source=%s", source)
                 if self.on_intent_change:
                     await self.on_intent_change(winning_intent.source.name if winning_intent.source else "IDLE")
             
@@ -263,6 +266,7 @@ class FlightPipeline:
             if is_critical_manual_intent(winning_intent) and self.on_intent_dispatched:
                 await self.on_intent_dispatched(winning_intent)
             result = await self.command_writer.execute(safe_intent)
+            logger.info("FLIGHT_EXEC_RESULT %s vehicle=%s success=%s", safe_intent.action.value, getattr(self.fc, "vehicle_name", getattr(self.fc, "vehicle_id", "unknown")), bool(result))
             if is_critical_manual_intent(winning_intent):
                 if self.on_intent_result:
                     await self.on_intent_result(winning_intent, result)

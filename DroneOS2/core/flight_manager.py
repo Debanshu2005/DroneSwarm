@@ -71,6 +71,15 @@ class FlightManager:
         logger.info("RTL intent submitted.")
         return True
 
+    async def cancel_critical_command(self, command_id: str) -> bool:
+        """Release a queued critical command that never reached the FC."""
+        manual_intent = self.state_store.get_intents().get(IntentSource.MANUAL)
+        if manual_intent and manual_intent.params.get("_command_id") == command_id:
+            cleared = self.state_store.complete_intent(manual_intent)
+            logger.warning("Cancelled undispatched critical command id=%s cleared=%s", command_id, cleared)
+            return cleared
+        return False
+
     async def smart_rtl(self, params: Dict[str, Any] = None) -> bool:
         telemetry = self.state_store.local_telemetry
         if telemetry.altitude is None or telemetry.altitude < self._min_srtl_altitude_m:

@@ -130,7 +130,7 @@ class StatusMessage(BaseMessage):
 class CommandLifecycleMessage(BaseMessage):
     msg_type: MessageType = MessageType.COMMAND_LIFECYCLE
     action: CommandAction
-    stage: str # REQUESTED, BACKEND_RECEIVED, MAVSDK_REQUESTED, MAVSDK_RESPONSE, PX4_TELEMETRY_CONFIRMATION, SUCCESS, REJECTED, TIMEOUT, FAILED
+    stage: str # BACKEND_RECEIVED, SENDING, AIRSIM_DISPATCHED, AIRSIM_RESULT, ACCEPTED, REJECTED, TIMEOUT, FAILED (plus legacy stages)
     reason: Optional[str] = None
     cmd_id: Optional[str] = None
 

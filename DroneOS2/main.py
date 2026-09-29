@@ -114,6 +114,7 @@ class DroneOSApp:
             error_learning=self.error_learning
         )
         self.command_handler.network = self.network
+        self.command_handler.flight_manager = self.flight_manager
         from DroneOS2.core.terminal_controller import TerminalController
         self.terminal_controller = TerminalController(
             self.command_handler, self.flight_controller, self.node_id
@@ -154,6 +155,8 @@ class DroneOSApp:
         from DroneOS2.core.flight_pipeline import FlightPipeline
         self.flight_pipeline = FlightPipeline(self.state_store, self.flight_controller, self.flight_cfg, self.decision_engine)
         self.flight_pipeline.on_intent_change = self._handle_intent_change
+        self.flight_pipeline.on_intent_dispatched = self.command_handler.on_pipeline_intent_dispatched
+        self.flight_pipeline.on_intent_result = self.command_handler.on_pipeline_intent_result
         
         self.telemetry_publisher = TelemetryPublisher(
             self.node_id, 

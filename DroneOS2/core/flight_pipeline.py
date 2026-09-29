@@ -70,6 +70,9 @@ class CommandWriter:
 
     async def execute(self, intent: FlightIntent):
         self.last_action_time = time.time()
+        if intent.action != IntentAction.IDLE:
+            vehicle = getattr(self.fc, "vehicle_name", getattr(self.fc, "vehicle_id", "unknown"))
+            logger.info("FLIGHT_EXEC %s source=%s vehicle=%s params=%s", intent.action.value, intent.source.name, vehicle, intent.params)
         
         try:
             if intent.action == IntentAction.EMERGENCY_KILL:
@@ -164,6 +167,8 @@ class FlightPipeline:
         self._running = False
         self._hz = config.pipeline_hz
         self.on_intent_change = None
+        self.on_intent_dispatched = None
+        self.on_intent_result = None
         self.last_winning_key = None
 
     async def run_pipeline_loop(self):
@@ -198,10 +203,13 @@ class FlightPipeline:
             if winning_key != self.last_winning_key:
                 self.last_winning_key = winning_key
                 logger.info("Winning intent source=%s action=%s", winning_intent.source.name, winning_intent.action.value)
+                logger.info("ARBITER winner source=%s action=%s", winning_intent.source.name, winning_intent.action.value)
                 if is_critical_manual_intent(winning_intent):
+                    logger.warning("CRITICAL_PREEMPT active action=%s", winning_intent.action.value)
                     preempted = [source.name for source, intent in intents.items() if source in {IntentSource.FORMATION, IntentSource.MISSION} and not intent.is_expired()]
                     if preempted:
-                        logger.warning("Critical manual %s preempts active %s control.", winning_intent.action.value, ", ".join(preempted))
+                        for source in preempted:
+                            logger.warning("CRITICAL_PREEMPT suppressing source=%s", source)
                 if self.on_intent_change:
                     await self.on_intent_change(winning_intent.source.name if winning_intent.source else "IDLE")
             
@@ -209,8 +217,13 @@ class FlightPipeline:
             safe_intent = self.safety_filter.validate(winning_intent, telemetry)
             
             # 5. Command Writer
+            if is_critical_manual_intent(winning_intent) and self.on_intent_dispatched:
+                await self.on_intent_dispatched(winning_intent)
             result = await self.command_writer.execute(safe_intent)
+            logger.info("FLIGHT_EXEC_RESULT %s vehicle=%s success=%s", safe_intent.action.value, getattr(self.fc, "vehicle_name", getattr(self.fc, "vehicle_id", "unknown")), bool(result))
             if is_critical_manual_intent(winning_intent):
+                if self.on_intent_result:
+                    await self.on_intent_result(winning_intent, result)
                 cleared = self.state_store.complete_intent(winning_intent)
                 logger.info("Critical manual %s completed success=%s cleared=%s", winning_intent.action.value, result, cleared)
             
