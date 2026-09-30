@@ -24,6 +24,18 @@
 * **Terminal Command Parsing:** Built-in NLP-like terminal controller allows users to parse and execute human-readable drone commands (e.g., "takeoff to 5m, hover for 2 seconds, and land").
 * **Custom UDP/WebSocket Relay:** Ships with a high-performance Python relay (`relay.py`) that bridges UDP MAVLink/JSON telemetry from the drones directly to your browser/mobile app over WebSocket.
 
+
+## Mobile App Simulation
+
+https://github.com/user-attachments/assets/426d9305-4a38-4753-a019-aa2a98f3f77d
+
+## AirSim Simulation
+
+
+https://github.com/user-attachments/assets/f3a2a1c6-26ea-4c27-bca7-7f7c4041c44d
+
+
+
 ## 🏗️ Architecture
 
 ```mermaid
