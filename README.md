@@ -16,40 +16,120 @@
   <img src="banner.jpg?v=2" alt="PhoneOS Swarm Preview" width="700" />
 </p>
 
-## 🌟 Key Features
-
-* **Swarm Intelligence:** Manage up to 4 drones simultaneously. The `DroneOS3` core dynamically handles peer-to-peer heartbeat tracking, telemetry syncing, and failsafes.
-* **Multi-Drone Dashboard:** A beautiful, responsive React-based ground control station (in `mobile/`) that connects to multiple drones via WebSocket. View live synchronized telemetry and artificial horizons for the entire swarm simultaneously in a responsive grid layout.
-* **Hardware-Agnostic Core:** Powered by a clean Adapter pattern. It uses `px4_adapter.py` to talk to MAVSDK and real Pixhawk hardware, and newly features an `airsim_adapter.py` for full 3D Unreal Engine simulation testing using AirSim. It seamlessly falls back to SITL or mock test modes when hardware/simulators aren't present.
-* **Terminal Command Parsing:** Built-in NLP-like terminal controller allows users to parse and execute human-readable drone commands (e.g., "takeoff to 5m, hover for 2 seconds, and land").
-* **Custom UDP/WebSocket Relay:** Ships with a high-performance Python relay (`relay.py`) that bridges UDP MAVLink/JSON telemetry from the drones directly to your browser/mobile app over WebSocket.
-
-
 ## Mobile App Simulation
-
 https://github.com/user-attachments/assets/426d9305-4a38-4753-a019-aa2a98f3f77d
 
 ## AirSim Simulation
-
-
 https://github.com/user-attachments/assets/f3a2a1c6-26ea-4c27-bca7-7f7c4041c44d
 
+## 1. Project Overview
+PhoneOS Swarm (DroneSwarm) is an advanced, distributed autonomous drone operating and control software platform built for real-world, multi-agent drone operations. It is designed to bridge the gap between high-level swarm intelligence and low-level physical flight execution. By actively decoupling intelligent swarm behaviors from the physical flight controller, PhoneOS Swarm introduces a hardware-agnostic architecture. It leverages native hardware capabilities (Pixhawk/MAVSDK) and simulation environments (AirSim) for flight stability, while running an asynchronous, high-performance node layer on companion computers (like Raspberry Pi) and a rich mobile Ground Control Station (GCS).
 
-
-## 🏗️ Architecture
+## 2. Core Architecture
+PhoneOS Swarm utilizes a clear separation of concerns, routing human or autonomous commands through a fast UDP-to-WebSocket relay, into a safety-checked OS environment (DroneOS), and finally to the flight controller.
 
 ```mermaid
 graph TD
     A[Mobile App - React/Capacitor] <-->|WebSocket :8080-8083| B(Relay Server - relay.py)
-    B <-->|UDP :14550-14555| C{DroneOS3 Core}
+    B <-->|UDP :14550-14555| C{DroneOS Core}
     C <-->|gRPC :50051-50054| D[MAVSDK Server]
     D <-->|Serial /dev/serial0| E((PX4 Flight Controller))
 ```
 
-## 🚀 Getting Started
+## 3. Repository Structure
+```text
+PhoneOS_Swarm/
+├── README.md               # Project documentation
+├── DroneOS1/               # DroneOS instance for Drone 1
+├── DroneOS2/               # DroneOS instance for Drone 2
+├── DroneOS3/               # DroneOS instance for Drone 3
+├── DroneOS/                # Base DroneOS core components
+│   ├── adapters/           # Hardware abstraction layer (PX4, AirSim)
+│   ├── configs/            # YAML configuration files
+│   ├── core/               # Core flight, safety, mission, and swarm logic
+│   ├── shared/             # Shared protocols, networking, and message definitions
+│   └── tests/              # Unit and integration tests for DroneOS
+├── deploy/                 # Systemd services and deployment scripts
+├── mobile/                 # React/Capacitor mobile application (PhoneOS GCS)
+├── relay/                  # UDP-to-WebSocket bridge for GCS communication
+├── scripts/                # Helper scripts (e.g., AirSim smoke tests)
+└── start_drone*.py         # Lifecycle managers for specific drone nodes
+```
 
-### 1. Hardware Setup (Raspberry Pi)
-The system is designed to run on a Raspberry Pi connected directly to a Pixhawk flight controller via serial telemetry.
+## 4. System Components
+
+### DroneOS
+DroneOS runs on the companion computer and acts as the brain of the drone.
+* **Flight Controller Adapter:** Translates high-level actions into hardware-specific API calls (`px4_adapter.py` for MAVSDK, `airsim_adapter.py` for Unreal Engine simulation).
+* **Command Handler / Flight Pipeline:** Receives and routes incoming network commands to appropriate subsystems, prioritizing intents based on source.
+* **Flight Manager:** Manages basic flight behaviors (Arm, Disarm, Takeoff, Land, RTL, Move).
+* **Safety System:** Enforces connection timeouts, battery critical levels, and applies horizontal/vertical safety velocity limits.
+* **Mission Manager:** Handles the storage, progression, and execution of complex multi-waypoint missions.
+* **Swarm Management:** Manages peer discovery and heartbeats for multi-drone operations (supporting up to 4 drones natively).
+* **Decision Engine:** Periodically evaluates telemetry and swarm state to make autonomous movement decisions.
+
+### Mobile App (Ground Control Station)
+The PhoneOS GCS is a responsive React-based ground control station.
+* Connects to multiple drones via WebSocket through `relay.py`.
+* Provides a multi-drone dashboard with live synchronized telemetry.
+* Displays artificial horizons for the entire swarm simultaneously in a responsive grid layout.
+
+## 5. Flight Controller Integration
+PhoneOS Swarm uses the Adapter Pattern to interface with flight controllers.
+* **PX4 Adapter:** Utilizes MAVSDK to connect to Pixhawk hardware via serial/USB. Subscribes asynchronously to telemetry streams and translates flight commands.
+* **AirSim Adapter:** Enables full 3D Unreal Engine simulation testing using AirSim, seamlessly falling back to SITL when real hardware isn't present.
+* **Safety Authority:** SwarmOS respects the native flight-controller safety authority. It does not bypass Pixhawk's native safety mechanisms.
+
+## 6. Command Pipeline
+Commands flow through a strict, serialized pipeline (`flight_pipeline.py`) ensuring that only valid, safe actions reach the hardware.
+* **Supported Actions:** ARM, DISARM, TAKEOFF, LAND, RTL, HOVER, MOVE_VELOCITY, GOTO.
+* **Terminal Controller:** A built-in NLP-like terminal controller allows parsing of human-readable commands (e.g., "takeoff to 5m, hover for 2 seconds, and land").
+
+## 7. Safety Architecture
+Safety is handled in complementary layers:
+* **Connection Heartbeats:** Loss of heartbeat triggers an automatic RTL or Land depending on altitude.
+* **Battery Failsafes:** Critical and Low battery failovers built into the HealthMonitor.
+* **Velocity Clamping:** Software safety filters cap horizontal and vertical velocities before they reach the flight controller.
+
+## 8. ARM / TAKEOFF Safety Workflow
+A strict distinction is maintained between Arming and Taking off:
+* **ARM:** Evaluates native pre-arm checks. Physical arm confirmation must be received via telemetry before flight.
+* **TAKEOFF:** Implicitly requires the drone to be armed first. Sets takeoff altitude and issues command to FC.
+
+## 9. Telemetry Pipeline
+Telemetry is continuously streamed from the flight controller to the network via a high-performance UDP/WebSocket Relay.
+* **Pipeline:** Flight Controller -> Adapter -> DroneOS Core -> UDP Broadcast -> Relay -> WebSocket -> Mobile GCS.
+* **Fields Supported:** Latitude, Longitude, Altitude, Velocity, Battery Level, Flight Mode, Armed State, etc.
+
+## 10. Mission System
+Supports distributed mission workflows:
+* **Upload & Management:** JSON-based mission plans are transmitted to the drone and stored locally. Operators can start, stop, pause, and resume execution dynamically.
+
+## 11. Swarm System
+Built for multi-drone coordination (up to 4 drones natively):
+* **Peer-to-Peer Tracking:** Drones exchange heartbeats, telemetry, and future intents to maintain situational awareness.
+* **Collision Avoidance:** Subsystems in the decision engine prevent physical overlaps during dynamic routing.
+
+## 12. Ground Station (Mobile App)
+The modern Node.js/React application provides a comprehensive UI:
+* **Multi-Drone Dashboard:** Live readouts of altitude, speed, battery, and attitude for up to 4 drones.
+* **WebSockets Integration:** High-frequency, low-latency updates via the custom Python relay.
+
+## 13. Communication Architecture
+* **Drone-to-Drone:** Fast, lightweight asynchronous UDP stack (ports 14550-14555).
+* **Drone-to-GCS:** UDP-to-WebSocket bridge (ports 8080-8083).
+* **Serialization:** JSON-based serialization via Pydantic schemas.
+
+## 14. Error Handling
+* **Command Validation:** Incoming network messages are strictly validated.
+* **Hardware Rejections:** Exceptions from MAVSDK are caught, logged, and prevented from crashing the system.
+
+## 15. Configuration
+Configuration is managed via structured YAML files:
+* Ensure `adapter_type` (e.g., `"airsim"` or `"px4"`) is correctly set in `configs/flight.yaml` files based on your environment.
+
+## 16. Installation
+For a Raspberry Pi (or Linux) setup:
 
 ```bash
 # Clone the repository
@@ -60,27 +140,24 @@ cd DroneSwarm
 ./deploy/install.sh 1
 ```
 
-### 2. Running a Drone Node
-Each drone in the swarm uses its own startup script to configure its specific `drone_id`, serial port index, network ports, and initialize the lifecycle manager (which boots MAVSDK, the Relay, and DroneOS3).
+## 17. Running the System
 
+### Running a Drone Node
+Each drone in the swarm uses its own startup script to boot MAVSDK, the Relay, and DroneOS core.
 ```bash
 # Example for Drone 1
 python start_drone1.py
 ```
 
-### 3. Running the Mobile App (GCS)
-The Ground Control Station is a modern Node.js/React application built with Vite.
-
+### Running the Mobile App (GCS)
 ```bash
 cd mobile
 npm install
 npm run dev
 ```
-Once the app is running, go to **Settings > Multi-Drone Connections** and add your drones' IP addresses on their respective WebSocket ports (e.g., 8080, 8081, 8082, 8083).
+Once running, go to **Settings > Multi-Drone Connections** and add your drones' IP addresses on their respective WebSocket ports (e.g., 8080, 8081, 8082, 8083).
 
-### 4. Building the Android APK
-The mobile app uses Capacitor for native packaging. To build the APK for Android:
-
+### Building the Android APK
 ```bash
 cd mobile
 npm run build
@@ -88,31 +165,64 @@ npx cap sync android
 cd android
 ./gradlew assembleDebug
 ```
-The resulting APK will be generated at `mobile/android/app/build/outputs/apk/debug/app-debug.apk`.
+The resulting APK will be at `mobile/android/app/build/outputs/apk/debug/app-debug.apk`.
 
-### 5. Running in Simulation (AirSim)
-You can completely test the swarm logic and mobile app using Microsoft AirSim without any real hardware.
-1. Download and run an AirSim environment (e.g., Blocks).
-2. Copy the provided multivehicle settings file to your Documents: `cp scripts/airsim_settings_example.json ~/Documents/AirSim/settings.json` (on Windows).
-3. Ensure `adapter_type: "airsim"` is set in your `configs/flight.yaml` files.
-4. Run the smoke test to verify connections:
+### Running in Simulation (AirSim)
+1. Download and run an AirSim environment.
+2. Copy the settings: `cp scripts/airsim_settings_example.json ~/Documents/AirSim/settings.json` (on Windows).
+3. Set `adapter_type: "airsim"` in `configs/flight.yaml`.
+4. Run the smoke test:
 ```bash
 python scripts/airsim_smoke_test.py --pkg DroneOS --vehicle Drone1
 ```
 
-## 📂 Project Structure
+## 18. Hardware Setup
+* **Companion Computer:** Raspberry Pi or similar Linux SBC.
+* **Flight Controller:** Pixhawk running PX4 firmware.
+* **Connection:** Serial telemetry link between Pi and Pixhawk.
 
-* `/DroneOS3`: The core Python operating system running on the companion computer (Raspberry Pi).
-* `/mobile`: The React/Capacitor mobile application (PhoneOS GCS).
-* `/relay`: The UDP-to-WebSocket bridge allowing the web app to talk to the drone network.
-* `/start_drone*.py`: Lifecycle managers that boot all required services for a specific drone node.
-* `/deploy`: Systemd services and deployment scripts.
+## 19. ⚠️ SAFETY WARNING
+* Remove propellers during all software, networking, and hardware integration testing.
+* Never test autonomous flight in unsafe areas. Obey all local aviation regulations.
+* Never attempt to bypass flight-controller safety checks. DroneOS is an intelligence layer, not a replacement for a certified flight controller.
 
-## 🛡️ Failsafes and Safety
-DroneOS3 includes an aggressive `SafetyModule` and `HealthMonitor`. It actively monitors:
-- Network Connection loss (triggers RTL/Land based on altitude)
-- Battery limits (Critical and Low battery failovers)
-- Hardware diagnostics (GPS loss, Gyro failures)
+## 20. Testing
+Swarm logic and adapter unit tests can be found in the `/tests/` directories.
+* Real-flight swarm behavior requires physical validation and tuning.
 
-## 📄 License
+## 21. Current Status
+| Component | Status |
+|---|---|
+| DroneOS Architecture | Implemented |
+| PX4/MAVSDK Integration | Implemented |
+| AirSim Integration | Implemented |
+| Telemetry & Command Pipeline | Implemented |
+| React Mobile GCS | Implemented |
+| Swarm Communication | Implemented |
+| Hardware Validation | Requires Physical Testing |
+
+## 22. Known Limitations
+* Real-flight swarm behavior requires physical validation and tuning.
+* GPS data is unavailable indoors; AirSim is recommended for indoor simulated swarm testing.
+
+## 23. Development Principles
+* **Separation of Concerns:** Mobile UI, Networking relay, OS logic, and Hardware adapters are isolated.
+* **Adapter Pattern:** The `IFlightController` interface ensures DroneOS can swap out PX4 for AirSim seamlessly.
+
+## 24. Future Roadmap
+* **Planned:** Integration of advanced visual odometry or RTK GPS for precision swarm formations.
+* **Planned:** Decentralized leaderless consensus algorithms for swarm obstacle avoidance.
+* **Planned:** Enhanced iOS build support for the Capacitor mobile app.
+
+## 25. Contributing
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 26. License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 27. Author / Repository
+Repository: [https://github.com/Debanshu2005/DroneSwarm](https://github.com/Debanshu2005/DroneSwarm)

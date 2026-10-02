@@ -1,6 +1,6 @@
 # Workspace Memory
 This file is maintained automatically by Code Janitor so Claude, Codex, Bob, and any other AI agent can reuse repo context without rescanning everything from scratch.
-Generated: 2026-10-02T03:56:29.604Z
+Generated: 2026-10-02T17:34:54.700Z
 Workspace: PhoneOS_Swarm
 Workspace root: d:\CityGrid\my-project\PhoneOS_Swarm
 Refresh reason: startup
@@ -18,14 +18,14 @@ Structured manifest: workspace.json
 - Graphify graph: not available yet
 - Last activity: 2026-08-29T12:17:18.957Z
 ## Workspace Focus
-- Active file in focus: DroneOS/configs/flight.yaml
+- Active file in focus: DroneOS1/core/flight_pipeline.py
 - Hottest files right now: DroneOS/tests/test_terminal_controller.py (1)
-- Suggested starting points: DroneOS/configs/flight.yaml, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
+- Suggested starting points: DroneOS1/core/flight_pipeline.py, DroneOS/tests/test_terminal_controller.py, .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md
 ## Current Workspace
-- Active file: DroneOS/configs/flight.yaml
-- Tracked files in snapshot: 3829
-- Top-level areas: venv (1780), AirSim (1428), mobile (141), DroneOS (88), DroneOS1 (85), DroneOS2 (84), DroneOS3 (84), [root] (50)
-- Primary file types: .py (1929), [no extension] (219), .hpp (214), .uasset (179), .cpp (126), .png (126), .md (106), .h (98)
+- Active file: DroneOS1/core/flight_pipeline.py
+- Tracked files in snapshot: 3839
+- Top-level areas: venv (1780), AirSim (1428), mobile (141), DroneOS (88), DroneOS1 (85), DroneOS2 (84), DroneOS3 (84), [root] (53)
+- Primary file types: .py (1934), [no extension] (219), .hpp (214), .uasset (179), .cpp (126), .png (126), .md (106), .h (98)
 - Key files: .github/modernize/java-upgrade/.gitignore, .gitignore, .pytest_cache/.gitignore, .pytest_cache/README.md, AirSim/.gitignore, AirSim/AirLib/.gitignore, AirSim/GazeboDrone/README.md, AirSim/MavLinkCom/MavLinkMoCap/Readme.md
 ## Package Snapshot
 - Package metadata unavailable: package.json was not found.
@@ -51,7 +51,7 @@ Structured manifest: workspace.json
 
 ## Git Snapshot
 - Branch: main
-- HEAD: 2026-09-30 05372a9 Update README with simulation sections
+- HEAD: 2026-10-02 99bccf2 feat: updated collision avoidance
 - Working tree summary: clean
 - Working tree: clean
 
@@ -62,8 +62,8 @@ Visibility: public | Default branch: main
 Stars: 1 | Forks: 0 | Open issues: 0
 
 Latest commit on main:
-- 05372a9 by Debanshu Sarkar on 2026-09-30
-  Update README with simulation sections Added sections for Mobile App Simulation and AirSim Simulation with links.
+- 99bccf2 by Debanshu2005 on 2026-10-02
+  feat: updated collision avoidance
 
 URL: https://github.com/Debanshu2005/DroneSwarm
 
