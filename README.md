@@ -30,10 +30,39 @@ PhoneOS Swarm utilizes a clear separation of concerns, routing human or autonomo
 
 ```mermaid
 graph TD
-    A[Mobile App - React/Capacitor] <-->|WebSocket :8080-8083| B(Relay Server - relay.py)
-    B <-->|UDP :14550-14555| C{DroneOS Core}
-    C <-->|gRPC :50051-50054| D[MAVSDK Server]
-    D <-->|Serial /dev/serial0| E((PX4 Flight Controller))
+    subgraph Ground Control Station
+        GCS[Mobile App - React/Capacitor]
+    end
+
+    subgraph Network Bridge
+        Relay[Relay Server - relay.py]
+    end
+
+    subgraph Drone 1 Node
+        OS1[DroneOS Core 1]
+        MAV1[MAVSDK Server 1]
+        FC1((PX4 FC 1))
+    end
+    
+    subgraph Drone 2 Node
+        OS2[DroneOS Core 2]
+        MAV2[MAVSDK Server 2]
+        FC2((PX4 FC 2))
+    end
+
+    GCS <-->|WebSocket :8080| Relay
+    GCS <-->|WebSocket :8081| Relay
+    
+    Relay <-->|UDP :14550| OS1
+    Relay <-->|UDP :14551| OS2
+    
+    OS1 <-->|Peer-to-Peer UDP| OS2
+
+    OS1 <-->|gRPC| MAV1
+    MAV1 <-->|Serial| FC1
+    
+    OS2 <-->|gRPC| MAV2
+    MAV2 <-->|Serial| FC2
 ```
 
 ## 3. Repository Structure
@@ -82,6 +111,31 @@ PhoneOS Swarm uses the Adapter Pattern to interface with flight controllers.
 
 ## 6. Command Pipeline
 Commands flow through a strict, serialized pipeline (`flight_pipeline.py`) ensuring that only valid, safe actions reach the hardware.
+
+```mermaid
+sequenceDiagram
+    participant Operator as Ground Station
+    participant Relay as UDP Relay
+    participant State as FlightStateStore
+    participant Arbiter as Arbiter
+    participant Safety as SafetyFilter
+    participant Writer as CommandWriter
+    participant FC as Flight Controller
+
+    Operator->>Relay: Send MOVE Command (WebSocket)
+    Relay->>State: Forward Command (UDP)
+    State->>State: Store in Active Intents
+    loop Flight Pipeline (10Hz)
+        State->>Arbiter: get_intents()
+        Arbiter->>Arbiter: Prioritize (Safety > Manual > Mission)
+        Arbiter-->>Safety: winning_intent
+        Safety->>Safety: Clamp velocities to safety_limits
+        Safety-->>Writer: safe_intent
+        Writer->>FC: Execute via MAVSDK/AirSim
+        FC-->>Writer: Return execution result
+    end
+```
+
 * **Supported Actions:** ARM, DISARM, TAKEOFF, LAND, RTL, HOVER, MOVE_VELOCITY, GOTO.
 * **Terminal Controller:** A built-in NLP-like terminal controller allows parsing of human-readable commands (e.g., "takeoff to 5m, hover for 2 seconds, and land").
 
@@ -107,6 +161,23 @@ Supports distributed mission workflows:
 
 ## 11. Swarm System
 Built for multi-drone coordination (up to 4 drones natively):
+
+```mermaid
+graph LR
+    subgraph Swarm Network
+        D1[Drone 1]
+        D2[Drone 2]
+        D3[Drone 3]
+    end
+
+    D1 <-->|Heartbeats & Telemetry| D2
+    D2 <-->|Heartbeats & Telemetry| D3
+    D3 <-->|Heartbeats & Telemetry| D1
+    
+    D1 -.->|DroneJoinMessage| D2
+    D2 -.->|SwarmStateMessage| D1
+```
+
 * **Peer-to-Peer Tracking:** Drones exchange heartbeats, telemetry, and future intents to maintain situational awareness.
 * **Collision Avoidance:** Subsystems in the decision engine prevent physical overlaps during dynamic routing.
 
