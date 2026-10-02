@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(leve
 logger = logging.getLogger("PhoneOS_Relay")
 
 class UdpWebsocketRelay:
-    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14551, udp_target_port=14550, udp_broadcast_addr="255.255.255.255", udp_target_host=None, gs_heartbeat_interval=1.0):
+    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14551, udp_target_port=14550, udp_broadcast_addr="255.255.255.255", udp_target_host=None, gs_heartbeat_interval=1.0, udp_target_endpoints=None):
         self.ws_host = ws_host
         self.ws_port = ws_port
         self.udp_bind_host = udp_bind_host
@@ -23,6 +23,12 @@ class UdpWebsocketRelay:
         # None preserves production LAN broadcast.  Simulation supplies a
         # concrete loopback address so a relay reaches only its own DroneOS.
         self.udp_target_host = udp_target_host
+        # Optional static routes let a simulation relay deliver a targeted
+        # command even when the GCS is connected to a different drone's relay.
+        self.udp_target_endpoints = {
+            str(drone_id).strip().lower(): endpoint
+            for drone_id, endpoint in (udp_target_endpoints or {}).items()
+        }
         self.gs_heartbeat_interval = gs_heartbeat_interval
         self.auth_token = os.getenv("RELAY_AUTH_TOKEN")
         self.net_secret = os.getenv("DRONE_NET_SECRET")
@@ -194,16 +200,29 @@ class UdpWebsocketRelay:
         try:
             msg_dict = json.loads(message)
             target_id = msg_dict.get('target_id')
+            route_target_id = target_id.strip().lower() if isinstance(target_id, str) else target_id
             data = json.dumps(self._sign_message_dict(msg_dict)).encode('utf-8')
             if self.trace_network:
                 logger.info(f"TRACE WS_RX ws={self.ws_port} target={target_id} type={msg_dict.get('msg_type')} action={msg_dict.get('action')} cmd_id={msg_dict.get('cmd_id')}")
             
-            if target_id and target_id in self.known_endpoints:
-                # Unicast
-                addr = self.known_endpoints[target_id]
+            if route_target_id == "all" and self.udp_target_endpoints:
+                # Send one copy to every configured simulation DroneOS node.
+                # DroneOS de-duplicates by cmd_id when the GCS has multiple
+                # relay connections open.
+                for addr in dict.fromkeys(self.udp_target_endpoints.values()):
+                    self.transport.sendto(data, addr)
+                    if self.trace_network:
+                        logger.info(f"TRACE UDP_TX udp={self.udp_bind_port} to={addr} route=configured-all")
+                logger.debug(f"Forwarded WS msg ({msg_dict.get('msg_type')}) to all configured endpoints")
+            elif route_target_id and (route_target_id in self.known_endpoints or route_target_id in self.udp_target_endpoints):
+                # Prefer the live endpoint learned from telemetry, then use a
+                # deterministic simulation route if this relay has not yet
+                # observed that drone.
+                addr = self.known_endpoints.get(route_target_id) or self.udp_target_endpoints[route_target_id]
                 self.transport.sendto(data, addr)
+                route = "learned-unicast" if route_target_id in self.known_endpoints else "configured-unicast"
                 if self.trace_network:
-                    logger.info(f"TRACE UDP_TX udp={self.udp_bind_port} to={addr} route=learned-unicast")
+                    logger.info(f"TRACE UDP_TX udp={self.udp_bind_port} to={addr} route={route}")
                 logger.debug(f"Forwarded WS msg ({msg_dict.get('msg_type')}) via Unicast to {addr}")
             else:
                 # Broadcast
@@ -219,7 +238,7 @@ class UdpWebsocketRelay:
             logger.error(f"Error forwarding WS to UDP: {e}")
 
     async def _send_relay_groundstation_heartbeat(self) -> bool:
-        if not self.transport:
+        if not self.transport or not self.clients:
             return False
 
         msg = {
@@ -251,6 +270,28 @@ class UdpWebsocketRelay:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        if os.name == 'nt':
+            try:
+                import ctypes
+                SIO_UDP_CONNRESET = 0x9800000C
+                in_buffer = ctypes.c_uint32(0)
+                bytes_returned = ctypes.c_uint32(0)
+                ws2_32 = ctypes.windll.ws2_32
+                result = ws2_32.WSAIoctl(
+                    sock.fileno(),
+                    SIO_UDP_CONNRESET,
+                    ctypes.byref(in_buffer),
+                    ctypes.sizeof(in_buffer),
+                    None,
+                    0,
+                    ctypes.byref(bytes_returned),
+                    None,
+                    None
+                )
+                if result != 0:
+                    logger.warning(f"WSAIoctl SIO_UDP_CONNRESET failed: {ws2_32.WSAGetLastError()}")
+            except Exception as e:
+                logger.warning(f"Could not disable SIO_UDP_CONNRESET: {e}")
         try:
             sock.bind((self.udp_bind_host, self.udp_bind_port))
         except OSError as e:
@@ -273,6 +314,21 @@ class UdpWebsocketRelay:
             if self._heartbeat_task:
                 self._heartbeat_task.cancel()
 
+
+def parse_udp_target_endpoint(value: str):
+    """Parse a CLI route in the form drone_id=host:port."""
+    drone_id, separator, endpoint = value.partition("=")
+    host, port_separator, port_text = endpoint.rpartition(":")
+    if not separator or not drone_id or not port_separator or not host:
+        raise argparse.ArgumentTypeError("expected drone_id=host:port")
+    try:
+        port = int(port_text)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError("endpoint port must be an integer") from e
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("endpoint port must be between 1 and 65535")
+    return drone_id, (host, port)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PhoneOS WebSocket-to-UDP Relay")
     parser.add_argument("--ws-host", type=str, default="0.0.0.0", help="WebSocket host/interface to listen on")
@@ -281,6 +337,7 @@ if __name__ == "__main__":
     parser.add_argument("--udp-bind-host", type=str, default="0.0.0.0", help="UDP host/interface to bind")
     parser.add_argument("--udp-target-port", type=int, default=14550, help="UDP port of DroneOS to broadcast to")
     parser.add_argument("--udp-target-host", type=str, default=None, help="Optional unicast host for DroneOS (used by simulation)")
+    parser.add_argument("--udp-target", action="append", type=parse_udp_target_endpoint, default=[], metavar="DRONE=HOST:PORT", help="Static targeted UDP route (repeatable; used by simulation)")
     parser.add_argument("--gs-heartbeat-interval", type=float, default=1.0, help="Seconds between relay ground-station heartbeats while a WebSocket client is connected")
     args = parser.parse_args()
 
@@ -291,7 +348,8 @@ if __name__ == "__main__":
         udp_bind_port=args.udp_bind_port,
         udp_target_port=args.udp_target_port,
         udp_target_host=args.udp_target_host,
-        gs_heartbeat_interval=args.gs_heartbeat_interval
+        gs_heartbeat_interval=args.gs_heartbeat_interval,
+        udp_target_endpoints=dict(args.udp_target)
     )
     try:
         asyncio.run(relay.start())

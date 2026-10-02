@@ -6,6 +6,7 @@ from DroneOS3.shared.protocol.messages import HeartbeatMessage, TelemetryMessage
 
 logger = setup_logger("TelemetryPublisher")
 
+# In sim profile, publish telemetry at 10 Hz so collision avoidance sees fresh positions.
 _SIM_TELEMETRY_INTERVAL = 0.1
 
 

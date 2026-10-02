@@ -2,21 +2,22 @@ adapter_type: airsim
 airsim_host: 127.0.0.1
 airsim_port: 41451
 takeoff_altitude: 10.0
-max_velocity: 5.0
+max_velocity: 15.0
 pipeline_hz: 10.0
 collision_avoidance:
   enabled: true
-  min_horizontal_distance: 2.0
+  min_horizontal_distance: 4.0
   min_vertical_distance: 2.0
-  warning_distance: 4.5
-  emergency_distance: 1.5
+  warning_distance: 6.0
+  emergency_distance: 2.0
   neighbor_timeout_sec: 3.0
   lookahead_sec: 3.0
-  avoidance_speed: 4.0
-  emergency_speed: 5.0
+  avoidance_speed: 5.0
+  emergency_speed: 8.0
   max_peer_age_sec: 2.5
   ground_altitude_m: 0.5
 formation:
+  spacing: 15.0
   velocity_gain: 1.0
   min_formation_separation_m: 3.0
 sim:

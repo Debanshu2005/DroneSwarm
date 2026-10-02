@@ -54,7 +54,9 @@ export function evaluatePreflightChecklist(drone) {
 export function evaluateTelemetryFreshness(drone) {
     if (!drone) return 'OFFLINE';
     const now = Date.now();
-    const lastSeen = drone.lastSeen || 0;
+    // Heartbeats prove the connection is open, but only telemetry proves that
+    // the position displayed to the operator is current.
+    const lastSeen = drone.lastTelemetry || drone.lastSeen || 0;
     
     if (drone.status === 'OFFLINE' || (now - lastSeen) > 8000) return 'OFFLINE';
     if ((now - lastSeen) > 4000) return 'STALE';

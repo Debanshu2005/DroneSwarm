@@ -219,6 +219,20 @@ export const DroneProvider = ({ children }) => {
       if (msg.sender_id && msg.sender_id.startsWith("drone")) {
         setDrones(prev => {
           const existing = prev[msg.sender_id] || {};
+          // Relays and reconnecting WebSockets can deliver an older UDP
+          // datagram after a newer one. Never let that move a drone backwards
+          // on the map or refresh its telemetry liveness.
+          const incomingTimestamp = Number(msg.telemetry?.timestamp ?? msg.timestamp);
+          const currentTimestamp = Number(existing.telemetryTimestamp);
+          if (Number.isFinite(incomingTimestamp) && Number.isFinite(currentTimestamp) && incomingTimestamp < currentTimestamp) {
+            console.debug("Ignoring out-of-order telemetry", {
+              droneId: msg.sender_id,
+              incomingTimestamp,
+              currentTimestamp,
+            });
+            return prev;
+          }
+
           let path = existing.path || [];
           if (msg.telemetry?.latitude && msg.telemetry?.longitude) {
             path = [...path, [msg.telemetry.latitude, msg.telemetry.longitude]].slice(-100);
@@ -245,6 +259,7 @@ export const DroneProvider = ({ children }) => {
               ...existing,
               id: msg.sender_id,
               telemetry: sanitizedTelemetry,
+              telemetryTimestamp: Number.isFinite(incomingTimestamp) ? incomingTimestamp : existing.telemetryTimestamp,
               lastSeen: now,
               lastTelemetry: now,
               path,

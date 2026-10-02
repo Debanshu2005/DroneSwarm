@@ -163,3 +163,32 @@ def test_parity_squadron_shapes_anchor_relative_equals_raw(pkg_name):
             assert rel[:2] == pytest.approx(raw[:2], abs=1e-9), (
                 f"{pkg_name} {ft} slot {slot}: anchor-relative should equal raw"
             )
+
+
+@pytest.mark.parametrize("file_path", [
+    "core/collision_avoidance.py",
+    "core/flight_pipeline.py",
+    "core/decision_engine.py"
+])
+def test_parity_file_contents(file_path):
+    import os
+    import re
+    import difflib
+    
+    with open(f"DroneOS/{file_path}", "r", encoding="utf-8") as f:
+        src_content = f.read()
+    src_lines = src_content.splitlines()
+
+    for target in ["DroneOS1", "DroneOS2", "DroneOS3"]:
+        with open(f"{target}/{file_path}", "r", encoding="utf-8") as f:
+            tgt_content = f.read()
+            
+        tgt_content = re.sub(f'{target}\\.', 'DroneOS.', tgt_content)
+        tgt_content = re.sub(f'from {target}\\b', 'from DroneOS', tgt_content)
+        tgt_content = re.sub(f'import {target}\\b', 'import DroneOS', tgt_content)
+        
+        tgt_lines = tgt_content.splitlines()
+        
+        diff = list(difflib.unified_diff(src_lines, tgt_lines, fromfile=f"DroneOS/{file_path}", tofile=f"{target}/{file_path}"))
+        
+        assert not diff, f"File {file_path} differs between DroneOS and {target} after normalization:\n" + "\n".join(diff)

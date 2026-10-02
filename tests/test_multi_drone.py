@@ -91,7 +91,7 @@ class TestMultiDrone(unittest.IsolatedAsyncioTestCase):
                         
                     await asyncio.sleep(1.0)
                 logging.info(f"{drone_id} stopping simulation")
-        except ConnectionRefusedError:
+        except (ConnectionRefusedError, TimeoutError, OSError):
             self.skipTest("Relay not running, skipping multi-drone simulation")
             
     async def test_multi_drone_connections(self):

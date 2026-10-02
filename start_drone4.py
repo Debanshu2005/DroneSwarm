@@ -63,37 +63,37 @@ def main():
     import psutil
     is_sim = os.environ.get("DRONEOS_PROFILE") == "sim"
     server_port = 50051
+    sim_ws_port = "8084"  # Drone 4 relay WS port
+    drone_udp_port = 14553  # Drone 4 DroneOS UDP listen port
+
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmdline = proc.info.get('cmdline') or []
+            cmdline_str = ' '.join(cmdline)
             if not is_sim and proc.info['name'] and 'mavsdk_server' in proc.info['name']:
                 if cmdline and any(str(server_port) in arg for arg in cmdline):
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
                     proc.kill()
-            elif cmdline and 'relay.py' in ' '.join(cmdline) and '8080' in ' '.join(cmdline):
-                if is_sim: continue
+            elif cmdline and 'relay.py' in cmdline_str:
+                if is_sim and sim_ws_port not in cmdline_str:
+                    continue  # Not our relay, skip
                 print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
                 proc.kill()
         except Exception:
             pass
 
-    time.sleep(1.0)
+    # Kill any process still holding our DroneOS UDP port (zombie guard).
+    for proc in psutil.process_iter(['pid']):
+        try:
+            for conn in proc.net_connections(kind='udp'):
+                if conn.laddr.port == drone_udp_port:
+                    print(f"[{drone_cfg.drone_id}] Releasing UDP port {drone_udp_port} held by zombie PID {proc.pid}")
+                    proc.kill()
+                    break
+        except Exception:
+            pass
 
-    if not is_sim:
-        # 2. Spawn MAVSDK Server on unique port
-        mavsdk_bin = get_mavsdk_server_path()
-        print(f"[{drone_cfg.drone_id}] Starting {mavsdk_bin} on port {server_port}")
-    
-        mavsdk_proc = subprocess.Popen(
-            [mavsdk_bin, "-p", str(server_port), resolved_conn],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-    
-        if not wait_for_port(server_port):
-            print(f"[{drone_cfg.drone_id}] WARNING: MAVSDK server is not listening on port {server_port} yet. It may be waiting for the flight controller to boot. Continuing...")
-    
-        print(f"[{drone_cfg.drone_id}] MAVSDK server ready. Starting Relay...")
+    time.sleep(1.0)
 
     # 3. Spawn Relay on default ports (WS 8080, UDP 14550/14551)
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
@@ -101,22 +101,14 @@ def main():
     if is_sim:
         relay_args = ["--ws-host", "0.0.0.0", "--ws-port", "8084",
                       "--udp-bind-host", "127.0.0.1", "--udp-bind-port", "14653",
-                      "--udp-target-host", "127.0.0.1", "--udp-target-port", "14553"]
+                      "--udp-target-host", "127.0.0.1", "--udp-target-port", "14553",
+                      "--udp-target", "drone1=127.0.0.1:14550",
+                      "--udp-target", "drone2=127.0.0.1:14551",
+                      "--udp-target", "drone3=127.0.0.1:14552",
+                      "--udp-target", "drone4=127.0.0.1:14553"]
     relay_proc = subprocess.Popen(
         [sys.executable, str(relay_script)] + relay_args
     )
-
-    if not is_sim:
-        # 4. Monkey-patch mavsdk.System so DroneOS3 connects to the already-running
-        #    mavsdk_server on server_port WITHOUT spawning a new one.
-        import mavsdk
-        old_init = mavsdk.System.__init__
-        def patched_init(self, *args, **kwargs):
-            kwargs['port'] = server_port
-            old_init(self, *args, **kwargs)
-        mavsdk.System.__init__ = patched_init
-
-    
 
     # 5. Run the DroneOS3 application
     from DroneOS3.main import DroneOSApp

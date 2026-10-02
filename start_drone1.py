@@ -45,6 +45,26 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
     return conn_str
 
 
+def wait_for_relay_ready(relay_proc, host: str, port: int, timeout: float = 5.0) -> None:
+    """Fail fast if a stale relay owns this drone's WebSocket endpoint."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        exit_code = relay_proc.poll()
+        if exit_code is not None:
+            raise RuntimeError(f"Relay exited before becoming ready (exit code {exit_code}).")
+        try:
+            with socket.create_connection((host, port), timeout=0.2):
+                # Do not mistake an older listener for the child we just spawned.
+                time.sleep(0.2)
+                if relay_proc.poll() is None:
+                    return
+        except OSError:
+            pass
+        time.sleep(0.1)
+    relay_proc.terminate()
+    raise RuntimeError(f"Relay did not listen on {host}:{port} within {timeout:.1f}s.")
+
+
 def main():
     config_dir = Path(__file__).resolve().parent / "DroneOS" / "configs"
     drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
@@ -62,20 +82,39 @@ def main():
     import psutil
     is_sim = os.environ.get("DRONEOS_PROFILE") == "sim"
     server_port = 50051
+    sim_ws_port = "8081"  # Drone 1 relay WS port
+    drone_udp_port = 14550  # Drone 1 DroneOS UDP listen port
+
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmdline = proc.info.get('cmdline') or []
+            cmdline_str = ' '.join(cmdline)
             if not is_sim and proc.info['name'] and 'mavsdk_server' in proc.info['name']:
                 if cmdline and any(str(server_port) in arg for arg in cmdline):
                     print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
                     proc.kill()
-            elif cmdline and 'relay.py' in ' '.join(cmdline) and 'DroneOS' in ' '.join(cmdline):
-                if is_sim: continue
+            elif cmdline and 'relay.py' in cmdline_str:
+                if is_sim and sim_ws_port not in cmdline_str:
+                    continue  # Not our relay, skip
                 print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
                 proc.kill()
         except Exception:
             pass
-            
+
+    # Kill any process still holding our DroneOS UDP port (zombie guard).
+    # This is the primary cause of "no_reply": a stale DroneOS process holds
+    # the port but can't process commands, while the new instance silently fails
+    # to bind and never receives any UDP traffic.
+    for proc in psutil.process_iter(['pid']):
+        try:
+            for conn in proc.net_connections(kind='udp'):
+                if conn.laddr.port == drone_udp_port:
+                    print(f"[{drone_cfg.drone_id}] Releasing UDP port {drone_udp_port} held by zombie PID {proc.pid}")
+                    proc.kill()
+                    break
+        except Exception:
+            pass
+
     time.sleep(1.0)
     
     print(f"[{drone_cfg.drone_id}] Starting Relay...")
@@ -86,13 +125,18 @@ def main():
     if is_sim:
         relay_args = ["--ws-host", "0.0.0.0", "--ws-port", "8081",
                       "--udp-bind-host", "127.0.0.1", "--udp-bind-port", "14650",
-                      "--udp-target-host", "127.0.0.1", "--udp-target-port", "14550"]
+                      "--udp-target-host", "127.0.0.1", "--udp-target-port", "14550",
+                      "--udp-target", "drone1=127.0.0.1:14550",
+                      "--udp-target", "drone2=127.0.0.1:14551",
+                      "--udp-target", "drone3=127.0.0.1:14552",
+                      "--udp-target", "drone4=127.0.0.1:14553"]
     relay_proc = subprocess.Popen(
         [sys.executable, str(relay_script)] + relay_args,
         stdout=None if os.environ.get("DRONEOS_DIAGNOSTIC_TRACE") else subprocess.DEVNULL,
         stderr=None if os.environ.get("DRONEOS_DIAGNOSTIC_TRACE") else subprocess.DEVNULL
     )
-    
+    if is_sim:
+        wait_for_relay_ready(relay_proc, "127.0.0.1", int(sim_ws_port))
 
     
     # 5. Run the DroneOS application

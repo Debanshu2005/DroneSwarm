@@ -29,7 +29,7 @@ from DroneOS1.core.diagnostics import ConfigurationValidator, SystemHealthReport
 from DroneOS1.shared.config.loader import load_yaml_config
 from DroneOS1.shared.config.models import DroneConfig, NetworkConfig, FlightConfig
 
-logger = setup_logger("DroneOS1_Main")
+logger = setup_logger("DroneOS_Main")
 
 class DroneOSApp:
     def __init__(self):
@@ -480,19 +480,27 @@ class DroneOSApp:
             await asyncio.sleep(1.0)
 
     async def run(self) -> None:
-        logger.info(f"Starting DroneOS1 Node: {self.node_id}")
-        logger.info("STARTUP package=DroneOS1 drone_id=%s", self.node_id)
+        logger.info(f"Starting DroneOS Node: {self.node_id}")
+        logger.info("STARTUP package=DroneOS drone_id=%s", self.node_id)
         self._running = True
         self._install_signal_handlers()
         
         try:
             connected = await self.flight_controller.connect()
             if not connected:
-                logger.error("Could not connect to flight controller initially. Will continue starting DroneOS1 and retry later.")
+                logger.error("Could not connect to flight controller initially. Will continue starting DroneOS and retry later.")
         except Exception as e:
-            logger.error(f"Flight controller connection error during startup: {e}. DroneOS1 will continue.")
+            logger.error(f"Flight controller connection error during startup: {e}. DroneOS will continue.")
 
-        await self.network.start()
+        try:
+            await self.network.start()
+        except OSError as e:
+            logger.critical(
+                f"FATAL: Cannot bind UDP port {self.network_cfg.port} - another process may be holding it. "
+                f"Stop all DroneOS instances and retry. Error: {e}"
+            )
+            self._running = False
+            raise
         
         import logging
         from DroneOS1.shared.utils.remote_log_handler import RemoteLogHandler
@@ -550,7 +558,7 @@ class DroneOSApp:
 
         self._dispatch_task(_delayed_rejoin())
         
-        logger.info("DroneOS1 is running. Press Ctrl+C to stop.")
+        logger.info("DroneOS is running. Press Ctrl+C to stop.")
         
         try:
             while self._running:
@@ -594,4 +602,4 @@ if __name__ == "__main__":
         # Note: In a full implementation, we would await app.stop() gracefully
         # but since asyncio.run is closing, we just log here. 
         # App internal loop catches the cancel.
-        logger.info("DroneOS1 shutdown complete.")
+        logger.info("DroneOS shutdown complete.")

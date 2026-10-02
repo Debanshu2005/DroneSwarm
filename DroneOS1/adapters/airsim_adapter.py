@@ -375,7 +375,6 @@ class AirSimFlightController(IFlightController):
 
     async def hover(self, force: bool = False) -> bool:
         if not self._connected or self.client is None: return False
-        # Do not interrupt an active LAND or RTL unless the caller explicitly forces it
         if self._mode in ("LAND", "RTL") and not force:
             return True
         try:

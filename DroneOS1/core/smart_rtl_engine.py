@@ -72,4 +72,3 @@ class SmartRtlEngine:
                 params={"lat": target_lat, "lon": target_lon, "alt": target_alt, "yaw": 0.0}
             )
 
-

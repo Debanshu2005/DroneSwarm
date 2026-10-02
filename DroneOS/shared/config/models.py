@@ -63,7 +63,6 @@ class FlightConfig(BaseModel):
     safety_limits: Optional[SafetyLimitsConfig] = None
     smart_rtl: Optional[SmartRtlConfig] = None
     sim: Optional[SimFaultConfig] = None
-    formation: Optional[FormationConfig] = None
 
 class SafetyConfig(BaseModel):
     low_battery_threshold: float = 20.0

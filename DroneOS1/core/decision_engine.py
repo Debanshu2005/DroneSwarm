@@ -58,6 +58,7 @@ class LocalDecisionEngine:
             return
 
         # 1. Collect ALL fresh peer telemetry — formation membership does NOT exempt a peer.
+        # CA is a hard safety layer and must evaluate every airborne peer.
         peer_telemetry = {}
         my_id = self.swarm.identity.drone_id
         for peer_id in self.swarm.registry.get_all_peers():
@@ -67,7 +68,7 @@ class LocalDecisionEngine:
             if state and state.telemetry is not None:
                 peer_telemetry[peer_id] = state.telemetry
 
-        # 2. CA diagnostics
+        # 2. CA diagnostics — log what CA is about to receive
         logger.info("CA_INPUT self=%s peers=%d", my_id, len(peer_telemetry))
         if peer_telemetry and current_telemetry.latitude is not None:
             now = time.time()
@@ -101,6 +102,14 @@ class LocalDecisionEngine:
         )
 
         if state != "NORMAL":
+            if correction and getattr(self.config, "max_velocity", None):
+                max_v = float(self.config.max_velocity)
+                speed = math.hypot(correction.get("north", 0.0), correction.get("east", 0.0))
+                if speed > max_v:
+                    scale = max_v / speed
+                    correction["north"] *= scale
+                    correction["east"] *= scale
+
             mode = current_telemetry.flight_mode or "UNKNOWN"
             log_str = (
                 f"SAFETY INTERVENTION | state: {state} | "
@@ -108,7 +117,20 @@ class LocalDecisionEngine:
                 f"dist: {dist:.2f}m | mode: {mode} | ts: {time.time()} | reason: Minimum separation breached"
             )
             if state == "WARNING":
-                logger.warning(log_str + " | action: NONE (Logging)")
+                if correction:
+                    logger.warning(log_str + " | action: WARNING_MOVE")
+                    logger.info(
+                        "CA_AVOIDANCE peer=%s north=%.3f east=%.3f down=%.3f",
+                        threat_peer,
+                        correction.get("north", 0.0),
+                        correction.get("east", 0.0),
+                        correction.get("down", 0.0),
+                    )
+                    intent = FlightIntent(IntentSource.COLLISION, IntentAction.MOVE_VELOCITY_NED, ttl_seconds=1.0, params=correction)
+                    self.state_store.submit_intent(intent)
+                    return
+                else:
+                    logger.warning(log_str + " | action: NONE (Logging)")
             elif state == "AVOIDANCE":
                 logger.warning(log_str + " | action: EVASIVE_MOVE")
                 if correction:
@@ -140,10 +162,53 @@ class LocalDecisionEngine:
 
         # 4. Proceed with Formation Execution
         if self.nav.flight_manager.formation_params:
+            params = self.nav.flight_manager.formation_params
+            slot_assignments = params.get("slot_assignments", {})
+            my_slot = slot_assignments.get(my_id, "?")
+            logger.info("FORMATION_ACTIVE drone=%s slot=%s", my_id, my_slot)
+
+            # Log anchor telemetry
+            anchor_id = None
+            for did, s in slot_assignments.items():
+                if int(s) == 0:
+                    anchor_id = did
+                    break
+            if anchor_id and anchor_id != my_id:
+                anchor_peer = self.swarm.registry.get_peer(anchor_id)
+                if anchor_peer and anchor_peer.last_position_time is not None:
+                    age = time.time() - anchor_peer.last_position_time
+                    logger.info(
+                        "FORMATION_ANCHOR drone=%s anchor=%s lat=%s lon=%s age=%.3fs",
+                        my_id, anchor_id, anchor_peer.lat, anchor_peer.lon, age
+                    )
+                else:
+                    logger.warning(
+                        "FORMATION_ANCHOR drone=%s anchor=%s MISSING or no position",
+                        my_id, anchor_id
+                    )
+
+            # Log peer telemetry ages
+            formation_members = params.get("members", list(slot_assignments.keys()))
+            now = time.time()
+            peer_ages = []
+            for pid in formation_members:
+                if pid == my_id:
+                    continue
+                p = self.swarm.registry.get_peer(pid)
+                if p and p.last_position_time is not None:
+                    peer_ages.append(f"{pid}:{now - p.last_position_time:.2f}s")
+                else:
+                    peer_ages.append(f"{pid}:MISSING")
+            logger.info("FORMATION_PEERS drone=%s peers=%s", my_id, ",".join(peer_ages) if peer_ages else "none")
+
             intent = self.formation_engine.compute_intent(
                 current_telemetry,
                 peer_telemetry,
-                self.nav.flight_manager.formation_params
+                params
+            )
+            logger.info(
+                "FORMATION_INTENT drone=%s slot=%s action=%s params=%s",
+                my_id, my_slot, intent.action.value, intent.params
             )
             if intent:
                 self.state_store.submit_intent(intent)

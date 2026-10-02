@@ -28,12 +28,14 @@ The simulation-only `network.sim.yaml` overlays provide deterministic loopback r
 
 | Drone | DroneOS UDP | Relay UDP input | WebSocket |
 | --- | --- | --- | --- |
-| Drone1 | `127.0.0.1:14550` | `127.0.0.1:14650` | `ws://<Windows-LAN-IP>:8084` |
-| Drone2 | `127.0.0.1:14551` | `127.0.0.1:14651` | `ws://<Windows-LAN-IP>:8081` |
-| Drone3 | `127.0.0.1:14552` | `127.0.0.1:14652` | `ws://<Windows-LAN-IP>:8082` |
-| Drone4 | `127.0.0.1:14553` | `127.0.0.1:14653` | `ws://<Windows-LAN-IP>:8083` |
+| Drone1 | `127.0.0.1:14550` | `127.0.0.1:14650` | `ws://<Windows-LAN-IP>:8081` |
+| Drone2 | `127.0.0.1:14551` | `127.0.0.1:14651` | `ws://<Windows-LAN-IP>:8082` |
+| Drone3 | `127.0.0.1:14552` | `127.0.0.1:14652` | `ws://<Windows-LAN-IP>:8083` |
+| Drone4 | `127.0.0.1:14553` | `127.0.0.1:14653` | `ws://<Windows-LAN-IP>:8084` |
 
-Each node sends its heartbeat/telemetry to its three peers and its own relay; each relay unicast-forwards GCS traffic only to its matching DroneOS endpoint. AirSim remains at `127.0.0.1:41451`.
+Each node sends its heartbeat/telemetry to its three peers and its own relay. In simulation, every relay is also given deterministic routes to all four DroneOS endpoints, so commands work even if the GCS is connected to only one relay. AirSim remains at `127.0.0.1:41451`.
+
+`launch_sim.bat` clears old simulation processes before starting the swarm. Use it rather than launching individual starter scripts after an interrupted run; an old relay or DroneOS process can otherwise keep a UDP port and make telemetry appear healthy while commands are delivered to the stale process.
 
 Run the launch script from the root of the repository:
 *   **Windows**: `sim\launch_sim.bat`

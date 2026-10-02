@@ -102,6 +102,14 @@ class LocalDecisionEngine:
         )
 
         if state != "NORMAL":
+            if correction and getattr(self.config, "max_velocity", None):
+                max_v = float(self.config.max_velocity)
+                speed = math.hypot(correction.get("north", 0.0), correction.get("east", 0.0))
+                if speed > max_v:
+                    scale = max_v / speed
+                    correction["north"] *= scale
+                    correction["east"] *= scale
+
             mode = current_telemetry.flight_mode or "UNKNOWN"
             log_str = (
                 f"SAFETY INTERVENTION | state: {state} | "
@@ -109,7 +117,20 @@ class LocalDecisionEngine:
                 f"dist: {dist:.2f}m | mode: {mode} | ts: {time.time()} | reason: Minimum separation breached"
             )
             if state == "WARNING":
-                logger.warning(log_str + " | action: NONE (Logging)")
+                if correction:
+                    logger.warning(log_str + " | action: WARNING_MOVE")
+                    logger.info(
+                        "CA_AVOIDANCE peer=%s north=%.3f east=%.3f down=%.3f",
+                        threat_peer,
+                        correction.get("north", 0.0),
+                        correction.get("east", 0.0),
+                        correction.get("down", 0.0),
+                    )
+                    intent = FlightIntent(IntentSource.COLLISION, IntentAction.MOVE_VELOCITY_NED, ttl_seconds=1.0, params=correction)
+                    self.state_store.submit_intent(intent)
+                    return
+                else:
+                    logger.warning(log_str + " | action: NONE (Logging)")
             elif state == "AVOIDANCE":
                 logger.warning(log_str + " | action: EVASIVE_MOVE")
                 if correction:

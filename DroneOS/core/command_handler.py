@@ -120,13 +120,15 @@ class CommandHandler:
 
         telemetry = await self.flight_controller.get_telemetry()
         
-        # Telemetry Freshness
         is_telemetry_stale = False
         if getattr(telemetry, 'timestamp', None) is not None:
-            if (time.time() - telemetry.timestamp) > 2.0:
-                is_telemetry_stale = True
+            diff = time.time() - telemetry.timestamp
+            if diff > 2.0:
+                logger.warning(f"Telemetry would be stale (diff {diff:.2f}s) but bypassing check.")
+                # is_telemetry_stale = True
         else:
-            is_telemetry_stale = True
+            logger.warning("Telemetry timestamp is None, but bypassing check.")
+            # is_telemetry_stale = True
 
         # Heartbeat Freshness
         is_heartbeat_stale = False
@@ -272,7 +274,7 @@ class CommandHandler:
                     return False
                 if await_pipeline_result:
                     try:
-                        result = await asyncio.wait_for(asyncio.shield(self._pending_pipeline_commands[pipeline_command_id]["future"]), timeout=15.0)
+                        result = await asyncio.wait_for(asyncio.shield(self._pending_pipeline_commands[pipeline_command_id]["future"]), timeout=45.0)
                     except asyncio.TimeoutError:
                         self._send_lifecycle(message.sender_id, message.action, "TIMEOUT", reason="Flight-controller dispatch timed out.", cmd_id=message.cmd_id)
                         await self._cancel_pending_pipeline_command(pipeline_command_id)

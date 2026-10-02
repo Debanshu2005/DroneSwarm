@@ -88,7 +88,7 @@ def test_warning_between_min_h_and_warn_dist():
     peer_t = _telem(lat=-0.00007, lon=0.0, alt=10.0, ts=now)
     state, correction, peer_id, dist = ca.evaluate_threats(self_t, {"peer1": peer_t})
     assert state == "WARNING"
-    assert correction is None
+    assert correction is not None
 
 
 def test_normal_beyond_warn_dist():

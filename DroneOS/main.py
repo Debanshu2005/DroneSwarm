@@ -492,7 +492,15 @@ class DroneOSApp:
         except Exception as e:
             logger.error(f"Flight controller connection error during startup: {e}. DroneOS will continue.")
 
-        await self.network.start()
+        try:
+            await self.network.start()
+        except OSError as e:
+            logger.critical(
+                f"FATAL: Cannot bind UDP port {self.network_cfg.port} - another process may be holding it. "
+                f"Stop all DroneOS instances and retry. Error: {e}"
+            )
+            self._running = False
+            raise
         
         import logging
         from DroneOS.shared.utils.remote_log_handler import RemoteLogHandler

@@ -103,6 +103,33 @@ class UdpNetworkAdapter(INetworkAdapter):
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         
+        # Disable WSAECONNRESET on Windows to prevent asyncio DatagramProtocol from crashing
+        # when sending to a disconnected UDP peer (ICMP Port Unreachable).
+        if os.name == 'nt':
+            try:
+                import ctypes
+                SIO_UDP_CONNRESET = 0x9800000C
+                in_buffer = ctypes.c_uint32(0)
+                bytes_returned = ctypes.c_uint32(0)
+                ws2_32 = ctypes.windll.ws2_32
+                result = ws2_32.WSAIoctl(
+                    sock.fileno(),
+                    SIO_UDP_CONNRESET,
+                    ctypes.byref(in_buffer),
+                    ctypes.sizeof(in_buffer),
+                    None,
+                    0,
+                    ctypes.byref(bytes_returned),
+                    None,
+                    None
+                )
+                if result != 0:
+                    logger.warning(f"WSAIoctl SIO_UDP_CONNRESET failed: {ws2_32.WSAGetLastError()}")
+            except Exception as e:
+                logger.warning(f"Could not disable SIO_UDP_CONNRESET: {e}")
+
+
+        
         try:
             sock.bind((self.host, self.port))
         except OSError as e:
@@ -151,6 +178,8 @@ class UdpNetworkAdapter(INetworkAdapter):
             data = self.serializer.serialize(self._sign_message(message))
             
             if self.configured_peer_endpoints:
+                # Simulation uses unique loopback ports.  Send a copy to each
+                # peer DroneOS node and to this node's relay deterministically.
                 for addr in dict.fromkeys(self.configured_peer_endpoints):
                     self.transport.sendto(data, addr)
                     if self.trace_network:

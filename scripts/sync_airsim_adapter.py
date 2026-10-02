@@ -13,6 +13,12 @@ def sync():
         ("DroneOS/tests/test_sim_config.py", "tests/test_sim_config.py"),
         ("DroneOS/main.py", "main.py"),
         ("DroneOS/shared/config/profile.py", "shared/config/profile.py"),
+        ("DroneOS/core/flight_pipeline.py", "core/flight_pipeline.py"),
+        ("DroneOS/core/decision_engine.py", "core/decision_engine.py"),
+        ("DroneOS/core/collision_avoidance.py", "core/collision_avoidance.py"),
+        ("DroneOS/core/smart_rtl_engine.py", "core/smart_rtl_engine.py"),
+        ("DroneOS/core/telemetry_publisher.py", "core/telemetry_publisher.py"),
+        ("DroneOS/shared/communication/network_node.py", "shared/communication/network_node.py"),
     ]
 
     targets = ["DroneOS1", "DroneOS2", "DroneOS3"]
@@ -30,6 +36,8 @@ def sync():
             
             # Rewrite DroneOS. to Target.
             dst_content = re.sub(r'DroneOS\.', f'{target}.', src_content)
+            dst_content = re.sub(r'from DroneOS\b', f'from {target}', dst_content)
+            dst_content = re.sub(r'import DroneOS\b', f'import {target}', dst_content)
             
             if os.path.exists(dst_path):
                 with open(dst_path, "r", encoding="utf-8") as f:
