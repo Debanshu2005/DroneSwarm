@@ -137,7 +137,46 @@ sequenceDiagram
 ```
 
 * **Supported Actions:** ARM, DISARM, TAKEOFF, LAND, RTL, HOVER, MOVE_VELOCITY, GOTO.
-* **Terminal Controller:** A built-in NLP-like terminal controller allows parsing of human-readable commands (e.g., "takeoff to 5m, hover for 2 seconds, and land").
+* **Terminal Controller:** A built-in NLP-like terminal controller allows parsing of human-readable commands.
+
+### NLP Terminal Commands Reference
+
+The NLP terminal accepts natural English language or compact forms. **Note:** when taking off or maneuvering near the ground, specify an altitude to avoid safety guard rejections. When assembling a swarm formation, the minimum allowed spacing is `12m` due to collision avoidance safety guards.
+
+**Natural English Examples:**
+* `take off to 3 meters, hover for two seconds, and land`
+* `fly in a 10 meter radius circle at 5 meter altitude`
+* `do a 10 meter square search pattern at 3 meters`
+* `fly a triangle with 6 meter sides at 3 meters`
+* `fly a figure eight size 5 at 3 meters`
+* `go 10 meters north and 5 meters east at 3 meters altitude`
+* `move 5 meters forward and 2 meters up`
+* `go 5 meters high`
+* `hold position`
+* `switch mode to guided`
+* `land now`
+* `return to launch`
+
+**Swarm Formation Commands:**
+* `formation V spacing 15m`
+* `formation circle spacing 12m`
+* `formation line spacing 15m`
+* `form diamond spacing 20m`
+
+*(Note: Supported formation shapes include `v`, `circle`, `square`, `line`, `column`, `wedge`, `echelon_left`, `echelon_right`, `diamond`, and `grid`)*
+
+**Compact Command Forms:**
+* `takeoff h=3 hover_s=2`
+* `circle r=10 h=5 n=36`
+* `square size=10 h=3 passes=4`
+* `triangle size=6 h=3`
+* `grid size=10 h=3 passes=4`
+* `spiral size=10 h=3 turns=3`
+* `figure-8 size=5 h=3`
+* `goto x=10 y=5 h=3`
+* `climb 2 | descend 1 | lower 50cm`
+* `mode guided | mode alt_hold`
+* `hold | land | rtl`
 
 ## 7. Safety Architecture
 Safety is handled in complementary layers:
