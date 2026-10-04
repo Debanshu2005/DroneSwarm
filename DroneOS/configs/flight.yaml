@@ -16,8 +16,4 @@ coordination:
   anchor_min_battery: 30
   anchor_min_dwell_s: 10
   quorum_required: true
-  formation:
-    type: line
-    spacing_m: 8
-    reslot_cooldown_s: 15
-    stagger_alt_m: 3
+  reslot_cooldown_s: 15

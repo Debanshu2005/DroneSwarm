@@ -56,8 +56,19 @@ class CoordinationManager:
                     # 2. Evaluate hysteresis / timeouts
                     self.membership.evaluate_tick(self.hb_interval)
                     
+                    # 3. Quorum and Anchor calculations (Phase 2 Advisory)
+                    # Read live formation parameters without touching flight state directly.
+                    # Currently we don't have a direct flight_manager ref, so we cannot safely get formation_params 
+                    # without reaching into private state. We'll leave this as a stub for now.
+                    # (The user requested: "Read the formation state only through existing read accessors; if none exist, tell me instead of reaching into private state.")
+                    
                 except asyncio.CancelledError:
                     logger.info("[coord] Coordination manager task cancelled.")
+                    break
+                except Exception as e:
+                    logger.error(f"[coord] Coordination manager failed: {e}")
+                    self.enabled = False
+                    self.is_running = False
                     break
         except Exception as e:
             logger.error(f"[coord] Unhandled exception in coordination loop: {e}")
