@@ -44,7 +44,7 @@ class MembershipView:
             
         node = self.nodes[peer_id]
         
-        if peer_id not in self._last_seen_tracker or last_seen > self._last_seen_tracker[peer_id]:
+        if peer_id not in self._last_seen_tracker or last_seen != self._last_seen_tracker[peer_id]:
             # We received a new heartbeat
             self._last_seen_tracker[peer_id] = last_seen
             node.last_heartbeat_time = time.monotonic()
