@@ -131,6 +131,7 @@ async def test_manager_exception_handling():
     from DroneOS.core.coordination.manager import CoordinationManager
     
     class MockSwarm:
+        identity = type('MockIdentity', (), {'drone_id': 'drone1'})
         registry = type('MockRegistry', (), {'get_all_peers': lambda: ["drone1", "drone2"]})
     
     manager = CoordinationManager(MockSwarm(), None)
@@ -146,25 +147,25 @@ async def test_manager_exception_handling():
     assert manager.is_running is False
     assert manager.enabled is False
 
-    def test_vanished_peer_becomes_dead(monkeypatch):
-        # g) a peer removed from the registry still becomes DEAD
-        config = {
-            "suspect_missed_beats": 3,
-            "dead_missed_beats": 6,
-            "rejoin_stable_s": 2.0
-        }
-        current_time = 100.0
-        monkeypatch.setattr(time, 'monotonic', lambda: current_time)
-        view = MembershipView(config)
-        
-        # Peer joins
-        view.update_from_peer("drone_vanished", 100.0, 100.0, 0, 0, 0)
-        
-        # It vanishes from registry, meaning we don't call update_from_peer anymore
-        # But evaluate_tick is called
-        current_time = 106.5
-        view.evaluate_tick()
-        assert view.nodes["drone_vanished"].state == PeerState.DEAD
+def test_vanished_peer_becomes_dead(monkeypatch):
+    # g) a peer removed from the registry still becomes DEAD
+    config = {
+        "suspect_missed_beats": 3,
+        "dead_missed_beats": 6,
+        "rejoin_stable_s": 2.0
+    }
+    current_time = 100.0
+    monkeypatch.setattr(time, 'monotonic', lambda: current_time)
+    view = MembershipView(config)
+    
+    # Peer joins
+    view.update_from_peer("drone_vanished", 100.0, 100.0, 0, 0, 0)
+    
+    # It vanishes from registry, meaning we don't call update_from_peer anymore
+    # But evaluate_tick is called
+    current_time = 106.5
+    view.evaluate_tick(1.0)
+    assert view.nodes["drone_vanished"].state == PeerState.DEAD
 
 @pytest.mark.asyncio
 async def test_manager_vanished_peer_becomes_dead(monkeypatch):
@@ -181,6 +182,7 @@ async def test_manager_vanished_peer_becomes_dead(monkeypatch):
     
     class MockSwarm:
         def __init__(self):
+            self.identity = type('MockIdentity', (), {'drone_id': 'drone1'})
             self.registry = registry
             self.network_cfg = type('MockNetCfg', (), {'heartbeat_interval': 1.0})
             

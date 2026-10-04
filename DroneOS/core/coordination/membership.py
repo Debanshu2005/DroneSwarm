@@ -11,10 +11,10 @@ class PeerState(Enum):
     DEAD = "DEAD"
 
 class MemberNode:
-    def __init__(self, drone_id: str):
+    def __init__(self, drone_id: str, clock=time.monotonic):
         self.drone_id = drone_id
         self.state: PeerState = PeerState.ALIVE
-        self.last_heartbeat_time: float = time.monotonic()
+        self.last_heartbeat_time: float = clock()
         self.missed_beats: int = 0
         self.rejoin_stable_start: Optional[float] = None
         
@@ -25,7 +25,8 @@ class MemberNode:
         self.alt: Optional[float] = None
         
 class MembershipView:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, clock=time.monotonic):
+        self.clock = clock
         self.config = config
         self.nodes: Dict[str, MemberNode] = {}
         
@@ -33,12 +34,12 @@ class MembershipView:
         self.dead_missed = int(config.get("dead_missed_beats", 6))
         self.rejoin_stable_s = float(config.get("rejoin_stable_s", 10.0))
         
-        self.last_eval_time = time.monotonic()
+        self.last_eval_time = self.clock()
         self._last_seen_tracker = {}
 
     def update_from_peer(self, peer_id: str, last_seen: float, battery: Optional[float], lat: Optional[float], lon: Optional[float], alt: Optional[float]):
         if peer_id not in self.nodes:
-            self.nodes[peer_id] = MemberNode(peer_id)
+            self.nodes[peer_id] = MemberNode(peer_id, clock=self.clock)
             self._last_seen_tracker[peer_id] = last_seen
             logger.info(f"[coord] New member discovered: {peer_id}")
             
@@ -47,7 +48,7 @@ class MembershipView:
         if peer_id not in self._last_seen_tracker or last_seen != self._last_seen_tracker[peer_id]:
             # We received a new heartbeat
             self._last_seen_tracker[peer_id] = last_seen
-            node.last_heartbeat_time = time.monotonic()
+            node.last_heartbeat_time = self.clock()
             node.missed_beats = 0
             
             if battery is not None: node.battery = battery
@@ -57,9 +58,9 @@ class MembershipView:
             
             if node.state == PeerState.DEAD:
                 if node.rejoin_stable_start is None:
-                    node.rejoin_stable_start = time.monotonic()
+                    node.rejoin_stable_start = self.clock()
                     logger.info(f"[coord] {peer_id} started rejoin stabilization")
-                elif time.monotonic() - node.rejoin_stable_start >= self.rejoin_stable_s:
+                elif self.clock() - node.rejoin_stable_start >= self.rejoin_stable_s:
                     node.state = PeerState.ALIVE
                     node.rejoin_stable_start = None
                     logger.info(f"[coord] {peer_id} fully rejoined as ALIVE")
@@ -68,7 +69,7 @@ class MembershipView:
                 logger.info(f"[coord] {peer_id} recovered from SUSPECT to ALIVE")
 
     def evaluate_tick(self, hb_interval: float = 1.0):
-        now = time.monotonic()
+        now = self.clock()
         dt = now - self.last_eval_time
         if dt < min(0.25, hb_interval / 2.0):
             return # evaluate roughly every second

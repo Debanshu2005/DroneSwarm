@@ -163,7 +163,40 @@ class DroneOSApp:
         if is_enabled:
             from DroneOS.core.coordination.manager import CoordinationManager
             hb_interval = getattr(self.network_cfg, 'heartbeat_interval', 1.0)
-            self.coordination_manager = CoordinationManager(self.swarm_manager, self.flight_cfg, hb_interval)
+            
+            import copy
+            import time
+            def formation_provider():
+                try:
+                    fp = getattr(self.flight_manager, 'formation_params', None)
+                    return copy.deepcopy(fp) if fp else None
+                except Exception:
+                    return None
+                    
+            def self_status_provider():
+                try:
+                    t = getattr(self.state_store, 'local_telemetry', None)
+                    if not t:
+                        return {"battery_level": 0.0, "gps_valid": False, "position_age": None, "lat": None, "lon": None, "alt": None}
+                    ts = getattr(t, 'timestamp', None)
+                    return {
+                        "battery_level": getattr(t, 'battery_level', 0.0) or 0.0,
+                        "gps_valid": getattr(t, 'gps_valid', False),
+                        "position_age": (time.time() - ts) if ts is not None else None, 
+                        "lat": getattr(t, 'latitude', None),
+                        "lon": getattr(t, 'longitude', None),
+                        "alt": getattr(t, 'altitude', None),
+                    }
+                except Exception:
+                    return {"battery_level": 0.0, "gps_valid": False, "last_position_time": None, "lat": None, "lon": None, "alt": None}
+            
+            self.coordination_manager = CoordinationManager(
+                self.swarm_manager, 
+                self.flight_cfg, 
+                hb_interval,
+                formation_provider=formation_provider,
+                self_status_provider=self_status_provider
+            )
         else:
             self.coordination_manager = None
         
