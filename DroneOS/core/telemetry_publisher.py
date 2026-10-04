@@ -17,7 +17,7 @@ class TelemetryPublisher:
     """
     def __init__(self, node_id, network_adapter, flight_controller, flight_manager, mission_manager,
                  health_monitor=None, telemetry_interval: float = 0.5, heartbeat_interval: float = 1.0,
-                 swarm_manager=None, state_store=None):
+                 swarm_manager=None, state_store=None, coordination_manager=None):
         self.node_id = node_id
         self.network = network_adapter
         self.fc = flight_controller
@@ -28,6 +28,7 @@ class TelemetryPublisher:
         self.heartbeat_interval = heartbeat_interval
         self.swarm_manager = swarm_manager
         self.state_store = state_store
+        self.coordination_manager = coordination_manager
         
         from DroneOS.core.formation_engine import FormationEngine
         if self.swarm_manager and self.state_store:
@@ -82,6 +83,7 @@ class TelemetryPublisher:
                     lon=lon,
                     alt=alt
                 )
+                
                 await self.network.broadcast_message(msg)
                 
                 swarm_hb_msg = SwarmHeartbeatMessage(

@@ -155,6 +155,18 @@ class DroneOSApp:
             config=self.flight_cfg
         )
         
+        coord_cfg = getattr(self.flight_cfg, 'coordination', None)
+        is_enabled = False
+        if coord_cfg:
+            is_enabled = coord_cfg.get('enabled', False) if isinstance(coord_cfg, dict) else getattr(coord_cfg, 'enabled', False)
+            
+        if is_enabled:
+            from DroneOS.core.coordination.manager import CoordinationManager
+            hb_interval = getattr(self.network_cfg, 'heartbeat_interval', 1.0)
+            self.coordination_manager = CoordinationManager(self.swarm_manager, self.flight_cfg, hb_interval)
+        else:
+            self.coordination_manager = None
+        
         from DroneOS.core.flight_pipeline import FlightPipeline
         self.flight_pipeline = FlightPipeline(self.state_store, self.flight_controller, self.flight_cfg, self.decision_engine)
         self.flight_pipeline.on_intent_change = self._handle_intent_change
@@ -171,7 +183,8 @@ class DroneOSApp:
             telemetry_interval=self.network_cfg.telemetry_interval,
             heartbeat_interval=self.network_cfg.heartbeat_interval,
             swarm_manager=self.swarm_manager,
-            state_store=self.state_store
+            state_store=self.state_store,
+            coordination_manager=self.coordination_manager if hasattr(self, 'coordination_manager') else None
         )
         
         self.diagnostics = SystemHealthReporter(
@@ -520,7 +533,8 @@ class DroneOSApp:
         
         self._dispatch_task(self._system_monitor_loop())
         self._dispatch_task(self.terminal_controller.run_repl())
-        
+        if self.coordination_manager:
+            self._dispatch_task(self.coordination_manager.run())
         # Start publisher loops
         self.telemetry_publisher.start()
         

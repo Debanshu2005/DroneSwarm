@@ -7,3 +7,17 @@ airsim_host: "127.0.0.1"
 
 airsim_port: 41451
 
+coordination:
+  enabled: false
+  mode: advisory
+  suspect_missed_beats: 3
+  dead_missed_beats: 6
+  rejoin_stable_s: 10
+  anchor_min_battery: 30
+  anchor_min_dwell_s: 10
+  quorum_required: true
+  formation:
+    type: line
+    spacing_m: 8
+    reslot_cooldown_s: 15
+    stagger_alt_m: 3
