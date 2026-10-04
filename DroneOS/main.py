@@ -183,8 +183,7 @@ class DroneOSApp:
             telemetry_interval=self.network_cfg.telemetry_interval,
             heartbeat_interval=self.network_cfg.heartbeat_interval,
             swarm_manager=self.swarm_manager,
-            state_store=self.state_store,
-            coordination_manager=self.coordination_manager if hasattr(self, 'coordination_manager') else None
+            state_store=self.state_store
         )
         
         self.diagnostics = SystemHealthReporter(
