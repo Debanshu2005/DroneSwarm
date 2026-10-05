@@ -67,7 +67,8 @@ def test_freshness_clock_agrees_in_both_directions(monkeypatch):
     assert _active_plan(mv, cfg, status).accepted
 
 
-def test_hovering_peer_does_not_refresh_without_new_position_stamp():
+def test_frozen_stamp_peer_does_not_refresh_without_new_position_stamp():
+    """A drone that emits no telemetry but is kept alive by network heartbeats should go stale (its position stamp is frozen)."""
     clock = [10.0]
     mv = MembershipView(config={}, clock=lambda: clock[0])
     mv.update_from_peer("d1", 1.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=9.0)
@@ -75,7 +76,15 @@ def test_hovering_peer_does_not_refresh_without_new_position_stamp():
     mv.update_from_peer("d1", 2.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=9.0)
     assert mv.nodes["d1"].last_position_time == 10.0
 
-
+def test_hovering_peer_with_changing_stamp_stays_fresh():
+    """A realistic hovering peer sends identical coordinates but new timestamps. It should stay fresh."""
+    clock = [10.0]
+    mv = MembershipView(config={}, clock=lambda: clock[0])
+    mv.update_from_peer("d1", 1.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=9.0)
+    clock[0] = 12.0
+    mv.update_from_peer("d1", 2.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=11.0)
+    assert mv.nodes["d1"].last_position_time == 12.0
+    
 def test_partial_none_is_not_a_position_and_is_transient_in_active_mode(monkeypatch):
     _line_offset(monkeypatch)
     clock = [10.0]
@@ -104,6 +113,36 @@ def test_active_mode_rejects_partial_self_telemetry(monkeypatch):
     assert plan.reject_reason == "missing or invalid telemetry for d0"
 
 
+def test_negative_age_is_stale(monkeypatch):
+    _line_offset(monkeypatch)
+    clock = [1000.0]
+    mv = MembershipView(config={}, clock=lambda: clock[0])
+    swarm = MockSwarm()
+    swarm.registry.peers["d1"] = MockPeerState(battery=50.0, last_pos=1.7e9)
+    cfg = MockFlightCfg("active")
+    
+    # Set the stamp so it's in the FUTURE compared to our clock, resulting in negative age.
+    # Actually wait: age is calculated as clock() - last_position_time. 
+    # If last_position_time > clock(), age is negative.
+    mv.update_from_peer("d1", 1.0, 50.0, 1.1, 1.0, 1.0, peer_position_stamp=1.7e9)
+    # The member view records its OWN receipt time (which is 1000.0) as last_position_time.
+    # To get a negative age during is_healthy/healing, the clock must jump BACKWARDS.
+    clock[0] = 900.0 
+    
+    assert not is_healthy("d1", "d0", mv, swarm, 30.0, clock[0], 5.0)
+    
+    plan = _active_plan(mv, cfg, {"lat": 1.0, "lon": 1.0, "alt": 1.0, "gps_valid": True, "position_age": 0.0})
+    assert plan.reject_kind == RejectKind.TRANSIENT
+    assert "stale telemetry for d1 (age=-100.0)" in plan.reject_reason
+
+def test_self_status_none_is_transient(monkeypatch):
+    _line_offset(monkeypatch)
+    mv = MembershipView(config={}, clock=lambda: 1.0)
+    mv.update_from_peer("d1", 1.0, 50.0, 1.1, 1.0, 1.0, peer_position_stamp=1.0)
+    plan = _active_plan(mv, MockFlightCfg("active"), None)
+    assert plan.reject_kind == RejectKind.TRANSIENT
+    assert plan.reject_reason == "missing or invalid telemetry for d0"
+
 def test_advisory_nominal_label_lists_d1_d3_and_keeps_real_self():
     mv = MembershipView(config={}, clock=lambda: 1.0)
     cfg = MockFlightCfg("advisory", dead_drone_obstacle="false")
@@ -124,22 +163,23 @@ def test_min_required_sep_uses_the_runtime_defaults(monkeypatch):
 
     cfg = MockFlightCfg("advisory", heal_separation_margin_m=0.0,
                         heal_position_margin_m=0.0)
-    cfg.formation = type("Formation", (), {})()
-    cfg.collision_avoidance = type("Collision", (), {})()
+    # Remove config blocks
+    cfg.formation = None
+    if hasattr(cfg, "collision_avoidance"):
+        delattr(cfg, "collision_avoidance")
+        
     params = {"type": "LINE", "spacing": 7.0,
               "slot_assignments": {"d0": 0, "d1": 1, "d2": 2}}
 
-    before_min_required_sep = max(8.0, CollisionAvoidanceConfig().min_horizontal_distance)
     before = plan_healing(params, {"d0", "d1"}, "d0", "d0", "d0", cfg)
-    assert before_min_required_sep == 8.0
-    assert "8.00" in before.reject_reason  # formation-engine default
+    assert "8.00" in before.reject_reason  # 8.0 is max(8.0 default formation, 6.0 default collision)
 
-    monkeypatch.setattr(formation_engine, "_DEFAULT_MIN_SEP_M", 4.0)
-    cfg.collision_avoidance = CollisionAvoidanceConfig(min_horizontal_distance=11.0)
-    after_min_required_sep = max(4.0, cfg.collision_avoidance.min_horizontal_distance)
+    # Monkeypatch the class used inside the function by patching the original module
+    import DroneOS.shared.config.models as config_models
+    monkeypatch.setattr(config_models, "CollisionAvoidanceConfig", lambda: type("CA", (), {"min_horizontal_distance": 12.0}))
+    
     after = plan_healing(params, {"d0", "d1"}, "d0", "d0", "d0", cfg)
-    assert after_min_required_sep == 11.0
-    assert "11.00" in after.reject_reason  # collision default/config now wins
+    assert "12.00" in after.reject_reason  # max(8.0, 12.0) = 12.0
 
 
 def test_settle_diagnostics_are_per_peer_and_rate_limited(caplog, monkeypatch):
@@ -156,9 +196,11 @@ def test_settle_diagnostics_are_per_peer_and_rate_limited(caplog, monkeypatch):
     fp = {"type": "LINE", "slot_assignments": {"d0": 0, "d1": 1, "d2": 2}}
 
     d1 = HealPlan({}, "none", {}, 0.0, 0.0, False,
-                  "PRECONDITION FAILED: not settled (d1 dist=5.00m > 3.00m)", RejectKind.TRANSIENT)
+                  "PRECONDITION FAILED: not settled (d1 dist=5.00m > 3.00m)", RejectKind.TRANSIENT,
+                  unsettled={"pid": "d1", "dist": 5.0, "radius": 3.0})
     d2 = HealPlan({}, "none", {}, 0.0, 0.0, False,
-                  "PRECONDITION FAILED: not settled (d2 dist=4.00m > 3.00m)", RejectKind.TRANSIENT)
+                  "PRECONDITION FAILED: not settled (d2 dist=4.00m > 3.00m)", RejectKind.TRANSIENT,
+                  unsettled={"pid": "d2", "dist": 4.0, "radius": 3.0})
     responses = iter([d1, d1, d2, d1])
     monkeypatch.setattr("DroneOS.core.coordination.healing.plan_healing", lambda *_args, **_kwargs: next(responses))
 

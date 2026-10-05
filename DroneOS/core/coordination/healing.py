@@ -5,17 +5,6 @@ from typing import Dict, Set, Tuple, List, Optional, Any
 from DroneOS.core.formation_manager import FormationManager, FormationType, global_offset_local_m
 from DroneOS.core.formation_engine import FormationEngine
 
-class HealPlan:
-    def __init__(self, slot_assignments: Dict[str, int], reason: str, moves: Dict[str, Tuple[int, int]], total_travel: float, min_separation: float, accepted: bool, reject_reason: Optional[str] = None, is_hold: bool = False, hold_slot: Optional[int] = None):
-        self.slot_assignments = slot_assignments
-        self.reason = reason
-        self.moves = moves  # drone_id -> (from_slot, to_slot)
-        self.total_travel = total_travel
-        self.min_separation = min_separation
-        self.accepted = accepted
-        self.reject_reason = reject_reason
-        self.is_hold = is_hold
-        self.hold_slot = hold_slot
 
 def _get_slot_offset(f_type: str, slot: int, spacing: float, total: int) -> Tuple[float, float, float]:
     """Uses FormationEngine to compute the exact target offset relative to the anchor's physical position."""
@@ -61,7 +50,7 @@ class RejectKind(Enum):
 class HealPlan:
     def __init__(self, slot_assignments: Dict[str, int], reason: str, moves: Dict[str, Tuple[int, int]],
                  total_travel: float, min_separation: float, accepted: bool = True, reject_reason: str = "",
-                 reject_kind: RejectKind = RejectKind.FINAL):
+                 reject_kind: RejectKind = RejectKind.FINAL, unsettled: Optional[Dict[str, float]] = None):
         self.slot_assignments = slot_assignments
         self.reason = reason
         self.moves = moves
@@ -72,6 +61,7 @@ class HealPlan:
         self.reject_kind = reject_kind
         self.is_hold = False
         self.hold_slot = -1
+        self.unsettled = unsettled
 
 class EvaluatedPlan:
     def __init__(self, accepted: bool, min_separation: float, total_travel: float, reject_reason: str = "", reject_kind: RejectKind = RejectKind.FINAL):
@@ -326,7 +316,7 @@ def plan_healing(
                     
             dist_to_nom = math.hypot(actual_pos[0]-nom_pos[0], actual_pos[1]-nom_pos[1])
             if dist_to_nom > settled_radius:
-                return HealPlan(old_slots, "none", {}, 0.0, 0.0, False, f"PRECONDITION FAILED: not settled ({pid} dist={dist_to_nom:.2f}m > {settled_radius:.2f}m)", RejectKind.TRANSIENT)
+                return HealPlan(old_slots, "none", {}, 0.0, 0.0, False, f"PRECONDITION FAILED: not settled ({pid} dist={dist_to_nom:.2f}m > {settled_radius:.2f}m)", RejectKind.TRANSIENT, unsettled={"pid": pid, "dist": dist_to_nom, "radius": settled_radius})
             
             start_positions[pid] = actual_pos
         else:

@@ -6,7 +6,7 @@ from collections import Counter
 
 import pytest
 
-from DroneOS.core.coordination.healing import _point_to_segment, _segment_distance, plan_healing
+from DroneOS.core.coordination.healing import plan_healing
 from DroneOS.core.coordination.manager import CoordinationManager
 from DroneOS.core.formation_engine import FormationEngine
 from DroneOS.core.formation_manager import convert_local_offset_to_global, global_offset_local_m
@@ -17,6 +17,53 @@ from DroneOS.shared.config.profile import resolve_flight_config
 FORMATIONS = ["V", "LINE", "SQUARE", "COLUMN", "ECHELON_LEFT",
               "ECHELON_RIGHT", "DIAMOND", "GRID", "CIRCLE"]
 _ORACLE_SEED = 0xA11CE
+    
+
+def _pt_to_segment(p, a, b):
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
+    l2 = dx*dx + dy*dy
+    if l2 == 0:
+        return math.hypot(p[0]-a[0], p[1]-a[1])
+    t = max(0, min(1, ((p[0]-a[0])*dx + (p[1]-a[1])*dy) / l2))
+    return math.hypot(p[0] - (a[0] + t*dx), p[1] - (a[1] + t*dy))
+
+def _ccw(A, B, C):
+    return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
+
+def _intersect(A, B, C, D):
+    return _ccw(A,C,D) != _ccw(B,C,D) and _ccw(A,B,C) != _ccw(A,B,D)
+
+def analytic_segment_distance(A, B, C, D):
+    if _intersect(A, B, C, D):
+        return 0.0
+    return min(
+        _pt_to_segment(A, C, D), _pt_to_segment(B, C, D),
+        _pt_to_segment(C, A, B), _pt_to_segment(D, A, B)
+    )
+
+def test_analytic_segment_distance_correctness():
+    rng = random.Random(12345)
+    for _ in range(500):
+        A = (rng.uniform(-50, 50), rng.uniform(-50, 50))
+        B = (rng.uniform(-50, 50), rng.uniform(-50, 50))
+        C = (rng.uniform(-50, 50), rng.uniform(-50, 50))
+        D = (rng.uniform(-50, 50), rng.uniform(-50, 50))
+        
+        # Dense sampling
+        min_d = float('inf')
+        steps = 100
+        for i in range(steps + 1):
+            t1 = i / steps
+            p1 = (A[0] + t1*(B[0]-A[0]), A[1] + t1*(B[1]-A[1]))
+            for j in range(steps + 1):
+                t2 = j / steps
+                p2 = (C[0] + t2*(D[0]-C[0]), C[1] + t2*(D[1]-C[1]))
+                d = math.hypot(p1[0]-p2[0], p1[1]-p2[1])
+                if d < min_d: min_d = d
+                
+        analytic = analytic_segment_distance(A, B, C, D)
+        assert abs(analytic - min_d) < 1.0  # Dense sampling has error bound, 1m is safe for 100 steps on 100m grid
 
 
 class MockSwarm:
@@ -160,7 +207,7 @@ def test_healing_oracle(cfg_name, f_type, old_N, dead_slot, spacing_multiplier, 
         stats["max_path_length"] = max(stats["max_path_length"], math.dist(start, end))
         if not perturbed and pid == prop_anchor:
             assert math.dist(start, end) < 1e-4
-        dead_distance = _point_to_segment(dead_position, start, end)
+        dead_distance = _pt_to_segment(dead_position, start, end)
         stats["min_margins"][cfg_name] = min(stats["min_margins"][cfg_name], dead_distance - min_required_sep)
         if dead_distance + 0.1 < min_required_sep:
             stats["violations"] += 1
@@ -172,7 +219,7 @@ def test_healing_oracle(cfg_name, f_type, old_N, dead_slot, spacing_multiplier, 
             assert math.dist(end, other_start) + 0.1 >= min_required_sep
             assert math.dist(end, other_end) + 0.1 >= min_required_sep
             if other > pid:
-                separation = _segment_distance(start, end, other_start, other_end)
+                separation = analytic_segment_distance(start, end, other_start, other_end)
                 stats["min_margins"][cfg_name] = min(stats["min_margins"][cfg_name], separation - min_required_sep)
                 if separation + 0.1 < min_required_sep:
                     stats["violations"] += 1

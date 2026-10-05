@@ -243,18 +243,14 @@ class CoordinationManager:
             self._memoized_plans[memo_key] = True
         elif not plan.accepted:
             if plan.reject_kind == RejectKind.TRANSIENT:
-                if plan.reject_reason.startswith("PRECONDITION FAILED: not settled ("):
-                    try:
-                        inner = plan.reject_reason.split("(")[1].split(")")[0]
-                        pid_part = inner.split(" ")[0]
-                        last_log = self._settle_logged.get(pid_part, None)
-                        if last_log is None or now - last_log >= 5.0:
-                            self._settle_logged[pid_part] = now
-                            dist_str = inner.split("dist=")[1].split("m")[0]
-                            rad_str = inner.split("> ")[1].split("m")[0]
-                            logger.info(f"[coord] settle: {pid_part} dist={dist_str}m radius={rad_str}m")
-                    except Exception as e:
-                        logger.warning(f"[coord] Failed to parse settle rejection: {e}")
+                if plan.unsettled:
+                    pid_part = plan.unsettled["pid"]
+                    last_log = self._settle_logged.get(pid_part, None)
+                    if last_log is None or now - last_log >= 5.0:
+                        self._settle_logged[pid_part] = now
+                        dist_str = f'{plan.unsettled["dist"]:.2f}'
+                        rad_str = f'{plan.unsettled["radius"]:.2f}'
+                        logger.info(f"[coord] settle: {pid_part} dist={dist_str}m radius={rad_str}m")
 
                 if self._transient_logged.get(dead_pid_str) != plan.reject_reason:
                     self._transient_logged[dead_pid_str] = plan.reject_reason

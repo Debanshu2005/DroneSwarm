@@ -828,3 +828,219 @@ def test_manager_advisory_active_mode_60_seconds(test_mode, monkeypatch):
     assert broadcasts == 2, f"Expected exactly 2 broadcast logs (1 for drone1 dead, 1 for drone2 dead), got {broadcasts}"
     assert manager._heal_count == 0, "Heal cap must not be tripped in advisory or disabled active mode"
     mgr.logger.removeHandler(mgr.logger.handlers[-1])
+
+@pytest.mark.asyncio
+async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
+    from DroneOS.core.coordination.manager import CoordinationManager
+    from DroneOS.core.coordination.quorum import QuorumState
+    from DroneOS.core.coordination.healing import HealPlan, RejectKind
+
+    class MockSwarm:
+        def __init__(self):
+            self.identity = type('MockIdentity', (), {'drone_id': 'drone1'})
+            self.registry = type('MockReg', (), {'get_all_peers': lambda: []})()
+            self.network_cfg = type('MockNet', (), {'heartbeat_interval': 1.0})()
+
+    mock_cfg = type('MockCfg', (), {'coordination': {
+        'enabled': True, 'mode': 'active', 'dead_drone_obstacle': 'true'
+    }})
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0)
+    manager._heals_disabled = False
+
+    # Simulate healing triggering with a rejected plan
+    fp = {'slot_assignments': {'drone1': 0, 'drone2': 1}}
+    healthy_members = {'drone1'}
+
+    from DroneOS.core.coordination.membership import PeerState
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+
+    def mock_plan_healing(*args, **kwargs):
+        return HealPlan(fp['slot_assignments'], "compaction", {}, 0.0, 0.0, False, "collision with dead drone drone2", RejectKind.FINAL)
+
+    import DroneOS.core.coordination.manager as mgr
+    monkeypatch.setattr(mgr, 'plan_healing', mock_plan_healing)
+
+    broadcasts = []
+    import logging
+    class MockHandler(logging.Handler):
+        def emit(self, record):
+            if 'would broadcast' in record.getMessage():
+                broadcasts.append(record.getMessage())
+    mgr.logger.addHandler(MockHandler())
+
+    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+
+    assert not broadcasts, "Should not broadcast a rejected plan"
+
+@pytest.mark.asyncio
+async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
+    from DroneOS.core.coordination.manager import CoordinationManager
+    from DroneOS.core.coordination.quorum import QuorumState
+    from DroneOS.core.coordination.healing import HealPlan, RejectKind
+
+    class MockSwarm:
+        def __init__(self):
+            self.identity = type('MockIdentity', (), {'drone_id': 'drone1'})
+            self.registry = type('MockReg', (), {'get_all_peers': lambda: []})()
+            self.network_cfg = type('MockNet', (), {'heartbeat_interval': 1.0})()
+
+    mock_cfg = type('MockCfg', (), {'coordination': {
+        'enabled': True, 'mode': 'active', 'dead_drone_obstacle': 'true'
+    }})
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0)
+    manager._heals_disabled = False
+
+    # Simulate healing triggering with a rejected plan
+    fp = {'slot_assignments': {'drone1': 0, 'drone2': 1}}
+    healthy_members = {'drone1'}
+
+    from DroneOS.core.coordination.membership import PeerState
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+
+    def mock_plan_healing(*args, **kwargs):
+        return HealPlan(fp['slot_assignments'], "compaction", {}, 0.0, 0.0, False, "collision with dead drone drone2", RejectKind.FINAL)
+
+    import DroneOS.core.coordination.manager as mgr
+    monkeypatch.setattr(mgr, 'plan_healing', mock_plan_healing)
+
+    broadcasts = []
+    import logging
+    class MockHandler(logging.Handler):
+        def emit(self, record):
+            if 'would broadcast' in record.getMessage():
+                broadcasts.append(record.getMessage())
+    mgr.logger.addHandler(MockHandler())
+
+    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+
+    assert not broadcasts, "Should not broadcast a rejected plan"
+
+@pytest.mark.asyncio
+async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
+    from DroneOS.core.coordination.manager import CoordinationManager
+    from DroneOS.core.coordination.quorum import QuorumState
+    from DroneOS.core.coordination.healing import HealPlan, RejectKind
+
+    class MockSwarm:
+        def __init__(self):
+            self.identity = type('MockIdentity', (), {'drone_id': 'drone1'})
+            self.registry = type('MockReg', (), {'get_all_peers': lambda: []})()
+            self.network_cfg = type('MockNet', (), {'heartbeat_interval': 1.0})()
+
+    mock_cfg = type('MockCfg', (), {'coordination': {
+        'enabled': True, 'mode': 'active', 'dead_drone_obstacle': 'true'
+    }})
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0)
+    manager._heals_disabled = False
+
+    # Simulate healing triggering with a rejected plan
+    fp = {'slot_assignments': {'drone1': 0, 'drone2': 1}}
+    healthy_members = {'drone1'}
+
+    from DroneOS.core.coordination.membership import PeerState
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+
+    def mock_plan_healing(*args, **kwargs):
+        return HealPlan(fp['slot_assignments'], "compaction", {}, 0.0, 0.0, False, "collision with dead drone drone2", RejectKind.FINAL)
+
+    import DroneOS.core.coordination.manager as mgr
+    monkeypatch.setattr(mgr, 'plan_healing', mock_plan_healing)
+
+    broadcasts = []
+    import logging
+    class MockHandler(logging.Handler):
+        def emit(self, record):
+            if 'would broadcast' in record.getMessage():
+                broadcasts.append(record.getMessage())
+    mgr.logger.addHandler(MockHandler())
+
+    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+
+    assert not broadcasts, "Should not broadcast a rejected plan"
+
+@pytest.mark.asyncio
+async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
+    from DroneOS.core.coordination.manager import CoordinationManager
+    from DroneOS.core.coordination.quorum import QuorumState
+    from DroneOS.core.coordination.healing import HealPlan, RejectKind
+
+    class MockSwarm:
+        def __init__(self):
+            self.identity = type('MockIdentity', (), {'drone_id': 'drone1'})
+            self.registry = type('MockReg', (), {'get_all_peers': lambda: []})()
+            self.network_cfg = type('MockNet', (), {'heartbeat_interval': 1.0})()
+
+    mock_cfg = type('MockCfg', (), {'coordination': {
+        'enabled': True, 'mode': 'active', 'dead_drone_obstacle': 'true'
+    }})
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0)
+    manager._heals_disabled = False
+
+    # Simulate healing triggering with a rejected plan
+    fp = {'slot_assignments': {'drone1': 0, 'drone2': 1}}
+    healthy_members = {'drone1'}
+
+    from DroneOS.core.coordination.membership import PeerState
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+
+    def mock_plan_healing(*args, **kwargs):
+        return HealPlan(fp['slot_assignments'], "compaction", {}, 0.0, 0.0, False, "collision with dead drone drone2", RejectKind.FINAL)
+
+    import DroneOS.core.coordination.manager as mgr
+    monkeypatch.setattr(mgr, 'plan_healing', mock_plan_healing)
+
+    broadcasts = []
+    import logging
+    class MockHandler(logging.Handler):
+        def emit(self, record):
+            if 'would broadcast' in record.getMessage():
+                broadcasts.append(record.getMessage())
+    mgr.logger.addHandler(MockHandler())
+
+    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+
+    assert not broadcasts, "Should not broadcast a rejected plan"
+
+@pytest.mark.asyncio
+async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
+    from DroneOS.core.coordination.manager import CoordinationManager
+    from DroneOS.core.coordination.quorum import QuorumState
+    from DroneOS.core.coordination.healing import HealPlan, RejectKind
+
+    class MockSwarm:
+        def __init__(self):
+            self.identity = type('MockIdentity', (), {'drone_id': 'drone1'})
+            self.registry = type('MockReg', (), {'get_all_peers': lambda: []})()
+            self.network_cfg = type('MockNet', (), {'heartbeat_interval': 1.0})()
+
+    mock_cfg = type('MockCfg', (), {'coordination': {
+        'enabled': True, 'mode': 'active', 'dead_drone_obstacle': 'true'
+    }})
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0)
+    manager._heals_disabled = False
+
+    # Simulate healing triggering with a rejected plan
+    fp = {'slot_assignments': {'drone1': 0, 'drone2': 1}}
+    healthy_members = {'drone1'}
+
+    from DroneOS.core.coordination.membership import PeerState
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+
+    def mock_plan_healing(*args, **kwargs):
+        return HealPlan(fp['slot_assignments'], "compaction", {}, 0.0, 0.0, False, "collision with dead drone drone2", RejectKind.FINAL)
+
+    import DroneOS.core.coordination.healing as healing_module
+    import DroneOS.core.coordination.manager as mgr
+    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_healing)
+
+    broadcasts = []
+    import logging
+    class MockHandler(logging.Handler):
+        def emit(self, record):
+            if 'would broadcast' in record.getMessage():
+                broadcasts.append(record.getMessage())
+    mgr.logger.addHandler(MockHandler())
+
+    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+
+    assert not broadcasts, "Should not broadcast a rejected plan"
