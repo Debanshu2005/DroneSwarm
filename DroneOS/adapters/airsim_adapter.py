@@ -389,9 +389,9 @@ class AirSimFlightController(IFlightController):
             return False
 
     async def move_velocity(self, vx: float, vy: float, vz: float, duration: float, yaw_rate: float = 0.0) -> bool:
-        """Move using world-frame NED velocity (vx=North, vy=East, vz=Down).
-        FormationEngine produces global NED error vectors so this must use
-        moveByVelocityAsync (world frame), NOT moveByVelocityBodyFrameAsync.
+        """Move using body-frame velocity (vx=Forward, vy=Right, vz=Down).
+        This must use moveByVelocityBodyFrameAsync. For world-frame (NED)
+        movement, use move_velocity_ned which uses moveByVelocityAsync.
         """
         if not self._connected or self.client is None: return False
         try:
@@ -405,7 +405,7 @@ class AirSimFlightController(IFlightController):
             eff_dur = max(duration, 2.0 / hz)
 
             logger.debug(
-                "FC move_velocity NED vx=%.3f vy=%.3f vz=%.3f dur=%.3f vehicle=%s",
+                "FC move_velocity body-frame vx=%.3f vy=%.3f vz=%.3f dur=%.3f vehicle=%s",
                 vx, vy, vz, eff_dur, self.vehicle_name
             )
             async with self._cmd_lock:
@@ -414,7 +414,7 @@ class AirSimFlightController(IFlightController):
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(
                     self._executor,
-                    self.client.moveByVelocityAsync,
+                    self.client.moveByVelocityBodyFrameAsync,
                     vx, vy, vz, eff_dur, airsim.DrivetrainType.MaxDegreeOfFreedom, yaw_mode, self.vehicle_name
                 )
             return True

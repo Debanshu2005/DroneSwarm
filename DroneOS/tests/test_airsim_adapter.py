@@ -514,3 +514,11 @@ async def test_simulated_faults_default_path(adapter):
         assert telem.gps_valid == True
         assert telem.battery_level == 100.0
         await adapter.disconnect()
+
+@pytest.mark.asyncio
+async def test_move_velocity_ned_uses_world_frame(adapter):
+    with patch('DroneOS.adapters.airsim_adapter.airsim.MultirotorClient', FakeAirSim.MultirotorClient):
+        await adapter.connect()
+        await adapter.move_velocity_ned(10.0, -10.0, 0.0, 1.0)
+        adapter.client.moveByVelocityAsync.assert_called_once()
+        adapter.client.moveByVelocityBodyFrameAsync.assert_not_called()
