@@ -29,6 +29,22 @@ from DroneOS.core.diagnostics import ConfigurationValidator, SystemHealthReporte
 from DroneOS.shared.config.loader import load_yaml_config
 from DroneOS.shared.config.models import DroneConfig, NetworkConfig, FlightConfig
 
+def self_status_provider_fn(state_store):
+    import time
+    try:
+        t = getattr(state_store, 'local_telemetry', None)
+        if not t: return {"battery_level": 0.0, "gps_valid": False, "position_age": None, "lat": None, "lon": None, "alt": None}
+        ts = getattr(t, 'timestamp', None)
+        return {
+            "battery_level": getattr(t, 'battery_level', 0.0) or 0.0,
+            "gps_valid": getattr(t, 'gps_valid', False),
+            "position_age": (time.time() - ts) if ts is not None else None, 
+            "lat": getattr(t, 'latitude', None),
+            "lon": getattr(t, 'longitude', None),
+            "alt": getattr(t, 'altitude', None),
+        }
+    except Exception: return {"battery_level": 0.0, "gps_valid": False, "position_age": None, "lat": None, "lon": None, "alt": None}
+
 logger = setup_logger("DroneOS_Main")
 
 class DroneOSApp:
@@ -173,29 +189,12 @@ class DroneOSApp:
                 except Exception:
                     return None
                     
-            def self_status_provider():
-                try:
-                    t = getattr(self.state_store, 'local_telemetry', None)
-                    if not t:
-                        return {"battery_level": 0.0, "gps_valid": False, "position_age": None, "lat": None, "lon": None, "alt": None}
-                    ts = getattr(t, 'timestamp', None)
-                    return {
-                        "battery_level": getattr(t, 'battery_level', 0.0) or 0.0,
-                        "gps_valid": getattr(t, 'gps_valid', False),
-                        "position_age": (time.time() - ts) if ts is not None else None, 
-                        "lat": getattr(t, 'latitude', None),
-                        "lon": getattr(t, 'longitude', None),
-                        "alt": getattr(t, 'altitude', None),
-                    }
-                except Exception:
-                    return {"battery_level": 0.0, "gps_valid": False, "last_position_time": None, "lat": None, "lon": None, "alt": None}
-            
             self.coordination_manager = CoordinationManager(
                 self.swarm_manager, 
                 self.flight_cfg, 
                 hb_interval,
                 formation_provider=formation_provider,
-                self_status_provider=self_status_provider
+                self_status_provider=lambda: self_status_provider_fn(self.state_store)
             )
         else:
             self.coordination_manager = None

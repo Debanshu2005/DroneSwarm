@@ -668,3 +668,160 @@ async def test_manager_real_membership_view_triggers_healing():
     await asyncio.gather(mgr.run(), run_once())
     assert len(mgr._memoized_plans) == 1
 
+
+@pytest.mark.asyncio
+async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
+    from DroneOS.core.coordination.manager import CoordinationManager
+    from DroneOS.core.coordination.quorum import QuorumState
+    from DroneOS.core.coordination.healing import HealPlan, RejectKind
+
+    class MockSwarm:
+        def __init__(self):
+            self.identity = type('MockIdentity', (), {'drone_id': 'drone1'})
+            self.registry = type('MockReg', (), {'get_all_peers': lambda: []})()
+            self.network_cfg = type('MockNet', (), {'heartbeat_interval': 1.0})()
+
+    mock_cfg = type('MockCfg', (), {'coordination': {
+        'enabled': True, 'mode': 'active', 'dead_drone_obstacle': 'true'
+    }})
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0)
+    manager._heals_disabled = False
+
+    # Simulate healing triggering with a rejected plan
+    fp = {'slot_assignments': {'drone1': 0, 'drone2': 1}}
+    healthy_members = {'drone1'}
+
+    from DroneOS.core.coordination.membership import PeerState
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+
+    def mock_plan_healing(*args, **kwargs):
+        return HealPlan(fp['slot_assignments'], "compaction", {}, 0.0, 0.0, False, "collision with dead drone drone2", RejectKind.FINAL)
+
+    import DroneOS.core.coordination.healing as healing_module
+    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_healing)
+
+    broadcasts = []
+    import logging
+    class MockHandler(logging.Handler):
+        def emit(self, record):
+            if 'would broadcast' in record.getMessage():
+                broadcasts.append(record.getMessage())
+    import DroneOS.core.coordination.manager as mgr
+    mgr.logger.addHandler(MockHandler())
+
+    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+
+    assert not broadcasts, "Should not broadcast a rejected plan"
+
+
+    assert manager._heal_count == 0, "Heal cap must not be tripped in advisory mode"
+
+def test_self_status_provider_fresh_stale_missing():
+    from DroneOS.main import self_status_provider_fn
+    import time
+    
+    class MockTelemetry:
+        def __init__(self, ts):
+            self.timestamp = ts
+            self.battery_level = 90.0
+            self.gps_valid = True
+            self.latitude = 1.0
+            self.longitude = 2.0
+            self.altitude = 3.0
+            
+    class MockStateStore:
+        def __init__(self, local_telemetry):
+            self.local_telemetry = local_telemetry
+            
+    # Fresh
+    store_fresh = MockStateStore(MockTelemetry(time.time() - 0.5))
+    res_fresh = self_status_provider_fn(store_fresh)
+    assert res_fresh['position_age'] is not None and res_fresh['position_age'] <= 3.0
+    assert res_fresh['battery_level'] == 90.0
+    
+    # Stale
+    store_stale = MockStateStore(MockTelemetry(time.time() - 35.0))
+    res_stale = self_status_provider_fn(store_stale)
+    assert res_stale['position_age'] is not None and res_stale['position_age'] > 30.0
+    
+    # Missing timestamp
+    store_no_ts = MockStateStore(type('Mock', (), {'battery_level': 100.0, 'gps_valid': True, 'latitude': 1.0, 'longitude': 1.0, 'altitude': 1.0})())
+    res_no_ts = self_status_provider_fn(store_no_ts)
+    assert res_no_ts['position_age'] is None
+    
+    # No telemetry at all
+    store_none = MockStateStore(None)
+    res_none = self_status_provider_fn(store_none)
+    assert res_none['battery_level'] == 0.0
+    assert res_none['position_age'] is None
+    assert res_none['gps_valid'] is False
+
+@pytest.mark.parametrize("test_mode", ["advisory", "active"])
+def test_manager_advisory_active_mode_60_seconds(test_mode, monkeypatch):
+    from DroneOS.core.coordination.manager import CoordinationManager
+    
+    class MockReg:
+        def get_all_peers(self): return ['drone1', 'drone2', 'drone3', 'drone4']
+        def get_peer(self, pid): return type('Peer', (), {'last_seen': 100.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0, 'last_position_time': 100.0})()
+        
+    class MockSwarm:
+        def __init__(self):
+            self.identity = type('MockIdentity', (), {'drone_id': 'drone1'})
+            self.registry = MockReg()
+            self.network_cfg = type('MockNet', (), {'heartbeat_interval': 1.0})()
+            
+    # Mocking standard runtime config dictionaries
+    mock_cfg = type('MockCfg', (), {'coordination': {
+        'enabled': 'true', 'mode': test_mode, 'dead_drone_obstacle': 'true', 'heal_after_dead_s': 10.0, 'max_heals_per_session': 3
+    }, 'formation': type('F', (), {'min_formation_separation_m': 3.0})(), 'collision_avoidance': type('C', (), {'min_horizontal_distance': 4.0})()})
+    
+    current_time = [100.0]
+    def fake_clock():
+        return current_time[0]
+        
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=fake_clock)
+    manager.formation_provider = lambda: {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2, 'drone4': 3}}
+    manager.self_status_provider = lambda: {'battery_level': 100.0, 'position_age': 1.0, 'gps_valid': True, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0}
+    
+    from DroneOS.core.coordination.membership import PeerState
+    from DroneOS.core.formation_engine import FormationEngine
+    from DroneOS.core.formation_manager import FormationType, convert_local_offset_to_global
+    fe = FormationEngine(MockSwarm(), None, None)
+    class FakeTelem: gps_valid=True; latitude=0.0; longitude=0.0; altitude=0.0
+    exp_pos = fe.get_expected_positions(FakeTelem(), {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2, 'drone4': 3}})
+    for i, pid in enumerate(['drone1', 'drone2', 'drone3', 'drone4']):
+        manager.membership.nodes[pid] = type('MockNode', (), {'state': PeerState.ALIVE, 'dead_since': None, 'rejoin_stable_start': None, 'missed_beats': 0, 'last_seen': 100.0, 'lat': exp_pos[pid][0], 'lon': exp_pos[pid][1], 'alt': 0.0})()
+        
+    manager.membership.nodes['drone1'].state = PeerState.DEAD
+    manager.membership.nodes['drone1'].dead_since = 90.0
+    
+    import logging
+    broadcasts = 0
+    class MockHandler(logging.Handler):
+        def emit(self, record):
+            nonlocal broadcasts
+            if 'would broadcast' in record.getMessage():
+                broadcasts += 1
+    import DroneOS.core.coordination.manager as mgr
+    mgr.logger.addHandler(MockHandler())
+    
+    import DroneOS.core.coordination.quorum as quorum
+    
+    fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2, 'drone4': 3}}
+    
+    for i in range(60):
+        current_time[0] += 1.0
+        if i < 30:
+            manager.my_id = 'drone2'
+            healthy = set(['drone2', 'drone3', 'drone4'])
+            manager._handle_healing(current_time[0], quorum.QuorumState.QUORUM, fp, healthy, 'drone1', 'drone2')
+        else:
+            if i == 30:
+                manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': current_time[0], 'rejoin_stable_start': None, 'missed_beats': 10, 'last_seen': 10.0})()
+            manager.my_id = 'drone3'
+            healthy = set(['drone3', 'drone4'])
+            manager._handle_healing(current_time[0], quorum.QuorumState.QUORUM, fp, healthy, 'drone1', 'drone3')
+        
+    assert broadcasts == 2, f"Expected exactly 2 broadcast logs (1 for drone1 dead, 1 for drone2 dead), got {broadcasts}"
+    assert manager._heal_count == 0, "Heal cap must not be tripped in advisory or disabled active mode"
+    mgr.logger.removeHandler(mgr.logger.handlers[-1])

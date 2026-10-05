@@ -12,9 +12,7 @@ def test_suspect_dead_transitions(monkeypatch):
     }
     # Mock time
     current_time = 100.0
-    monkeypatch.setattr(time, 'monotonic', lambda: current_time)
-    
-    view = MembershipView(config)
+    view = MembershipView(config, clock=lambda: current_time)
     
     # Initialize peer
     view.update_from_peer("drone2", 100.0, 100.0, 0, 0, 0)
@@ -43,9 +41,7 @@ def test_single_missed_beat_hysteresis(monkeypatch):
         "rejoin_stable_s": 2.0
     }
     current_time = 100.0
-    monkeypatch.setattr(time, 'monotonic', lambda: current_time)
-    
-    view = MembershipView(config)
+    view = MembershipView(config, clock=lambda: current_time)
     view.update_from_peer("drone2", 100.0, 100.0, 0, 0, 0)
     
     # 1 missed beat
@@ -68,9 +64,7 @@ def test_rejoin_stable_s(monkeypatch):
         "rejoin_stable_s": 2.0
     }
     current_time = 100.0
-    monkeypatch.setattr(time, 'monotonic', lambda: current_time)
-    
-    view = MembershipView(config)
+    view = MembershipView(config, clock=lambda: current_time)
     view.update_from_peer("drone2", 100.0, 100.0, 0, 0, 0)
     
     # Go DEAD
@@ -155,8 +149,7 @@ def test_vanished_peer_becomes_dead(monkeypatch):
         "rejoin_stable_s": 2.0
     }
     current_time = 100.0
-    monkeypatch.setattr(time, 'monotonic', lambda: current_time)
-    view = MembershipView(config)
+    view = MembershipView(config, clock=lambda: current_time)
     
     # Peer joins
     view.update_from_peer("drone_vanished", 100.0, 100.0, 0, 0, 0)
@@ -193,11 +186,11 @@ async def test_manager_vanished_peer_becomes_dead(monkeypatch):
         "rejoin_stable_s": 2.0
     }})
     
-    monkeypatch.setattr(time, 'monotonic', lambda: 100.0)
-    manager = CoordinationManager(MockSwarm(), mock_flight_cfg, heartbeat_interval=1.0)
+    current_time = 100.0
+    manager = CoordinationManager(MockSwarm(), mock_flight_cfg, heartbeat_interval=1.0, clock=lambda: current_time)
     
     # 1. Update from registry manually as if run() did one iteration at t=100
-    monkeypatch.setattr(time, 'monotonic', lambda: 100.0)
+    current_time = 100.0
     manager.membership.update_from_peer("drone_vanishing", 100.0, 100.0, 0, 0, 0)
     manager.membership.evaluate_tick(hb_interval=1.0)
     assert manager.membership.nodes["drone_vanishing"].state == PeerState.ALIVE
@@ -208,7 +201,7 @@ async def test_manager_vanished_peer_becomes_dead(monkeypatch):
     # 3. Simulate manager running at t=106.5
     # Manager will call get_all_peers() which is empty, so it won't call update_from_peer.
     # But it calls evaluate_tick()
-    monkeypatch.setattr(time, 'monotonic', lambda: 106.5)
+    current_time = 106.5
     
     # emulate manager's exact loop body
     for peer_id in registry.get_all_peers():
@@ -232,8 +225,7 @@ def test_non_default_heartbeat_interval(monkeypatch):
     
     # Fast heartbeat (0.5s)
     current_time = 100.0
-    monkeypatch.setattr(time, 'monotonic', lambda: current_time)
-    view = MembershipView(config)
+    view = MembershipView(config, clock=lambda: current_time)
     view.update_from_peer("fast_drone", 100.0, 100.0, 0, 0, 0)
     
     # Wait 2.0 seconds. At 0.5s interval, this is 4 missed beats -> SUSPECT
@@ -244,7 +236,7 @@ def test_non_default_heartbeat_interval(monkeypatch):
     
     # Slow heartbeat (2.0s)
     current_time = 200.0
-    view2 = MembershipView(config)
+    view2 = MembershipView(config, clock=lambda: current_time)
     view2.update_from_peer("slow_drone", 200.0, 100.0, 0, 0, 0)
     
     # Wait 2.0 seconds. At 2.0s interval, this is only 1 missed beat -> ALIVE

@@ -225,7 +225,12 @@ import pytest
 FORMATIONS = ["V", "LINE", "SQUARE", "COLUMN", "ECHELON_LEFT", "ECHELON_RIGHT", "DIAMOND", "GRID", "CIRCLE"]
 
 @pytest.mark.parametrize("f_type", FORMATIONS)
-def test_planner_equivalence_to_formation_engine(f_type):
+@pytest.mark.parametrize("old_N", [4, 3])
+@pytest.mark.parametrize("dead_slot", [0, 1, 2, 3])
+def test_planner_equivalence_to_formation_engine(f_type, old_N, dead_slot):
+    if dead_slot >= old_N:
+        pytest.skip("invalid slot for N")
+        
     from DroneOS.core.coordination.healing import plan_healing, _get_slot_offset
     from DroneOS.core.formation_engine import FormationEngine
     from DroneOS.core.formation_manager import global_offset_local_m
@@ -269,43 +274,37 @@ def test_planner_equivalence_to_formation_engine(f_type):
         longitude = 0.0
         altitude = 10.0
 
-    for old_N in [4, 3]:
-        for dead_slot in range(old_N):
-            slots = {f"d{i}": i for i in range(old_N)}
-            healthy = {f"d{i}" for i in range(old_N) if i != dead_slot}
-            current_anchor = "d0"
-            prop_anchor = "d1" if dead_slot == 0 else "d0"
-            
-            plan = plan_healing({"type": f_type, "spacing": 15.0, "slot_assignments": slots}, healthy, current_anchor, prop_anchor, prop_anchor, MockFlightCfg(), None)
-            
-            # The test asked to REMOVE early return for rejected plans if possible?
-            # Wait, the prompt says "remove early return for rejected plans".
-            # The user wrote: "Equivalence test: remove early return for rejected plans; test geometry via target computation including origin shift"
-            if not plan:
-                continue
-            
-            new_N = len(healthy)
-            assert len(plan.slot_assignments) == new_N
-            if plan.accepted:
-                assert plan.min_separation >= 2.0  # 1.5 * max(1.0, 1.0) = 1.5? wait, floor is 1.5 * max(min_formation_separation_m, min_horizontal_distance). Both are 1.0, so 1.5. 2.0 is > 1.5. Wait, just assert plan.min_separation >= 1.5.
-                assert plan.min_separation >= 1.5
-            
-            engine_params = {
-                "type": f_type,
-                "spacing": 15.0,
-                "slot_assignments": plan.slot_assignments
-            }
-            expected = engine.get_expected_positions(FakeTelemetry(), engine_params)
-            
-            for pid in healthy:
-                ns = plan.slot_assignments[pid]
-                heal_rel = _get_slot_offset(f_type, ns, 15.0, new_N)
-                
-                t_lat, t_lon = expected[pid]
-                dn, de = global_offset_local_m(0.0, 0.0, t_lat, t_lon)
-                
-                diff_n = abs(dn - heal_rel[0])
-                diff_e = abs(de - heal_rel[1])
-                
-                assert diff_n < 1e-3
-                assert diff_e < 1e-3
+    slots = {f"d{i}": i for i in range(old_N)}
+    healthy = {f"d{i}" for i in range(old_N) if i != dead_slot}
+    current_anchor = "d0"
+    prop_anchor = "d1" if dead_slot == 0 else "d0"
+    
+    plan = plan_healing({"type": f_type, "spacing": 15.0, "slot_assignments": slots}, healthy, current_anchor, prop_anchor, prop_anchor, MockFlightCfg(), None)
+    
+    if not plan:
+        return
+    
+    new_N = len(healthy)
+    assert len(plan.slot_assignments) == new_N
+    if plan.accepted:
+        assert plan.min_separation >= 1.5
+    
+    engine_params = {
+        "type": f_type,
+        "spacing": 15.0,
+        "slot_assignments": plan.slot_assignments
+    }
+    expected = engine.get_expected_positions(FakeTelemetry(), engine_params)
+    
+    for pid in healthy:
+        ns = plan.slot_assignments[pid]
+        heal_rel = _get_slot_offset(f_type, ns, 15.0, new_N)
+        
+        t_lat, t_lon = expected[pid]
+        dn, de = global_offset_local_m(0.0, 0.0, t_lat, t_lon)
+        
+        diff_n = abs(dn - heal_rel[0])
+        diff_e = abs(de - heal_rel[1])
+        
+        assert diff_n < 1e-3
+        assert diff_e < 1e-3

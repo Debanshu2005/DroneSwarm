@@ -9,8 +9,8 @@ from DroneOS.core.coordination.membership import MembershipView, PeerState
 logger = setup_logger("CoordinationManager")
 
 class CoordinationManager:
-    def __init__(self, swarm_manager: SwarmMembership, flight_cfg: Any, heartbeat_interval: float = 1.0, formation_provider=None, self_status_provider=None, clock=time.monotonic):
-        self.clock = clock
+    def __init__(self, swarm_manager: SwarmMembership, flight_cfg: Any, heartbeat_interval: float = 1.0, formation_provider=None, self_status_provider=None, clock=None):
+        self.clock = clock or time.monotonic
         self.swarm = swarm_manager
         self.hb_interval = heartbeat_interval
         self.flight_cfg = flight_cfg
@@ -197,25 +197,24 @@ class CoordinationManager:
                         node.dead_since = now
                         
         if not true_dead or self._heals_disabled:
-            logger.debug(f"[coord] DEBUG return 1: true_dead={true_dead} heals_disabled={self._heals_disabled}")
             return
 
-        memo_key = (tuple(sorted(true_dead)), str(fp))
+        # Safe memo key excluding mutable/unpredictable elements
+        safe_slots = tuple(sorted(slot_assignments.items()))
+        fp_safe = (fp.get('type'), fp.get('spacing'), safe_slots)
+        memo_key = (tuple(sorted(true_dead)), fp_safe)
         if memo_key in self._memoized_plans:
-            logger.debug(f"[coord] DEBUG return 2")
             return
 
         reslot_cooldown = float(self.config_dict.get("reslot_cooldown_s", 5.0))
         time_since_change = now - self._last_slot_change_time
         if time_since_change < reslot_cooldown:
-            logger.debug(f"[coord] DEBUG return 3")
             return
 
         if self._heal_count >= self.max_heals_per_session:
             if not self._heals_disabled:
                 logger.warning(f"[coord] max_heals_per_session={self.max_heals_per_session} reached; healing disabled for this session.")
                 self._heals_disabled = True
-            logger.debug(f"[coord] DEBUG return 4")
             return
 
         reshape_on_follower = str(self.config_dict.get("reshape_on_follower_loss", "false")).lower() == "true"
@@ -223,7 +222,6 @@ class CoordinationManager:
         is_anchor_dead = (current_anchor in true_dead)
         
         if not is_anchor_dead and not reshape_on_follower:
-            logger.debug(f"[coord] DEBUG return 5")
             if dead_pid_str not in self._hold_logged:
                 self._hold_logged.add(dead_pid_str)
                 logger.info(f"[coord] HOLD: hole left at slot(s) {[slot_assignments[d] for d in true_dead]} (follower died, reshape_on_follower_loss=false)")
@@ -233,11 +231,9 @@ class CoordinationManager:
         from DroneOS.core.coordination.healing import plan_healing, RejectKind
         plan = plan_healing(fp, healthy_members, current_anchor, prop_anchor, self.my_id, self.flight_cfg, self.membership)
         if not plan:
-            logger.debug(f"[coord] DEBUG return 6 plan=None")
             return
             
         if plan.is_hold:
-            logger.debug(f"[coord] DEBUG plan is_hold")
             if dead_pid_str not in self._hold_logged:
                 self._hold_logged.add(dead_pid_str)
                 logger.info(f"[coord] HOLD: hole left at slot {plan.hold_slot} (no safe move for {dead_pid_str})")

@@ -11,10 +11,10 @@ class PeerState(Enum):
     DEAD = "DEAD"
 
 class MemberNode:
-    def __init__(self, drone_id: str, clock=time.monotonic):
+    def __init__(self, drone_id: str, clock=None):
         self.drone_id = drone_id
         self.state: PeerState = PeerState.ALIVE
-        self.last_heartbeat_time: float = clock()
+        self.last_heartbeat_time: float = (clock or time.monotonic)()
         self.missed_beats: int = 0
         self.rejoin_stable_start: Optional[float] = None
         
@@ -25,8 +25,8 @@ class MemberNode:
         self.alt: Optional[float] = None
         
 class MembershipView:
-    def __init__(self, config: dict, clock=time.monotonic):
-        self.clock = clock
+    def __init__(self, config: dict, clock=None):
+        self.clock = clock or time.monotonic
         self.config = config
         self.nodes: Dict[str, MemberNode] = {}
         

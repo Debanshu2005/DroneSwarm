@@ -357,6 +357,7 @@ def plan_healing(
     if not accepted_plans:
         # NO_PLAN: all rejected
         best_rejected = plans[0] if plans else HealPlan({}, "NO_PLAN", {}, 0.0, 0.0, False, "no strategies generated")
+        best_rejected.reason = "NO_PLAN"
         best_rejected.is_hold = False
         return best_rejected
         
