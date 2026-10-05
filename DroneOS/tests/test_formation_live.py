@@ -151,8 +151,8 @@ def test_missing_anchor_telemetry_returns_hover_with_log(caplog):
     assert intent.action == IntentAction.HOVER
     assert intent.source == IntentSource.FORMATION
     # Must log a warning about stale/missing anchor
-    assert any("stale" in r.message.lower() or "missing" in r.message.lower()
-               for r in caplog.records)
+    warning_logs = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("stale or missing" in r.message for r in warning_logs)
 
 def test_missing_anchor_telemetry_returns_hover_with_info_in_grace(caplog):
     """Non-anchor drone with no anchor peer -> HOVER, logs INFO during grace period."""
@@ -171,7 +171,8 @@ def test_missing_anchor_telemetry_returns_hover_with_info_in_grace(caplog):
 
     assert intent.action == IntentAction.HOVER
     assert intent.source == IntentSource.FORMATION
-    assert any("not yet available" in r.message.lower() for r in caplog.records)
+    info_logs = [r for r in caplog.records if r.levelno == logging.INFO]
+    assert any("position not yet available" in r.message for r in info_logs)
 
 
 # ---------------------------------------------------------------------------
