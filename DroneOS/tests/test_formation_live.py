@@ -144,7 +144,8 @@ def test_missing_anchor_telemetry_returns_hover_with_log(caplog):
     engine.compute_intent(_telem(), {}, params)
     
     # Advance time past grace period
-    with patch("time.time", return_value=time.time() + 6.0):
+    from DroneOS.core.formation_engine import _FORMATION_STARTUP_GRACE_SEC
+    with patch("time.time", return_value=time.time() + _FORMATION_STARTUP_GRACE_SEC + 1.0):
         with caplog.at_level(logging.WARNING, logger="FormationEngine"):
             intent = engine.compute_intent(_telem(), {}, params)
 
