@@ -1,3 +1,4 @@
+import pytest
 import logging
 
 from DroneOS.core.coordination.anchor import is_healthy
