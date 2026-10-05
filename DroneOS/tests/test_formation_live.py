@@ -128,6 +128,8 @@ def test_formation_engine_produces_move_velocity_for_non_anchor():
 def test_missing_anchor_telemetry_returns_hover_with_log(caplog):
     """Non-anchor drone with no anchor peer -> HOVER, logs warning."""
     import logging
+    import time
+    from unittest.mock import patch
     peers = {}  # anchor not in registry
     engine = _make_engine("drone2", peers)
 
@@ -137,14 +139,39 @@ def test_missing_anchor_telemetry_returns_hover_with_log(caplog):
         "slot_assignments": {"drone1": 0, "drone2": 1},
         "speed": 2.0, "repulsion_radius_m": 1.0,
     }
-    with caplog.at_level(logging.WARNING, logger="FormationEngine"):
-        intent = engine.compute_intent(_telem(), {}, params)
+    
+    # Initialize the engine to set _formation_activated_at
+    engine.compute_intent(_telem(), {}, params)
+    
+    # Advance time past grace period
+    with patch("time.time", return_value=time.time() + 6.0):
+        with caplog.at_level(logging.WARNING, logger="FormationEngine"):
+            intent = engine.compute_intent(_telem(), {}, params)
 
     assert intent.action == IntentAction.HOVER
     assert intent.source == IntentSource.FORMATION
     # Must log a warning about stale/missing anchor
     assert any("stale" in r.message.lower() or "missing" in r.message.lower()
                for r in caplog.records)
+
+def test_missing_anchor_telemetry_returns_hover_with_info_in_grace(caplog):
+    """Non-anchor drone with no anchor peer -> HOVER, logs INFO during grace period."""
+    import logging
+    peers = {}  # anchor not in registry
+    engine = _make_engine("drone2", peers)
+
+    params = {
+        "type": "V", "spacing": 10.0,
+        "members": ["drone1", "drone2"],
+        "slot_assignments": {"drone1": 0, "drone2": 1},
+        "speed": 2.0, "repulsion_radius_m": 1.0,
+    }
+    with caplog.at_level(logging.INFO, logger="FormationEngine"):
+        intent = engine.compute_intent(_telem(), {}, params)
+
+    assert intent.action == IntentAction.HOVER
+    assert intent.source == IntentSource.FORMATION
+    assert any("not yet available" in r.message.lower() for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +230,7 @@ def test_airsim_adapter_receives_formation_move_velocity():
 
     intent = FlightIntent(
         IntentSource.FORMATION, IntentAction.MOVE_VELOCITY_NED, ttl_seconds=1.0,
-        params={"vx": 1.5, "vy": -0.5, "vz": 0.0, "yaw_rate": 0.0}
+        params={"north": 1.5, "east": -0.5, "down": 0.0, "yaw_rate": 0.0}
     )
 
     import asyncio
