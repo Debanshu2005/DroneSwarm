@@ -247,3 +247,27 @@ def test_non_default_heartbeat_interval(monkeypatch):
     view2.evaluate_tick(hb_interval=2.0)
     assert view2.nodes["slow_drone"].missed_beats == 1
     assert view2.nodes["slow_drone"].state == PeerState.ALIVE
+
+@pytest.mark.asyncio
+async def test_peer_state_message_updates_stamp():
+    from DroneOS.core.swarm_manager import SwarmMembership, PeerStateManager
+    from DroneOS.shared.protocol.messages import PeerStateMessage
+    
+    swarm = SwarmMembership("d0")
+    # Manually inject peer
+    peer = PeerStateManager("d1")
+    swarm.registry.peers["d1"] = peer
+    peer.lat = 0.0
+    peer.lon = 0.0
+    peer.alt = 0.0
+    peer.last_position_time = 10.0
+    
+    # 1. Update with older stamp
+    msg1 = PeerStateMessage(sender_id="d1", timestamp=20.0, peer_id="d1", is_active=True, peer_position_stamp=8.0)
+    swarm.sync.handle_peer_state(msg1)
+    
+    # 2. Update with newer stamp
+    msg2 = PeerStateMessage(sender_id="d1", timestamp=21.0, peer_id="d1", is_active=True, peer_position_stamp=15.0)
+    swarm.sync.handle_peer_state(msg2)
+    
+    assert peer.last_position_time == 15.0
