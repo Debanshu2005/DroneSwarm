@@ -222,6 +222,7 @@ class PeerStateMessage(BaseMessage):
     peer_id: str
     is_active: bool
     current_task: Optional[str] = None
+    peer_position_stamp: Optional[float] = None
 
 class DroneIdentityMessage(BaseMessage):
     msg_type: MessageType = MessageType.DRONE_IDENTITY

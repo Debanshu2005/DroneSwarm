@@ -215,3 +215,25 @@ def test_settle_diagnostics_are_per_peer_and_rate_limited(caplog, monkeypatch):
         "[coord] settle: d2 dist=4.00m radius=3.00m",
         "[coord] settle: d1 dist=5.00m radius=3.00m",
     ]
+
+def test_advancing_stamps_keep_hovering_peer_healthy():
+    """A hovering peer that sends identical coords but new stamps should stay healthy for 30s."""
+    clock = [10.0]
+    mv = MembershipView(config={}, clock=lambda: clock[0])
+    swarm = MockSwarm()
+    swarm.registry.peers["d1"] = MockPeerState(battery=50.0, last_pos=10.0)
+    
+    # Update from peer at time 10.0
+    mv.update_from_peer("d1", 10.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=10.0)
+    assert is_healthy("d1", "d0", mv, swarm, 30.0, clock[0], 5.0) == True
+    
+    # 25 seconds later, peer still hovering (same coords), but new stamp
+    clock[0] = 35.0
+    swarm.registry.peers["d1"].last_pos = 35.0
+    mv.update_from_peer("d1", 35.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=34.0)
+    assert is_healthy("d1", "d0", mv, swarm, 30.0, clock[0], 5.0) == True
+    
+    # If stamp stops advancing and gets older than 5s, it becomes stale
+    clock[0] = 45.0
+    mv.update_from_peer("d1", 45.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=34.0)
+    assert is_healthy("d1", "d0", mv, swarm, 30.0, clock[0], 5.0) == False
