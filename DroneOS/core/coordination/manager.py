@@ -49,6 +49,7 @@ class CoordinationManager:
         # HOLD memoization: set of dead pids already reported as HOLD this formation
         self._hold_logged: Set[str] = set()
         self._transient_logged: Dict[str, str] = {}
+        self._settle_logged: Dict[str, float] = {}
 
         # Legacy: kept for tests that directly read _last_heal_time
         self._last_heal_time: float = 0.0
@@ -90,7 +91,8 @@ class CoordinationManager:
                                 battery=peer_state.battery_level,
                                 lat=peer_state.lat,
                                 lon=peer_state.lon,
-                                alt=peer_state.alt
+                                alt=peer_state.alt,
+                                peer_position_stamp=peer_state.last_position_time
                             )
                             
                     self.membership.evaluate_tick(self.hb_interval)
@@ -114,6 +116,7 @@ class CoordinationManager:
                     
                     anchor_min_battery = float(self.config_dict.get("anchor_min_battery", 30))
                     anchor_min_dwell_s = float(self.config_dict.get("anchor_min_dwell_s", 10))
+                    heal_max_position_age_s = float(self.config_dict.get("heal_max_position_age_s", 5.0))
                     
                     # Build healthy members
                     healthy_members = set()
@@ -122,10 +125,10 @@ class CoordinationManager:
                             # self check
                             if my_status.get("battery_level", 0.0) >= anchor_min_battery:
                                 age = my_status.get("position_age")
-                                if age is not None and age <= 3.0:
+                                if age is not None and (heal_max_position_age_s <= 0 or age <= heal_max_position_age_s):
                                     healthy_members.add(pid)
                         else:
-                            if is_healthy(pid, self.my_id, self.membership, self.swarm, anchor_min_battery, now):
+                            if is_healthy(pid, self.my_id, self.membership, self.swarm, anchor_min_battery, now, heal_max_position_age_s):
                                 healthy_members.add(pid)
                                 
                     current_anchor = None
@@ -157,7 +160,7 @@ class CoordinationManager:
                         logger.info(f"[coord] state={q_state.name} anchor={current_anchor} proposed={prop_anchor} healthy={len(healthy_members)}/{len(slot_assignments)}")
                         
                     # ── Healing (Phase 3 Advisory) ──────────────────────────
-                    self._handle_healing(now, q_state, fp, healthy_members, current_anchor, prop_anchor)
+                    self._handle_healing(now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status)
 
                     
                 except asyncio.CancelledError:
@@ -177,7 +180,7 @@ class CoordinationManager:
     def stop(self):
         self.is_running = False
 
-    def _handle_healing(self, now, q_state, fp, healthy_members, current_anchor, prop_anchor):
+    def _handle_healing(self, now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status=None):
         if self.mode not in ("advisory", "active") or q_state.name != "QUORUM" or not fp:
             return
 
@@ -229,7 +232,7 @@ class CoordinationManager:
             return
             
         from DroneOS.core.coordination.healing import plan_healing, RejectKind
-        plan = plan_healing(fp, healthy_members, current_anchor, prop_anchor, self.my_id, self.flight_cfg, self.membership)
+        plan = plan_healing(fp, healthy_members, current_anchor, prop_anchor, self.my_id, self.flight_cfg, self.membership, my_status)
         if not plan:
             return
             
@@ -240,6 +243,19 @@ class CoordinationManager:
             self._memoized_plans[memo_key] = True
         elif not plan.accepted:
             if plan.reject_kind == RejectKind.TRANSIENT:
+                if plan.reject_reason.startswith("PRECONDITION FAILED: not settled ("):
+                    try:
+                        inner = plan.reject_reason.split("(")[1].split(")")[0]
+                        pid_part = inner.split(" ")[0]
+                        last_log = self._settle_logged.get(pid_part, None)
+                        if last_log is None or now - last_log >= 5.0:
+                            self._settle_logged[pid_part] = now
+                            dist_str = inner.split("dist=")[1].split("m")[0]
+                            rad_str = inner.split("> ")[1].split("m")[0]
+                            logger.info(f"[coord] settle: {pid_part} dist={dist_str}m radius={rad_str}m")
+                    except Exception as e:
+                        logger.warning(f"[coord] Failed to parse settle rejection: {e}")
+
                 if self._transient_logged.get(dead_pid_str) != plan.reject_reason:
                     self._transient_logged[dead_pid_str] = plan.reject_reason
                     logger.info(f"[coord] TRANSIENT NO_PLAN: {plan.reject_reason} for {dead_pid_str}")

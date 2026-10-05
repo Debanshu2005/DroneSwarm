@@ -32,5 +32,6 @@ coordination:
   rejoin_stable_s: 10
   anchor_min_battery: 30
   anchor_min_dwell_s: 10
+  heal_max_position_age_s: 5.0
   quorum_required: true
   reslot_cooldown_s: 15

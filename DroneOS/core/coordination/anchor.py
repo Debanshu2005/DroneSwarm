@@ -8,7 +8,8 @@ def is_healthy(
     membership_view: MembershipView,
     swarm: SwarmMembership,
     anchor_min_battery: float,
-    now: float
+    now: float,
+    max_position_age: float = 5.0
 ) -> bool:
     if peer_id == my_id:
         # Check own health via swarm manager or manager.py?
@@ -30,8 +31,9 @@ def is_healthy(
         if registry_peer_state.battery_level < anchor_min_battery:
             return False
             
-    if registry_peer_state.last_position_time is not None:
-        if (now - registry_peer_state.last_position_time) > 3.0:
+    if node.last_position_time is not None:
+        age = now - node.last_position_time
+        if age < 0 or (max_position_age > 0 and age > max_position_age):
             return False
     else:
         return False

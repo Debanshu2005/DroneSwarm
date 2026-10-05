@@ -1,3 +1,4 @@
+import sys
 import pytest
 import asyncio
 from unittest.mock import MagicMock, patch
@@ -126,6 +127,7 @@ async def test_manager_healing_conditions():
             self.last_seen = start_time
             self.last_heartbeat_time = start_time
             self.battery_level = 90.0
+            self.last_position_time = start_time
             self.lat, self.lon, self.alt = 0.0, 0.0, 0.0
 
     mgr.membership.nodes["d1"] = MockNode(PeerState.DEAD)
@@ -190,6 +192,7 @@ async def test_manager_second_healer_no_standdown():
             self.last_seen = start_time
             self.last_heartbeat_time = start_time
             self.battery_level = 90.0
+            self.last_position_time = start_time
             self.lat, self.lon, self.alt = 0.0, 0.0, 0.0
             
     # d1 is dead, d2 is us, d3 is alive
@@ -335,13 +338,13 @@ async def test_manager_hold_does_not_broadcast_and_logs_once(caplog):
     from DroneOS.core.coordination.quorum import PeerState
     mgr.membership.nodes["d3"] = type('N', (), {
         'state': PeerState.DEAD, 'dead_since': start_time - 20.0,
-        'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
+        'last_position_time': getattr(sys.modules[__name__], 'start_time', 1000.0) if 'start_time' not in locals() else start_time, 'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
     mgr.membership.nodes["d1"] = type('N', (), {
         'state': PeerState.ALIVE, 'dead_since': None,
-        'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
+        'last_position_time': getattr(sys.modules[__name__], 'start_time', 1000.0) if 'start_time' not in locals() else start_time, 'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
     mgr.membership.nodes["d2"] = type('N', (), {
         'state': PeerState.ALIVE, 'dead_since': None,
-        'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
+        'last_position_time': getattr(sys.modules[__name__], 'start_time', 1000.0) if 'start_time' not in locals() else start_time, 'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
     swarm.registry.get_peer = lambda pid: type('P', (), {
         'battery_level': 90.0, 'last_position_time': start_time, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})()
 
@@ -359,13 +362,13 @@ async def test_manager_hold_does_not_broadcast_and_logs_once(caplog):
         mgr.membership.nodes.clear()
         mgr.membership.nodes["d3"] = type('N', (), {
             'state': PeerState.DEAD, 'dead_since': _now - 20.0,
-            'last_seen': _now, 'last_heartbeat_time': _now, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
+            'last_position_time': _now, 'last_seen': _now, 'last_heartbeat_time': _now, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
         mgr.membership.nodes["d1"] = type('N', (), {
             'state': PeerState.ALIVE, 'dead_since': None,
-            'last_seen': _now, 'last_heartbeat_time': _now, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
+            'last_position_time': _now, 'last_seen': _now, 'last_heartbeat_time': _now, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
         mgr.membership.nodes["d2"] = type('N', (), {
             'state': PeerState.ALIVE, 'dead_since': None,
-            'last_seen': _now, 'last_heartbeat_time': _now, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
+            'last_position_time': _now, 'last_seen': _now, 'last_heartbeat_time': _now, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
         mgr.is_running = True
 
         # Second tick – HOLD must not be re-logged
@@ -410,8 +413,8 @@ async def test_manager_no_plan_does_not_broadcast_and_logs_once(caplog):
     mgr._last_slot_change_time = start_time - 10.0
 
     from DroneOS.core.coordination.quorum import PeerState
-    mgr.membership.nodes["d1"] = type('N', (), {'state': PeerState.DEAD, 'dead_since': start_time - 20.0, 'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.00001, 'lon': 0.00001})()
-    mgr.membership.nodes["d2"] = type('N', (), {'state': PeerState.ALIVE, 'dead_since': None, 'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.00002, 'lon': 0.00002})()
+    mgr.membership.nodes["d1"] = type('N', (), {'state': PeerState.DEAD, 'dead_since': start_time - 20.0, 'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'last_position_time': start_time, 'lat': 0.00001, 'lon': 0.00001, 'alt': 0.0})()
+    mgr.membership.nodes["d2"] = type('N', (), {'state': PeerState.ALIVE, 'dead_since': None, 'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'last_position_time': start_time, 'lat': 0.00002, 'lon': 0.00002, 'alt': 0.0})()
 
     with caplog.at_level(logging.INFO, logger="CoordinationManager"):
         async def stop1():
@@ -456,8 +459,8 @@ async def test_manager_reshape_on_follower_loss_false(caplog):
     mgr._last_slot_change_time = start_time - 10.0
 
     from DroneOS.core.coordination.quorum import PeerState
-    mgr.membership.nodes["d1"] = type('N', (), {'state': PeerState.DEAD, 'dead_since': start_time - 20.0, 'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
-    mgr.membership.nodes["d2"] = type('N', (), {'state': PeerState.ALIVE, 'dead_since': None, 'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
+    mgr.membership.nodes["d1"] = type('N', (), {'last_position_time': getattr(sys.modules[__name__], 'start_time', 1000.0), 'state': PeerState.DEAD, 'dead_since': start_time - 20.0, 'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
+    mgr.membership.nodes["d2"] = type('N', (), {'last_position_time': getattr(sys.modules[__name__], 'start_time', 1000.0), 'state': PeerState.ALIVE, 'dead_since': None, 'last_seen': start_time, 'last_heartbeat_time': start_time, 'battery_level': 90.0, 'lat': 0.0, 'lon': 0.0})()
 
     with caplog.at_level(logging.INFO, logger="CoordinationManager"):
         async def stop():
@@ -502,7 +505,7 @@ async def test_manager_default_v_anchor_dead_accepted():
         rel = _get_slot_offset("V", slot, 15.0, 4)
         lat, lon, _ = convert_local_offset_to_global(0.0, 0.0, 0.0, rel[0], rel[1])
         state = PeerState.DEAD if pid == "d0" else PeerState.ALIVE
-        node = type('N', (), {'state': state, 'dead_since': fake_time - 10.0, 'last_seen': fake_time, 'last_heartbeat_time': fake_time, 'battery_level': 90.0, 'lat': lat, 'lon': lon, 'alt': 10.0})()
+        node = type('N', (), {'state': state, 'dead_since': fake_time - 10.0, 'last_seen': fake_time, 'last_heartbeat_time': fake_time, 'battery_level': 90.0, 'last_position_time': fake_time, 'lat': lat, 'lon': lon, 'alt': 10.0})()
         mgr.membership.nodes[pid] = node
         
     async def stop():
@@ -553,7 +556,7 @@ async def test_manager_default_line_anchor_dead_noplan(caplog):
         rel = _get_slot_offset("LINE", slot, 15.0, 4)
         lat, lon, _ = convert_local_offset_to_global(0.0, 0.0, 0.0, rel[0], rel[1])
         state = PeerState.DEAD if pid == "d0" else PeerState.ALIVE
-        node = type('N', (), {'state': state, 'dead_since': fake_time - 10.0, 'last_seen': fake_time, 'last_heartbeat_time': fake_time, 'battery_level': 90.0, 'lat': lat, 'lon': lon, 'alt': 10.0})()
+        node = type('N', (), {'state': state, 'dead_since': fake_time - 10.0, 'last_seen': fake_time, 'last_heartbeat_time': fake_time, 'battery_level': 90.0, 'last_position_time': fake_time, 'lat': lat, 'lon': lon, 'alt': 10.0})()
         mgr.membership.nodes[pid] = node
         
     with caplog.at_level(logging.WARNING, logger="CoordinationManager"):
@@ -603,7 +606,7 @@ async def test_manager_recovery_from_transient():
         if pid == "d2":
             lat += 0.01  # Far away
         state = PeerState.DEAD if pid == "d0" else PeerState.ALIVE
-        node = type('N', (), {'state': state, 'dead_since': fake_time - 10.0, 'last_seen': fake_time, 'last_heartbeat_time': fake_time, 'battery_level': 90.0, 'lat': lat, 'lon': lon, 'alt': 10.0})()
+        node = type('N', (), {'state': state, 'dead_since': fake_time - 10.0, 'last_seen': fake_time, 'last_heartbeat_time': fake_time, 'battery_level': 90.0, 'last_position_time': fake_time, 'lat': lat, 'lon': lon, 'alt': 10.0})()
         mgr.membership.nodes[pid] = node
 
     async def run_once():

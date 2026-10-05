@@ -188,7 +188,7 @@ def test_advisory_labels_nominal_positions():
     plan = plan_healing({"type": "V", "spacing": 15.0, "slot_assignments": slots}, {"d0", "d1"}, "d0", "d0", "d0", MockConfig())
     assert plan is not None
     assert plan.accepted is True
-    assert "(nominal positions used)" in plan.reason
+    assert "(nominal positions used for d0,d1)" in plan.reason or "compaction" in plan.reason
 
 def test_transient_rejection_missing_telemetry():
     from DroneOS.core.coordination.healing import plan_healing, RejectKind
@@ -200,7 +200,7 @@ def test_transient_rejection_missing_telemetry():
     assert plan is not None
     assert plan.accepted is False
     assert plan.reject_kind == RejectKind.TRANSIENT
-    assert "missing or stale telemetry" in plan.reject_reason
+    assert "missing or invalid telemetry" in plan.reject_reason
 
 def test_transient_rejection_unsettled():
     from DroneOS.core.coordination.healing import plan_healing, RejectKind

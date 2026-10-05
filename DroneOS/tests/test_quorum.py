@@ -55,6 +55,7 @@ def test_compute_quorum():
 
 def test_is_healthy():
     mv = _make_mv(["d1"])
+    mv.nodes["d1"].last_position_time = 100.0
     swarm = MockSwarm()
     swarm.registry.peers["d1"] = MockPeerState(battery=50.0, last_pos=100.0)
     
@@ -66,7 +67,7 @@ def test_is_healthy():
     
     # Unhealthy: stale position
     swarm.registry.peers["d1"].battery_level = 50.0
-    assert is_healthy("d1", "d0", mv, swarm, anchor_min_battery=30.0, now=105.0) == False
+    assert is_healthy("d1", "d0", mv, swarm, anchor_min_battery=30.0, now=106.0) == False
     
     # Unhealthy: DEAD in membership
     mv.nodes["d1"].state = PeerState.DEAD

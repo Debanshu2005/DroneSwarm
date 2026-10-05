@@ -180,7 +180,8 @@ def plan_healing(
     prop_anchor: Optional[str],
     my_id: str,
     flight_cfg: Any,
-    membership_view: Any = None
+    membership_view: Any = None,
+    my_status: Dict[str, Any] = None
 ) -> Optional[HealPlan]:
     """
     Core algorithm for healing formations.
@@ -215,8 +216,12 @@ def plan_healing(
     form_cfg = getattr(flight_cfg, "formation", None)
     ca_cfg = getattr(flight_cfg, "collision_avoidance", None)
     
-    min_form_sep = float(getattr(form_cfg, "min_formation_separation_m", 8.0)) if form_cfg else 8.0
-    min_ca_dist = float(getattr(ca_cfg, "min_horizontal_distance", 2.0)) if ca_cfg else 2.0
+    from DroneOS.core.formation_engine import _DEFAULT_MIN_SEP_M
+    from DroneOS.shared.config.models import CollisionAvoidanceConfig
+    
+    default_ca = CollisionAvoidanceConfig().min_horizontal_distance
+    min_form_sep = float(getattr(form_cfg, "min_formation_separation_m", _DEFAULT_MIN_SEP_M)) if form_cfg else _DEFAULT_MIN_SEP_M
+    min_ca_dist = float(getattr(ca_cfg, "min_horizontal_distance", default_ca)) if ca_cfg else default_ca
     margin = float(config_dict.get("heal_separation_margin_m", 1.0))
     pos_margin = float(config_dict.get("heal_position_margin_m", 2.0))
     
@@ -246,16 +251,20 @@ def plan_healing(
             break
             
     if membership_view and anchor_id_old:
-        node = membership_view.nodes.get(anchor_id_old)
-        if node and getattr(node, "lat", None) is not None and getattr(node, "lon", None) is not None:
-            anchor_lat, anchor_lon = node.lat, node.lon
+        if anchor_id_old == my_id and my_status and my_status.get("lat") is not None and my_status.get("lon") is not None:
+            anchor_lat, anchor_lon = my_status["lat"], my_status["lon"]
+        else:
+            node = membership_view.nodes.get(anchor_id_old)
+            if node and getattr(node, "lat", None) is not None and getattr(node, "lon", None) is not None:
+                anchor_lat, anchor_lon = node.lat, node.lon
             
     start_positions = {}
     dead_positions = {}
     
     is_advisory = config_dict.get("mode", "advisory").lower() == "advisory"
     settled_radius = float(config_dict.get("heal_settled_radius_m", 3.0))
-    used_nominal = False
+    heal_max_position_age_s = float(config_dict.get("heal_max_position_age_s", 5.0))
+    used_nominal_for = []
     
     for pid, old_s in old_slots.items():
         nom_pos_3d = _get_slot_offset(f_type, int(old_s), spacing, total_drones)
@@ -264,32 +273,67 @@ def plan_healing(
         actual_pos = nom_pos
         has_real_pos = False
         
-        if membership_view and anchor_lat is not None and anchor_lon is not None:
+        node_lat, node_lon, node_alt = None, None, None
+        age = None
+        gps_valid = True
+        
+        if pid == my_id and my_status:
+            node_lat = my_status.get("lat")
+            node_lon = my_status.get("lon")
+            node_alt = my_status.get("alt")
+            if node_lat is None or node_lon is None:
+                node = membership_view.nodes.get(pid) if membership_view else None
+                if node:
+                    node_lat = getattr(node, "lat", None)
+                    node_lon = getattr(node, "lon", None)
+                    node_alt = getattr(node, "alt", None)
+            age = my_status.get("position_age", 0.0)
+            gps_valid = my_status.get("gps_valid", True)
+        elif membership_view:
             node = membership_view.nodes.get(pid)
-            if node and getattr(node, "lat", None) is not None and getattr(node, "lon", None) is not None:
-                dn, de = global_offset_local_m(anchor_lat, anchor_lon, node.lat, node.lon)
-                gps_offset_dist = math.hypot(dn, de)
-                is_anchor = (pid == anchor_id_old)
-                if is_anchor or gps_offset_dist > 0.5:
-                    actual_pos = (dn, de)
-                    has_real_pos = True
+            if node:
+                node_lat = getattr(node, "lat", None)
+                node_lon = getattr(node, "lon", None)
+                node_alt = getattr(node, "alt", None)
+                if getattr(node, "last_position_time", None) is not None:
+                    age = membership_view.clock() - node.last_position_time
+                else:
+                    age = 0.0
+                    
+        if (anchor_lat is not None and anchor_lon is not None and
+                node_lat is not None and node_lon is not None):
+            dn, de = global_offset_local_m(anchor_lat, anchor_lon, node_lat, node_lon)
+            gps_offset_dist = math.hypot(dn, de)
+            is_anchor = (pid == anchor_id_old)
+            if is_anchor or gps_offset_dist > 0.5:
+                actual_pos = (dn, de)
+                has_real_pos = True
 
         if pid in healthy_members:
-            if not has_real_pos:
-                if not is_advisory:
-                    return HealPlan(old_slots, "none", {}, 0.0, 0.0, False, f"missing or stale telemetry for {pid}", RejectKind.TRANSIENT)
-                used_nominal = True
-                
+            is_stale = age is None or age < 0 or (heal_max_position_age_s > 0 and age > heal_max_position_age_s)
+            is_invalid_gps = pid == my_id and not gps_valid
+            
+            if not is_advisory:
+                if not has_real_pos:
+                    return HealPlan(old_slots, "none", {}, 0.0, 0.0, False, f"missing or invalid telemetry for {pid}", RejectKind.TRANSIENT)
+                if is_invalid_gps:
+                    return HealPlan(old_slots, "none", {}, 0.0, 0.0, False, f"gps invalid for {pid}", RejectKind.TRANSIENT)
+                if is_stale:
+                    return HealPlan(old_slots, "none", {}, 0.0, 0.0, False, f"stale telemetry for {pid} (age={age})", RejectKind.TRANSIENT)
+            else:
+                if not has_real_pos or is_invalid_gps or is_stale:
+                    used_nominal_for.append(pid)
+                    
             dist_to_nom = math.hypot(actual_pos[0]-nom_pos[0], actual_pos[1]-nom_pos[1])
             if dist_to_nom > settled_radius:
-                return HealPlan(old_slots, "none", {}, 0.0, 0.0, False, f"PRECONDITION FAILED: {pid} is not settled at nominal slot {old_s} (dist={dist_to_nom:.1f}m)", RejectKind.TRANSIENT)
+                return HealPlan(old_slots, "none", {}, 0.0, 0.0, False, f"PRECONDITION FAILED: not settled ({pid} dist={dist_to_nom:.2f}m > {settled_radius:.2f}m)", RejectKind.TRANSIENT)
             
             start_positions[pid] = actual_pos
         else:
             dead_positions[pid] = actual_pos
             
-    if used_nominal:
-        advisory_suffix += " (nominal positions used)"
+    if used_nominal_for:
+        advisory_suffix += f" (nominal positions used for {','.join(used_nominal_for)})"
 
     plans: List[HealPlan] = []
 

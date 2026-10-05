@@ -23,6 +23,10 @@ class MemberNode:
         self.lat: Optional[float] = None
         self.lon: Optional[float] = None
         self.alt: Optional[float] = None
+        # A new member has not supplied a usable position yet.  In particular,
+        # do not manufacture a fresh position timestamp from its discovery
+        # heartbeat.
+        self.last_position_time: Optional[float] = None
         
 class MembershipView:
     def __init__(self, config: dict, clock=None):
@@ -37,10 +41,10 @@ class MembershipView:
         self.last_eval_time = self.clock()
         self._last_seen_tracker = {}
 
-    def update_from_peer(self, peer_id: str, last_seen: float, battery: Optional[float], lat: Optional[float], lon: Optional[float], alt: Optional[float]):
+    def update_from_peer(self, peer_id: str, last_seen: float, battery: Optional[float], lat: Optional[float], lon: Optional[float], alt: Optional[float], peer_position_stamp: Optional[float] = None):
         if peer_id not in self.nodes:
             self.nodes[peer_id] = MemberNode(peer_id, clock=self.clock)
-            self._last_seen_tracker[peer_id] = last_seen
+            # Remove the assignment here so the block below catches it
             logger.info(f"[coord] New member discovered: {peer_id}")
             
         node = self.nodes[peer_id]
@@ -52,9 +56,17 @@ class MembershipView:
             node.missed_beats = 0
             
             if battery is not None: node.battery = battery
-            if lat is not None: node.lat = lat
-            if lon is not None: node.lon = lon
-            if alt is not None: node.alt = alt
+            # A horizontal position is atomic: a partial latitude/longitude
+            # pair must not refresh position freshness or overwrite the last
+            # known tuple.  Altitude is optional for this horizontal planner.
+            if lat is not None and lon is not None:
+                stamp_changed = (peer_position_stamp is not None and getattr(node, "_last_peer_position_stamp", None) != peer_position_stamp)
+                if lat != node.lat or lon != node.lon or alt != node.alt or stamp_changed:
+                    node.lat = lat
+                    node.lon = lon
+                    node.alt = alt
+                    node.last_position_time = self.clock()
+                    node._last_peer_position_stamp = peer_position_stamp
             
             if node.state == PeerState.DEAD:
                 if node.rejoin_stable_start is None:
