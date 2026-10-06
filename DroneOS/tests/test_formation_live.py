@@ -151,13 +151,15 @@ def test_missing_anchor_telemetry_returns_hover_with_log(caplog):
 
     assert intent.action == IntentAction.HOVER
     assert intent.source == IntentSource.FORMATION
-    # Must log a warning about stale/missing anchor
+    # Must log a warning about stale/missing anchor exactly
     warning_logs = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert any("stale or missing" in r.message for r in warning_logs)
+    assert any("Anchor drone1 position stale or missing. Hovering." in r.message for r in warning_logs)
 
 def test_missing_anchor_telemetry_returns_hover_with_info_in_grace(caplog):
     """Non-anchor drone with no anchor peer -> HOVER, logs INFO during grace period."""
     import logging
+    import re
+    from DroneOS.core.formation_engine import _FORMATION_STARTUP_GRACE_SEC
     peers = {}  # anchor not in registry
     engine = _make_engine("drone2", peers)
 
@@ -173,7 +175,8 @@ def test_missing_anchor_telemetry_returns_hover_with_info_in_grace(caplog):
     assert intent.action == IntentAction.HOVER
     assert intent.source == IntentSource.FORMATION
     info_logs = [r for r in caplog.records if r.levelno == logging.INFO]
-    assert any("position not yet available" in r.message for r in info_logs)
+    pattern = re.compile(rf"Anchor drone1 position not yet available \(startup grace .*s remaining\)\. Hovering\.")
+    assert any(pattern.search(r.message) for r in info_logs)
 
 
 # ---------------------------------------------------------------------------
