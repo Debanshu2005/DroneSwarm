@@ -1,4 +1,9 @@
 import pytest
+from DroneOS.core.formation_manager import convert_local_offset_to_global
+from DroneOS.core.coordination.healing import _get_slot_offset
+_dn, _de = _get_slot_offset('LINE', 1, 15.0, 3)[:2]
+_, D1_LON, _ = convert_local_offset_to_global(1.0, 1.0, 1.0, _dn, _de)
+
 import logging
 
 from DroneOS.core.coordination.anchor import is_healthy
@@ -33,7 +38,7 @@ def test_freshness_clock_agrees_in_both_directions(monkeypatch):
 
     # The wire stamp is epoch-valued.  Membership stores its local monotonic
     # receipt time, so both consumers see a fresh position at t=1000.
-    mv.update_from_peer("d1", 1.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.7e9)
+    mv.update_from_peer("d1", 1.0, 50.0, 1.0, D1_LON, 1.0, peer_position_stamp=1.7e9)
     assert mv.nodes["d1"].last_position_time == 1000.0
     assert is_healthy("d1", "d0", mv, swarm, 30.0, 1000.0, 5.0)
     assert _active_plan(mv, cfg, status).accepted
@@ -41,7 +46,7 @@ def test_freshness_clock_agrees_in_both_directions(monkeypatch):
     # Fresh -> stale: the same position and stamp must not be refreshed by a
     # heartbeat alone.  Both the anchor gate and planner reject it.
     clock[0] = 1007.0
-    mv.update_from_peer("d1", 2.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.7e9)
+    mv.update_from_peer("d1", 2.0, 50.0, 1.0, D1_LON, 1.0, peer_position_stamp=1.7e9)
     assert mv.nodes["d1"].last_position_time == 1000.0
     assert not is_healthy("d1", "d0", mv, swarm, 30.0, 1007.0, 5.0)
     stale = _active_plan(mv, cfg, status)
@@ -50,7 +55,7 @@ def test_freshness_clock_agrees_in_both_directions(monkeypatch):
 
     # Stale -> fresh: a changed peer position stamp is a new position sample.
     clock[0] = 1008.0
-    mv.update_from_peer("d1", 3.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.7e9 + 1)
+    mv.update_from_peer("d1", 3.0, 50.0, 1.0, D1_LON, 1.0, peer_position_stamp=1.7e9 + 1)
     assert mv.nodes["d1"].last_position_time == 1008.0
     assert is_healthy("d1", "d0", mv, swarm, 30.0, 1008.0, 5.0)
     assert _active_plan(mv, cfg, status).accepted
@@ -91,7 +96,7 @@ def test_partial_none_is_not_a_position_and_is_transient_in_active_mode(monkeypa
 
 def test_active_mode_rejects_partial_self_telemetry(monkeypatch):
     mv = MembershipView(config={}, clock=lambda: 1.0)
-    mv.update_from_peer("d1", 1.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.0)
+    mv.update_from_peer("d1", 1.0, 50.0, 1.0, D1_LON, 1.0, peer_position_stamp=1.0)
     plan = _active_plan(
         mv, MockFlightCfg("active"),
         {"lat": 1.0, "lon": None, "alt": 1.0, "gps_valid": True, "position_age": 0.0},
@@ -110,7 +115,7 @@ def test_negative_age_is_stale(monkeypatch):
     # Set the stamp so it's in the FUTURE compared to our clock, resulting in negative age.
     # Actually wait: age is calculated as clock() - last_position_time. 
     # If last_position_time > clock(), age is negative.
-    mv.update_from_peer("d1", 1.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.7e9)
+    mv.update_from_peer("d1", 1.0, 50.0, 1.0, D1_LON, 1.0, peer_position_stamp=1.7e9)
     # The member view records its OWN receipt time (which is 1000.0) as last_position_time.
     # To get a negative age during is_healthy/healing, the clock must jump BACKWARDS.
     clock[0] = 900.0 
@@ -123,7 +128,7 @@ def test_negative_age_is_stale(monkeypatch):
 
 def test_self_status_none_is_transient(monkeypatch):
     mv = MembershipView(config={}, clock=lambda: 1.0)
-    mv.update_from_peer("d1", 1.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.0)
+    mv.update_from_peer("d1", 1.0, 50.0, 1.0, D1_LON, 1.0, peer_position_stamp=1.0)
     plan = _active_plan(mv, MockFlightCfg("active"), None)
     assert plan.reject_kind == RejectKind.TRANSIENT
     assert plan.reject_reason == "missing or invalid telemetry for d0"
@@ -152,13 +157,20 @@ def test_min_required_sep_uses_the_runtime_defaults(monkeypatch):
     if hasattr(cfg, "collision_avoidance"):
         delattr(cfg, "collision_avoidance")
         
-    before = healing.min_required_sep(cfg, {})
-    
-    # Monkeypatch the class default
-    monkeypatch.setattr(config_models, "CollisionAvoidanceConfig", lambda: type("CA", (), {"min_horizontal_distance": 20.0}))
-    
-    after = healing.min_required_sep(cfg, {})
-    assert after == 20.0 + 1.0 + 2.0  # max(8.0, 20.0) + margin + pos_margin
+    # use real margins
+    config_dict = {"heal_separation_margin_m": 1.0, "heal_position_margin_m": 2.0}
+
+    before = healing.min_required_sep(cfg, config_dict)
+
+    class MockCA:
+        min_horizontal_distance = 100.0
+
+    # Monkeypatch the class default where the production code imports it
+    monkeypatch.setattr(config_models, "CollisionAvoidanceConfig", lambda: MockCA())
+
+    after = healing.min_required_sep(cfg, config_dict)
+    assert before == 11.0
+    assert after == 103.0
 
 
 def test_settle_diagnostics_are_per_peer_and_rate_limited(caplog, monkeypatch):
@@ -236,4 +248,24 @@ def test_missing_position_is_stale_through_update_from_peer():
     plan = _active_plan(mv, MockFlightCfg("active"), {"lat": 1.0, "lon": 1.0, "alt": 1.0, "gps_valid": True, "position_age": 0.0})
     assert plan.reject_kind == RejectKind.TRANSIENT
     assert "stale telemetry for d1" in plan.reject_reason or "missing or invalid telemetry" in plan.reject_reason
+
+def test_missing_position_is_stale_through_update_from_peer():
+    mv = MembershipView(config={}, clock=lambda: 1.0)
+    swarm = MockSwarm()
+    swarm.registry.peers["d1"] = MockPeerState(battery=50.0, last_pos=None)
+    
+    # Peer heartbeat arrives, but lat/lon are None
+    mv.update_from_peer("d1", 1.0, 50.0, None, None, None, peer_position_stamp=None)
+    
+    # last_position_time must remain None
+    assert mv.nodes["d1"].last_position_time is None
+    
+    # is_healthy must be False
+    assert not is_healthy("d1", "d0", mv, swarm, 30.0, 1.0, 5.0)
+    
+    # Planner must reject with TRANSIENT
+    plan = _active_plan(mv, MockFlightCfg("active"), {"lat": 1.0, "lon": 1.0, "alt": 1.0, "gps_valid": True, "position_age": 0.0})
+    assert plan.reject_kind == RejectKind.TRANSIENT
+    assert plan.reject_reason == "missing or invalid telemetry for d1"
+
 
