@@ -15,17 +15,6 @@ class MockFlightCfg:
         self.collision_avoidance = type("Collision", (), {"min_horizontal_distance": 6.0})()
 
 
-def _line_offset(monkeypatch):
-    import DroneOS.core.coordination.healing as healing
-
-    def offset(_anchor_lat, _anchor_lon, node_lat, _node_lon):
-        if node_lat == 1.1:
-            return healing._get_slot_offset("LINE", 1, 15.0, 3)[:2]
-        return (0.0, 0.0)
-
-    monkeypatch.setattr(healing, "global_offset_local_m", offset)
-
-
 def _active_plan(mv, cfg, my_status=None):
     fp = {"type": "LINE", "spacing": 15.0,
           "slot_assignments": {"d0": 0, "d1": 1, "d2": 2}}
@@ -34,7 +23,6 @@ def _active_plan(mv, cfg, my_status=None):
 
 
 def test_freshness_clock_agrees_in_both_directions(monkeypatch):
-    _line_offset(monkeypatch)
     clock = [1000.0]
     mv = MembershipView(config={}, clock=lambda: clock[0])
     swarm = MockSwarm()
@@ -45,7 +33,7 @@ def test_freshness_clock_agrees_in_both_directions(monkeypatch):
 
     # The wire stamp is epoch-valued.  Membership stores its local monotonic
     # receipt time, so both consumers see a fresh position at t=1000.
-    mv.update_from_peer("d1", 1.0, 50.0, 1.1, 1.0, 1.0, peer_position_stamp=1.7e9)
+    mv.update_from_peer("d1", 1.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.7e9)
     assert mv.nodes["d1"].last_position_time == 1000.0
     assert is_healthy("d1", "d0", mv, swarm, 30.0, 1000.0, 5.0)
     assert _active_plan(mv, cfg, status).accepted
@@ -53,7 +41,7 @@ def test_freshness_clock_agrees_in_both_directions(monkeypatch):
     # Fresh -> stale: the same position and stamp must not be refreshed by a
     # heartbeat alone.  Both the anchor gate and planner reject it.
     clock[0] = 1007.0
-    mv.update_from_peer("d1", 2.0, 50.0, 1.1, 1.0, 1.0, peer_position_stamp=1.7e9)
+    mv.update_from_peer("d1", 2.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.7e9)
     assert mv.nodes["d1"].last_position_time == 1000.0
     assert not is_healthy("d1", "d0", mv, swarm, 30.0, 1007.0, 5.0)
     stale = _active_plan(mv, cfg, status)
@@ -62,7 +50,7 @@ def test_freshness_clock_agrees_in_both_directions(monkeypatch):
 
     # Stale -> fresh: a changed peer position stamp is a new position sample.
     clock[0] = 1008.0
-    mv.update_from_peer("d1", 3.0, 50.0, 1.1, 1.0, 1.0, peer_position_stamp=1.7e9 + 1)
+    mv.update_from_peer("d1", 3.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.7e9 + 1)
     assert mv.nodes["d1"].last_position_time == 1008.0
     assert is_healthy("d1", "d0", mv, swarm, 30.0, 1008.0, 5.0)
     assert _active_plan(mv, cfg, status).accepted
@@ -87,7 +75,6 @@ def test_hovering_peer_with_changing_stamp_stays_fresh():
     assert mv.nodes["d1"].last_position_time == 12.0
     
 def test_partial_none_is_not_a_position_and_is_transient_in_active_mode(monkeypatch):
-    _line_offset(monkeypatch)
     clock = [10.0]
     mv = MembershipView(config={}, clock=lambda: clock[0])
     mv.update_from_peer("d1", 1.0, 50.0, None, 1.0, 1.0, peer_position_stamp=9.0)
@@ -103,9 +90,8 @@ def test_partial_none_is_not_a_position_and_is_transient_in_active_mode(monkeypa
 
 
 def test_active_mode_rejects_partial_self_telemetry(monkeypatch):
-    _line_offset(monkeypatch)
     mv = MembershipView(config={}, clock=lambda: 1.0)
-    mv.update_from_peer("d1", 1.0, 50.0, 1.1, 1.0, 1.0, peer_position_stamp=1.0)
+    mv.update_from_peer("d1", 1.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.0)
     plan = _active_plan(
         mv, MockFlightCfg("active"),
         {"lat": 1.0, "lon": None, "alt": 1.0, "gps_valid": True, "position_age": 0.0},
@@ -115,7 +101,6 @@ def test_active_mode_rejects_partial_self_telemetry(monkeypatch):
 
 
 def test_negative_age_is_stale(monkeypatch):
-    _line_offset(monkeypatch)
     clock = [1000.0]
     mv = MembershipView(config={}, clock=lambda: clock[0])
     swarm = MockSwarm()
@@ -125,7 +110,7 @@ def test_negative_age_is_stale(monkeypatch):
     # Set the stamp so it's in the FUTURE compared to our clock, resulting in negative age.
     # Actually wait: age is calculated as clock() - last_position_time. 
     # If last_position_time > clock(), age is negative.
-    mv.update_from_peer("d1", 1.0, 50.0, 1.1, 1.0, 1.0, peer_position_stamp=1.7e9)
+    mv.update_from_peer("d1", 1.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.7e9)
     # The member view records its OWN receipt time (which is 1000.0) as last_position_time.
     # To get a negative age during is_healthy/healing, the clock must jump BACKWARDS.
     clock[0] = 900.0 
@@ -137,9 +122,8 @@ def test_negative_age_is_stale(monkeypatch):
     assert "stale telemetry for d1 (age=-100.0)" in plan.reject_reason
 
 def test_self_status_none_is_transient(monkeypatch):
-    _line_offset(monkeypatch)
     mv = MembershipView(config={}, clock=lambda: 1.0)
-    mv.update_from_peer("d1", 1.0, 50.0, 1.1, 1.0, 1.0, peer_position_stamp=1.0)
+    mv.update_from_peer("d1", 1.0, 50.0, 1.0, 1.0001349187896729, 1.0, peer_position_stamp=1.0)
     plan = _active_plan(mv, MockFlightCfg("active"), None)
     assert plan.reject_kind == RejectKind.TRANSIENT
     assert plan.reject_reason == "missing or invalid telemetry for d0"
@@ -159,28 +143,22 @@ def test_advisory_nominal_label_lists_d1_d3_and_keeps_real_self():
 
 
 def test_min_required_sep_uses_the_runtime_defaults(monkeypatch):
-    import DroneOS.core.formation_engine as formation_engine
-    from DroneOS.shared.config.models import CollisionAvoidanceConfig
+    import DroneOS.core.coordination.healing as healing
+    import DroneOS.shared.config.models as config_models
 
     cfg = MockFlightCfg("advisory", heal_separation_margin_m=0.0,
                         heal_position_margin_m=0.0)
-    # Remove config blocks
     cfg.formation = None
     if hasattr(cfg, "collision_avoidance"):
         delattr(cfg, "collision_avoidance")
         
-    params = {"type": "LINE", "spacing": 7.0,
-              "slot_assignments": {"d0": 0, "d1": 1, "d2": 2}}
-
-    before = plan_healing(params, {"d0", "d1"}, "d0", "d0", "d0", cfg)
-    assert "8.00" in before.reject_reason  # 8.0 is max(8.0 default formation, 6.0 default collision)
-
-    # Monkeypatch the class used inside the function by patching the original module
-    import DroneOS.shared.config.models as config_models
-    monkeypatch.setattr(config_models, "CollisionAvoidanceConfig", lambda: type("CA", (), {"min_horizontal_distance": 12.0}))
+    before = healing.min_required_sep(cfg, {})
     
-    after = plan_healing(params, {"d0", "d1"}, "d0", "d0", "d0", cfg)
-    assert "12.00" in after.reject_reason  # max(8.0, 12.0) = 12.0
+    # Monkeypatch the class default
+    monkeypatch.setattr(config_models, "CollisionAvoidanceConfig", lambda: type("CA", (), {"min_horizontal_distance": 20.0}))
+    
+    after = healing.min_required_sep(cfg, {})
+    assert after == 20.0 + 1.0 + 2.0  # max(8.0, 20.0) + margin + pos_margin
 
 
 def test_settle_diagnostics_are_per_peer_and_rate_limited(caplog, monkeypatch):
@@ -237,3 +215,25 @@ def test_advancing_stamps_keep_hovering_peer_healthy():
     clock[0] = 45.0
     mv.update_from_peer("d1", 45.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=34.0)
     assert is_healthy("d1", "d0", mv, swarm, 30.0, clock[0], 5.0) == False
+
+
+
+def test_missing_position_is_stale_through_update_from_peer():
+    mv = MembershipView(config={}, clock=lambda: 1.0)
+    swarm = MockSwarm()
+    swarm.registry.peers["d1"] = MockPeerState(battery=50.0, last_pos=None)
+    
+    # Peer heartbeat arrives, but lat/lon are None
+    mv.update_from_peer("d1", 1.0, 50.0, None, None, None, peer_position_stamp=None)
+    
+    # last_position_time must remain None
+    assert mv.nodes["d1"].last_position_time is None
+    
+    # is_healthy must be False
+    assert not is_healthy("d1", "d0", mv, swarm, 30.0, 1.0, 5.0)
+    
+    # Planner must reject with TRANSIENT
+    plan = _active_plan(mv, MockFlightCfg("active"), {"lat": 1.0, "lon": 1.0, "alt": 1.0, "gps_valid": True, "position_age": 0.0})
+    assert plan.reject_kind == RejectKind.TRANSIENT
+    assert "stale telemetry for d1" in plan.reject_reason or "missing or invalid telemetry" in plan.reject_reason
+

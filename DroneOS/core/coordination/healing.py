@@ -163,6 +163,22 @@ def _evaluate_plan(
 
     return EvaluatedPlan(True, min_dist, total_travel, "")
 
+def min_required_sep(flight_cfg, config_dict) -> float:
+    form_cfg = getattr(flight_cfg, "formation", None)
+    ca_cfg = getattr(flight_cfg, "collision_avoidance", None)
+    
+    from DroneOS.core.formation_engine import _DEFAULT_MIN_SEP_M
+    from DroneOS.shared.config.models import CollisionAvoidanceConfig
+    
+    default_ca = CollisionAvoidanceConfig().min_horizontal_distance
+    min_form_sep = float(getattr(form_cfg, "min_formation_separation_m", _DEFAULT_MIN_SEP_M)) if form_cfg else _DEFAULT_MIN_SEP_M
+    min_ca_dist = float(getattr(ca_cfg, "min_horizontal_distance", default_ca)) if ca_cfg else default_ca
+    margin = float(config_dict.get("heal_separation_margin_m", 1.0))
+    pos_margin = float(config_dict.get("heal_position_margin_m", 2.0))
+    
+    base_min_req = max(min_form_sep, min_ca_dist)
+    return base_min_req + margin + pos_margin
+
 def plan_healing(
     current_params: Dict[str, Any],
     healthy_members: Set[str],
@@ -203,23 +219,10 @@ def plan_healing(
             config_dict = {}
 
     # Config thresholds
-    form_cfg = getattr(flight_cfg, "formation", None)
-    ca_cfg = getattr(flight_cfg, "collision_avoidance", None)
-    
-    from DroneOS.core.formation_engine import _DEFAULT_MIN_SEP_M
-    from DroneOS.shared.config.models import CollisionAvoidanceConfig
-    
-    default_ca = CollisionAvoidanceConfig().min_horizontal_distance
-    min_form_sep = float(getattr(form_cfg, "min_formation_separation_m", _DEFAULT_MIN_SEP_M)) if form_cfg else _DEFAULT_MIN_SEP_M
-    min_ca_dist = float(getattr(ca_cfg, "min_horizontal_distance", default_ca)) if ca_cfg else default_ca
-    margin = float(config_dict.get("heal_separation_margin_m", 1.0))
-    pos_margin = float(config_dict.get("heal_position_margin_m", 2.0))
-    
-    base_min_req = max(min_form_sep, min_ca_dist)
-    min_required_sep = base_min_req + margin + pos_margin
+    min_req_sep = min_required_sep(flight_cfg, config_dict)
     
     dead_drone_obstacle = str(config_dict.get("dead_drone_obstacle", "true")).lower() == "true"
-    dead_obstacle_radius_m = min_required_sep
+    dead_obstacle_radius_m = min_req_sep
     
     is_advisory = config_dict.get("mode", "advisory").lower() == "advisory"
     if not is_advisory and not dead_drone_obstacle:
@@ -377,7 +380,8 @@ def plan_healing(
         if new_assignments:
             eval_res = _evaluate_plan(
                 new_assignments, start_positions, dead_positions,
-                f_type, spacing, min_required_sep, dead_drone_obstacle, dead_obstacle_radius_m, method, prop_anchor
+                f_type, spacing, min_req_sep,
+            dead_drone_obstacle, dead_obstacle_radius_m, method, prop_anchor
             )
             moves = {pid: (old_slots[pid], new_assignments[pid]) for pid in healthy_members}
             plans.append(HealPlan(
@@ -413,3 +417,6 @@ def validate_params(params: Dict[str, Any]) -> bool:
     if not params.get("type"):
         return False
     return True
+
+
+
