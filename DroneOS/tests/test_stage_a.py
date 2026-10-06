@@ -290,6 +290,7 @@ def test_stamp_change_detection_is_not_a_ratchet():
     assert mv.nodes["d1"].last_position_time == 3.0  # refreshed!
 def test_telemetry_freshness_through_handle_telemetry(monkeypatch):
     import time
+    import types
     from DroneOS.core.swarm_manager import SwarmMembership
     from DroneOS.shared.protocol.messages import TelemetryMessage, TelemetryData
     from DroneOS.core.coordination.membership import MembershipView
@@ -299,8 +300,8 @@ def test_telemetry_freshness_through_handle_telemetry(monkeypatch):
     
     clock = [1000.0]
     
-    # Patch time.time in swarm_manager where handle_telemetry calls it
-    monkeypatch.setattr("DroneOS.core.swarm_manager.time.time", lambda: clock[0])
+    # Patch time in swarm_manager
+    monkeypatch.setattr("DroneOS.core.swarm_manager.time", types.SimpleNamespace(time=lambda: clock[0]))
     
     mv = MembershipView(config={}, clock=lambda: clock[0])
     swarm = SwarmMembership("d0")
@@ -335,5 +336,5 @@ def test_telemetry_freshness_through_handle_telemetry(monkeypatch):
     
     plan = _active_plan(mv, MockFlightCfg("active"), {"lat": 1.0, "lon": 1.0, "alt": 1.0, "gps_valid": True, "position_age": 0.0})
     assert plan.reject_kind == RejectKind.TRANSIENT
-    assert "stale telemetry for d1" in plan.reject_reason or "missing or invalid telemetry for d1" in plan.reject_reason
+    assert plan.reject_reason == "stale telemetry for d1 (age=6.0)"
 
