@@ -269,3 +269,22 @@ def test_missing_position_is_stale_through_update_from_peer():
     assert plan.reject_reason == "missing or invalid telemetry for d1"
 
 
+def test_stamp_change_detection_is_not_a_ratchet():
+    from DroneOS.core.coordination.membership import MembershipView
+    mv = MembershipView(config={}, clock=lambda: 1.0)
+    
+    # Huge stamp
+    mv.update_from_peer("d1", 1.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=1e9)
+    assert mv.nodes["d1"]._last_peer_position_stamp == 1e9
+    assert mv.nodes["d1"].last_position_time == 1.0
+    
+    # Same huge stamp -> no change
+    mv.clock = lambda: 2.0
+    mv.update_from_peer("d1", 2.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=1e9)
+    assert mv.nodes["d1"].last_position_time == 1.0  # not refreshed
+    
+    # Backwards clock step (normal stamp)
+    mv.clock = lambda: 3.0
+    mv.update_from_peer("d1", 3.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=100.0)
+    assert mv.nodes["d1"]._last_peer_position_stamp == 100.0
+    assert mv.nodes["d1"].last_position_time == 3.0  # refreshed!

@@ -63,14 +63,14 @@ class MembershipView:
                 stamp_changed = False
                 if peer_position_stamp is not None:
                     last_stamp = getattr(node, "_last_peer_position_stamp", None)
-                    if last_stamp is None or peer_position_stamp > last_stamp:
+                    if last_stamp is None or peer_position_stamp != last_stamp:
                         stamp_changed = True
                 if lat != node.lat or lon != node.lon or alt != node.alt or stamp_changed:
                     node.lat = lat
                     node.lon = lon
                     node.alt = alt
                     node.last_position_time = self.clock()
-                    if peer_position_stamp is not None and (not hasattr(node, "_last_peer_position_stamp") or getattr(node, "_last_peer_position_stamp") is None or peer_position_stamp > getattr(node, "_last_peer_position_stamp")):
+                    if peer_position_stamp is not None:
                         node._last_peer_position_stamp = peer_position_stamp
             
             if node.state == PeerState.DEAD:
