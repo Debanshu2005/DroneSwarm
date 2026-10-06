@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from DroneOS.core.formation_manager import convert_local_offset_to_global
 from DroneOS.core.coordination.healing import _get_slot_offset
 _dn, _de = _get_slot_offset('LINE', 1, 15.0, 3)[:2]
@@ -229,25 +229,6 @@ def test_advancing_stamps_keep_hovering_peer_healthy():
     assert is_healthy("d1", "d0", mv, swarm, 30.0, clock[0], 5.0) == False
 
 
-
-def test_missing_position_is_stale_through_update_from_peer():
-    mv = MembershipView(config={}, clock=lambda: 1.0)
-    swarm = MockSwarm()
-    swarm.registry.peers["d1"] = MockPeerState(battery=50.0, last_pos=None)
-    
-    # Peer heartbeat arrives, but lat/lon are None
-    mv.update_from_peer("d1", 1.0, 50.0, None, None, None, peer_position_stamp=None)
-    
-    # last_position_time must remain None
-    assert mv.nodes["d1"].last_position_time is None
-    
-    # is_healthy must be False
-    assert not is_healthy("d1", "d0", mv, swarm, 30.0, 1.0, 5.0)
-    
-    # Planner must reject with TRANSIENT
-    plan = _active_plan(mv, MockFlightCfg("active"), {"lat": 1.0, "lon": 1.0, "alt": 1.0, "gps_valid": True, "position_age": 0.0})
-    assert plan.reject_kind == RejectKind.TRANSIENT
-    assert "stale telemetry for d1" in plan.reject_reason or "missing or invalid telemetry" in plan.reject_reason
 
 def test_missing_position_is_stale_through_update_from_peer():
     mv = MembershipView(config={}, clock=lambda: 1.0)

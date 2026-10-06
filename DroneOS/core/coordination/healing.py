@@ -381,7 +381,7 @@ def plan_healing(
             eval_res = _evaluate_plan(
                 new_assignments, start_positions, dead_positions,
                 f_type, spacing, min_req_sep,
-            dead_drone_obstacle, dead_obstacle_radius_m, method, prop_anchor
+                dead_drone_obstacle, dead_obstacle_radius_m, method, prop_anchor
             )
             moves = {pid: (old_slots[pid], new_assignments[pid]) for pid in healthy_members}
             plans.append(HealPlan(
