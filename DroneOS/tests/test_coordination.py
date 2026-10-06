@@ -269,5 +269,18 @@ async def test_peer_state_message_updates_stamp():
     # 2. Update with newer stamp
     msg2 = PeerStateMessage(sender_id="d1", timestamp=21.0, peer_id="d1", is_active=True, peer_position_stamp=15.0)
     swarm.sync.handle_peer_state(msg2)
+    # Simulate CoordinationManager loop
+    from DroneOS.core.coordination.membership import MembershipView
+    mv = MembershipView(config={})
+    mv.update_from_peer("d1", 21.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=peer.last_position_time)
     
     assert peer.last_position_time == 15.0
+    assert mv.nodes["d1"]._last_peer_position_stamp == 15.0
+    
+    # 3. Update with older stamp (should NOT go backwards)
+    msg3 = PeerStateMessage(sender_id="d1", timestamp=22.0, peer_id="d1", is_active=True, peer_position_stamp=12.0)
+    swarm.sync.handle_peer_state(msg3)
+    mv.update_from_peer("d1", 22.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=peer.last_position_time)
+    
+    assert peer.last_position_time == 15.0
+    assert mv.nodes["d1"]._last_peer_position_stamp == 15.0

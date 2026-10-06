@@ -267,11 +267,13 @@ class DroneOSApp:
     async def _handle_intent_change(self, task_name: str) -> None:
         from DroneOS.shared.protocol.messages import PeerStateMessage
         import time
-        # Get the latest telemetry timestamp to populate peer_position_stamp
-        telemetry = await self.flight_controller.get_telemetry()
         telem_stamp = time.time()  # Fallback
-        if hasattr(telemetry, 'timestamp'):
-            telem_stamp = telemetry.timestamp
+        try:
+            telemetry = await self.flight_controller.get_telemetry()
+            if hasattr(telemetry, 'timestamp'):
+                telem_stamp = telemetry.timestamp
+        except Exception as e:
+            logger.warning(f"Failed to fetch telemetry for PeerStateMessage: {e}")
 
         msg = PeerStateMessage(
             sender_id=self.node_id,

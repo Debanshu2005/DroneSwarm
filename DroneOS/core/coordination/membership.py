@@ -60,13 +60,18 @@ class MembershipView:
             # pair must not refresh position freshness or overwrite the last
             # known tuple.  Altitude is optional for this horizontal planner.
             if lat is not None and lon is not None:
-                stamp_changed = (peer_position_stamp is not None and getattr(node, "_last_peer_position_stamp", None) != peer_position_stamp)
+                stamp_changed = False
+                if peer_position_stamp is not None:
+                    last_stamp = getattr(node, "_last_peer_position_stamp", None)
+                    if last_stamp is None or peer_position_stamp > last_stamp:
+                        stamp_changed = True
                 if lat != node.lat or lon != node.lon or alt != node.alt or stamp_changed:
                     node.lat = lat
                     node.lon = lon
                     node.alt = alt
                     node.last_position_time = self.clock()
-                    node._last_peer_position_stamp = peer_position_stamp
+                    if peer_position_stamp is not None and (not hasattr(node, "_last_peer_position_stamp") or getattr(node, "_last_peer_position_stamp") is None or peer_position_stamp > getattr(node, "_last_peer_position_stamp")):
+                        node._last_peer_position_stamp = peer_position_stamp
             
             if node.state == PeerState.DEAD:
                 if node.rejoin_stable_start is None:
@@ -105,3 +110,4 @@ class MembershipView:
 
     def get_alive_peers(self) -> List[str]:
         return [pid for pid, n in self.nodes.items() if n.state == PeerState.ALIVE]
+

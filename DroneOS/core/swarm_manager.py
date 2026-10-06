@@ -116,7 +116,8 @@ class PeerSynchronization:
             peer.is_active = msg.is_active
             peer.current_task = msg.current_task
             if getattr(msg, 'peer_position_stamp', None) is not None:
-                peer.last_position_time = msg.peer_position_stamp
+                if peer.last_position_time is None or msg.peer_position_stamp > peer.last_position_time:
+                    peer.last_position_time = msg.peer_position_stamp
 
     def handle_telemetry(self, msg: TelemetryMessage):
         peer = self.registry.get_peer(msg.sender_id)
