@@ -288,3 +288,52 @@ def test_stamp_change_detection_is_not_a_ratchet():
     mv.update_from_peer("d1", 3.0, 50.0, 1.0, 2.0, 3.0, peer_position_stamp=100.0)
     assert mv.nodes["d1"]._last_peer_position_stamp == 100.0
     assert mv.nodes["d1"].last_position_time == 3.0  # refreshed!
+def test_telemetry_freshness_through_handle_telemetry(monkeypatch):
+    import time
+    from DroneOS.core.swarm_manager import SwarmMembership
+    from DroneOS.shared.protocol.messages import TelemetryMessage, TelemetryData
+    from DroneOS.core.coordination.membership import MembershipView
+    from DroneOS.core.coordination.anchor import is_healthy
+    from DroneOS.tests.test_stage_a import _active_plan, MockFlightCfg
+    from DroneOS.core.coordination.healing import RejectKind
+    
+    clock = [1000.0]
+    
+    # Patch time.time in swarm_manager where handle_telemetry calls it
+    monkeypatch.setattr("DroneOS.core.swarm_manager.time.time", lambda: clock[0])
+    
+    mv = MembershipView(config={}, clock=lambda: clock[0])
+    swarm = SwarmMembership("d0")
+    swarm.registry.add_peer("d1")
+    
+    # Hovering peer with telemetry every 1 s for 30 s
+    for i in range(30):
+        clock[0] += 1.0
+        t = TelemetryData(
+            flight_mode="HOLD",
+            latitude=1.0,
+            longitude=2.0,
+            altitude=3.0,
+            gps_valid=True
+        )
+        swarm.sync.handle_telemetry(TelemetryMessage(sender_id="d1", timestamp=clock[0], telemetry=t))
+        peer = swarm.registry.get_peer("d1")
+        mv.update_from_peer("d1", clock[0], 50.0, peer.lat, peer.lon, peer.alt, peer_position_stamp=peer.last_position_time)
+        
+        assert mv.nodes["d1"].last_position_time == clock[0]
+        assert is_healthy("d1", "d0", mv, swarm, 30.0, clock[0], 5.0)
+    
+    # Telemetry stops, 6 s later
+    clock[0] += 6.0
+    peer = swarm.registry.get_peer("d1")
+    # We still get heartbeats, but no new telemetry (peer_position_stamp stops advancing)
+    mv.update_from_peer("d1", clock[0], 50.0, peer.lat, peer.lon, peer.alt, peer_position_stamp=peer.last_position_time)
+    
+    # Last position time remains frozen
+    assert mv.nodes["d1"].last_position_time == clock[0] - 6.0
+    assert not is_healthy("d1", "d0", mv, swarm, 30.0, clock[0], 5.0)
+    
+    plan = _active_plan(mv, MockFlightCfg("active"), {"lat": 1.0, "lon": 1.0, "alt": 1.0, "gps_valid": True, "position_age": 0.0})
+    assert plan.reject_kind == RejectKind.TRANSIENT
+    assert "stale telemetry for d1" in plan.reject_reason or "missing or invalid telemetry for d1" in plan.reject_reason
+
