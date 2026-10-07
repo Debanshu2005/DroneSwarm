@@ -766,3 +766,27 @@ async def test_partial_delivery_3_to_2_two_miss(mock_cfg, monkeypatch):
             if sep < 8.0 - 0.1:
                 hazard_found = True
     assert hazard_found, "Expected partial delivery to cause a collision hazard!"
+
+@pytest.mark.asyncio
+async def test_receiver_floor_equality_relative_alt_hazard(mock_cfg):
+    # This test demonstrates why Stage B must intercept GLOBAL_RELATIVE_ALT:
+    # If telemetry.alt is relative to different takeoff elevations, drones at the same
+    # absolute AMSL altitude will have different relative altitudes, failing the floor check.
+    
+    # Simulate drone2 (self) taking off at 0m AMSL, flying to 50m AMSL -> alt = 50.0m
+    # Simulate drone1 (anchor) taking off at 20m AMSL, flying to 50m AMSL -> alt = 30.0m
+    # They are physically on the same floor (50m AMSL), but relative alts differ by 20m.
+    my_relative_alt = 50.0
+    anchor_relative_alt = 30.0
+    
+    # Stage B validation (e.g. heal_separation_margin_m = 1.0)
+    heal_separation_margin_m = 1.0
+    
+    # Direct comparison fails!
+    direct_diff = abs(my_relative_alt - anchor_relative_alt)
+    assert direct_diff > heal_separation_margin_m
+    
+    # Therefore, Stage B MUST intercept GLOBAL_RELATIVE_ALT telemetry to either:
+    # 1. Use absolute AMSL altitude from GPS
+    # 2. Add the home elevation offset back
+    # Otherwise, valid formations are rejected.
