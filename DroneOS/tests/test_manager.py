@@ -712,7 +712,7 @@ async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
     import DroneOS.core.coordination.manager as mgr
     mgr.logger.addHandler(MockHandler())
 
-    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+    await manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
 
     assert not broadcasts, "Should not broadcast a rejected plan"
 
@@ -817,13 +817,13 @@ def test_manager_advisory_active_mode_60_seconds(test_mode, monkeypatch):
         if i < 30:
             manager.my_id = 'drone2'
             healthy = set(['drone2', 'drone3', 'drone4'])
-            manager._handle_healing(current_time[0], quorum.QuorumState.QUORUM, fp, healthy, 'drone1', 'drone2')
+            import asyncio; asyncio.run(manager._handle_healing(current_time[0], quorum.QuorumState.QUORUM, fp, healthy, 'drone1', 'drone2'))
         else:
             if i == 30:
                 manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': current_time[0], 'rejoin_stable_start': None, 'missed_beats': 10, 'last_seen': 10.0})()
             manager.my_id = 'drone3'
             healthy = set(['drone3', 'drone4'])
-            manager._handle_healing(current_time[0], quorum.QuorumState.QUORUM, fp, healthy, 'drone1', 'drone3')
+            import asyncio; asyncio.run(manager._handle_healing(current_time[0], quorum.QuorumState.QUORUM, fp, healthy, 'drone1', 'drone3'))
         
     assert broadcasts == 2, f"Expected exactly 2 broadcast logs (1 for drone1 dead, 1 for drone2 dead), got {broadcasts}"
     assert manager._heal_count == 0, "Heal cap must not be tripped in advisory or disabled active mode"
@@ -868,7 +868,7 @@ async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
                 broadcasts.append(record.getMessage())
     mgr.logger.addHandler(MockHandler())
 
-    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+    await manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
 
     assert not broadcasts, "Should not broadcast a rejected plan"
 
@@ -911,7 +911,7 @@ async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
                 broadcasts.append(record.getMessage())
     mgr.logger.addHandler(MockHandler())
 
-    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+    await manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
 
     assert not broadcasts, "Should not broadcast a rejected plan"
 
@@ -954,7 +954,7 @@ async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
                 broadcasts.append(record.getMessage())
     mgr.logger.addHandler(MockHandler())
 
-    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+    await manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
 
     assert not broadcasts, "Should not broadcast a rejected plan"
 
@@ -997,7 +997,7 @@ async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
                 broadcasts.append(record.getMessage())
     mgr.logger.addHandler(MockHandler())
 
-    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+    await manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
 
     assert not broadcasts, "Should not broadcast a rejected plan"
 
@@ -1041,6 +1041,6 @@ async def test_rejected_plan_dead_drone_collision_never_broadcasts(monkeypatch):
                 broadcasts.append(record.getMessage())
     mgr.logger.addHandler(MockHandler())
 
-    manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
+    await manager._handle_healing(100.0, QuorumState.QUORUM, fp, healthy_members, 'drone1', 'drone1')
 
     assert not broadcasts, "Should not broadcast a rejected plan"

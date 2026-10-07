@@ -197,7 +197,7 @@ def test_settle_diagnostics_are_per_peer_and_rate_limited(caplog, monkeypatch):
 
     with caplog.at_level(logging.INFO, logger="CoordinationManager"):
         for now in (0.0, 1.0, 1.0, 6.0):
-            mgr._handle_healing(now, q_ok, fp, {"d0", "d1"}, "d0", "d0")
+            import asyncio; asyncio.run(mgr._handle_healing(now, q_ok, fp, {"d0", "d1"}, "d0", "d0"))
 
     messages = [record.message for record in caplog.records if "settle:" in record.message]
     assert messages == [

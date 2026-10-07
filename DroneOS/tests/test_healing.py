@@ -1,5 +1,5 @@
 import pytest
-from DroneOS.core.coordination.healing import plan_healing, validate_params
+from DroneOS.core.coordination.healing import plan_healing, validate_formation_params
 
 class MockConfig:
     min_formation_separation_m = 8.0
@@ -7,7 +7,7 @@ class MockConfig:
     heal_separation_margin_m = 1.0
     coordination = {"dead_drone_obstacle": "false"}
 
-def _make_live_params(f_type="V", spacing=10.0, members=4):
+def _make_live_params(f_type="V", spacing=15.0, members=4):
     slots = {f"d{i}": i for i in range(members)}
     return {
         "type": f_type,
@@ -84,9 +84,9 @@ def test_line_formation_cross_anchor():
     # Therefore the plan should be rejected.
     assert plan.accepted is False
 
-def test_validate_params():
-    assert validate_params(_make_live_params())
-    assert not validate_params({"type": "V"}) # missing spacing, slot_assignments
+def test_validate_formation_params():
+    assert validate_formation_params(_make_live_params(), None)
+    assert not validate_formation_params({"type": "V"}, None) # missing spacing, slot_assignments
     
 def test_all_formations_scaling():
     types = ["V", "LINE", "SQUARE", "COLUMN", "ECHELON_LEFT", "ECHELON_RIGHT", "DIAMOND", "GRID", "CIRCLE"]
