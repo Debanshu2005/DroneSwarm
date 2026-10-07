@@ -256,7 +256,11 @@ class CoordinationManager:
             return
             
         from DroneOS.core.coordination.healing import plan_healing, RejectKind
-        plan = plan_healing(fp, healthy_members, current_anchor, prop_anchor, self.my_id, self.flight_cfg, self.membership, my_status)
+        try:
+            plan = plan_healing(fp, healthy_members, current_anchor, prop_anchor, self.my_id, self.flight_cfg, self.membership, my_status)
+        except Exception as e:
+            logger.error(f"[coord] plan_healing raised exception: {e}")
+            return
         if not plan:
             return
             
