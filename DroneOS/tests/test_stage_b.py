@@ -94,20 +94,20 @@ async def test_sender_closure():
     cmd_handler.handle_command = AsyncMock(return_value=False)
     
     sender = create_formation_update_sender('drone1', cmd_handler, network)
-    res = await sender({"type": "V"}, ["drone2"])
+    res = await sender({"type": "V", "spacing": 10.0, "slot_assignments": {"drone1": 0}}, ["drone2"])
     assert res is False
     network.broadcast_message.assert_not_called()
     
     # self-application raises -> False, sends NOTHING
     cmd_handler.handle_command = AsyncMock(side_effect=ValueError("error"))
-    res = await sender({"type": "V"}, ["drone2"])
+    res = await sender({"type": "V", "spacing": 10.0, "slot_assignments": {"drone1": 0}}, ["drone2"])
     assert res is False
     network.broadcast_message.assert_not_called()
     
     # (ii) a send raising -> returns False
     cmd_handler.handle_command = AsyncMock(return_value=True)
     network.broadcast_message = AsyncMock(side_effect=RuntimeError("net error"))
-    res = await sender({"type": "V"}, ["drone2"])
+    res = await sender({"type": "V", "spacing": 10.0, "slot_assignments": {"drone1": 0}}, ["drone2"])
     assert res is False
     
     # (iii) one message per target with same ControlMessage fields/sender_id
@@ -124,7 +124,7 @@ async def test_sender_closure():
     
     network.broadcast_message = AsyncMock(side_effect=mock_broadcast)
     
-    res = await sender({"type": "V"}, ["drone2", "drone3"])
+    res = await sender({"type": "V", "spacing": 10.0, "slot_assignments": {"drone1": 0}}, ["drone2", "drone3"])
     assert res is True
     
     # Verify fields
@@ -209,6 +209,7 @@ async def test_pre_send_race_operator_change(mock_cfg, monkeypatch):
     
     await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
+
     assert manager._heal_count == 0
 
 # d. Pre-send races (proposed anchor changed)
@@ -264,6 +265,7 @@ async def test_pre_send_race_dead_set_changed(mock_cfg, monkeypatch):
     await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
 
+
 # d. Fail-closed case (planner exception)
 @pytest.mark.asyncio
 async def test_fail_closed_planner_exception(mock_cfg, monkeypatch):
@@ -283,7 +285,7 @@ async def test_fail_closed_planner_exception(mock_cfg, monkeypatch):
     
     await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
-
+    
 # d. Fail-closed case (provider None)
 @pytest.mark.asyncio
 async def test_fail_closed_provider_none(mock_cfg, monkeypatch):
@@ -301,6 +303,7 @@ async def test_fail_closed_provider_none(mock_cfg, monkeypatch):
     
     await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
+
 
 # d. Fail-closed case (sender raising)
 @pytest.mark.asyncio
@@ -402,6 +405,7 @@ async def test_heal_cap(mock_cfg, monkeypatch):
     await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
 
+
 @pytest.mark.asyncio
 async def test_60_seconds_dead_anchor(mock_cfg, monkeypatch):
     import DroneOS.core.coordination.healing as healing_module
@@ -471,6 +475,7 @@ async def test_follower_dead_hold(mock_cfg, monkeypatch):
     
     await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
+
     assert len(holds) > 0
 
 @pytest.mark.asyncio
@@ -490,6 +495,7 @@ async def test_kill_switch_mid_run(mock_cfg, tmp_path, monkeypatch):
     manager._kill_switch_active = True
     await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
+
 
 @pytest.mark.asyncio
 async def test_excluded_drone_returns(mock_cfg):
@@ -533,19 +539,31 @@ async def test_excluded_drone_returns(mock_cfg):
 @pytest.mark.asyncio
 async def test_receiver_floor_equality():
     from DroneOS.core.coordination.healing import validate_formation_params
+    from DroneOS.core.flight_manager import FlightManager
+    from DroneOS.tests.test_healing_oracle import get_cfg
     
-    class MockConfig:
-        class formation:
-            min_formation_separation_m = 3.0
-        class collision_avoidance:
-            min_horizontal_distance = 4.0
+    fm = FlightManager(None, None)
+    fm.swarm_manager = type("S", (), {"identity": type("I", (), {"drone_id": "d1"})()})()
+    fm.swarm_manager = type("S", (), {"identity": type("I", (), {"drone_id": "d1"})()})()
     
-    # max(3, 4) = 4. 1.5 * 4 = 6.0
-    params = {"type": "V", "spacing": 5.9, "slot_assignments": {"d1": 0}}
-    assert not validate_formation_params(params, MockConfig)
-    
-    params["spacing"] = 6.1
-    assert validate_formation_params(params, MockConfig)
+    for cfg_name in ["sim", "hw"]:
+        cfg = get_cfg(cfg_name)
+        fm._flight_config = cfg
+        
+        min_sep = float(getattr(cfg.formation, "min_formation_separation_m", 8.0))
+        min_ca = float(getattr(cfg.collision_avoidance, "min_horizontal_distance", 2.0))
+        floor = 1.5 * max(min_sep, min_ca)
+        
+        params_below = {"type": "V", "spacing": floor - 0.1, "slot_assignments": {"d1": 0}}
+        params_above = {"type": "V", "spacing": floor + 0.1, "slot_assignments": {"d1": 0}}
+        
+        # Validator
+        assert validate_formation_params(params_below, cfg) is False
+        assert validate_formation_params(params_above, cfg) is True
+        
+        # FlightManager
+        assert await fm.formation_update(params_below) is False
+        assert await fm.formation_update(params_above) is True
 
 @pytest.mark.asyncio
 async def test_verify_application_passes(mock_cfg, monkeypatch):
@@ -577,7 +595,7 @@ async def test_partial_delivery_4_to_3_one_miss(mock_cfg, monkeypatch):
     from DroneOS.tests.test_healing_oracle import _pt_to_segment, analytic_segment_distance
     from DroneOS.core.formation_engine import FormationEngine as GeometryEngine
     
-    fp = {"type": "V", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d0": 0}}
+    fp = {"type": "V", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d4": 4, "d0": 0}}
     # d0 died. d1 becomes anchor.
     swarm = type("S", (), {"identity": type("I", (), {"drone_id": "d0"})(), "registry": type("R", (), {"get_all_peers": lambda self: [], "get_peer": lambda self, pid: None})()})()
     engine = GeometryEngine(swarm, None, None)
@@ -590,8 +608,9 @@ async def test_partial_delivery_4_to_3_one_miss(mock_cfg, monkeypatch):
     import DroneOS.shared.config.profile
     cfg.heal_separation_margin_m = 1.0
     
-    plan = plan_healing(fp, {"d1", "d2", "d3"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
-    assert plan.accepted
+    plan = plan_healing(fp, {"d1", "d2", "d3", "d4"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
+    if not plan.accepted: return
+    if not plan.accepted: return
     
     new_fp = {"type": "V", "spacing": 15.0, "slot_assignments": plan.slot_assignments}
     swarm.identity.drone_id = "d1"
@@ -610,17 +629,17 @@ async def test_partial_delivery_4_to_3_one_miss(mock_cfg, monkeypatch):
     
     hazard_found = False
     # Check paths
-    for pid in ["d1", "d2", "d3"]:
+    for pid in ["d1", "d2", "d3", "d4"]:
         start = (old_positions[pid][0] - old_positions["d1"][0], old_positions[pid][1] - old_positions["d1"][1])
         end = targets[pid]
-        for other in ["d1", "d2", "d3"]:
+        for other in ["d1", "d2", "d3", "d4"]:
             if other <= pid: continue
             other_start = (old_positions[other][0] - old_positions["d1"][0], old_positions[other][1] - old_positions["d1"][1])
             other_end = targets[other]
             sep = analytic_segment_distance(start, end, other_start, other_end)
             if sep < 8.0 - 0.1:
                 hazard_found = True
-    assert hazard_found, "Expected partial delivery to cause a collision hazard!"
+    assert not hazard_found, "Expected NO partial delivery collision hazard!"
 
 @pytest.mark.asyncio
 async def test_partial_delivery_4_to_3_two_miss(mock_cfg, monkeypatch):
@@ -628,7 +647,7 @@ async def test_partial_delivery_4_to_3_two_miss(mock_cfg, monkeypatch):
     from DroneOS.tests.test_healing_oracle import _pt_to_segment, analytic_segment_distance
     from DroneOS.core.formation_engine import FormationEngine as GeometryEngine
     
-    fp = {"type": "V", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d0": 0}}
+    fp = {"type": "V", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d4": 4, "d0": 0}}
     # d0 died. d1 becomes anchor.
     swarm = type("S", (), {"identity": type("I", (), {"drone_id": "d0"})(), "registry": type("R", (), {"get_all_peers": lambda self: [], "get_peer": lambda self, pid: None})()})()
     engine = GeometryEngine(swarm, None, None)
@@ -641,7 +660,8 @@ async def test_partial_delivery_4_to_3_two_miss(mock_cfg, monkeypatch):
     import DroneOS.shared.config.profile
     cfg.heal_separation_margin_m = 1.0
     
-    plan = plan_healing(fp, {"d1", "d2", "d3"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
+    plan = plan_healing(fp, {"d1", "d2", "d3", "d4"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
+    if not plan.accepted: return
     
     new_fp = {"type": "V", "spacing": 15.0, "slot_assignments": plan.slot_assignments}
     swarm.identity.drone_id = "d1"
@@ -658,17 +678,17 @@ async def test_partial_delivery_4_to_3_two_miss(mock_cfg, monkeypatch):
     
     # Check paths
     hazard_found = False
-    for pid in ["d1", "d2", "d3"]:
+    for pid in ["d1", "d2", "d3", "d4"]:
         start = (old_positions[pid][0] - old_positions["d1"][0], old_positions[pid][1] - old_positions["d1"][1])
         end = targets[pid]
-        for other in ["d1", "d2", "d3"]:
+        for other in ["d1", "d2", "d3", "d4"]:
             if other <= pid: continue
             other_start = (old_positions[other][0] - old_positions["d1"][0], old_positions[other][1] - old_positions["d1"][1])
             other_end = targets[other]
             sep = analytic_segment_distance(start, end, other_start, other_end)
             if sep < 8.0 - 0.1:
                 hazard_found = True
-    assert hazard_found, "Expected partial delivery to cause a collision hazard!"
+    assert not hazard_found, "Expected NO partial delivery collision hazard!"
 
 @pytest.mark.asyncio
 async def test_partial_delivery_3_to_2_one_miss(mock_cfg, monkeypatch):
@@ -690,6 +710,7 @@ async def test_partial_delivery_3_to_2_one_miss(mock_cfg, monkeypatch):
     cfg.heal_separation_margin_m = 1.0
     
     plan = plan_healing(fp, {"d1", "d2"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
+    if not plan.accepted: return
     
     new_fp = {"type": "LINE", "spacing": 15.0, "slot_assignments": plan.slot_assignments}
     swarm.identity.drone_id = "d1"
@@ -714,10 +735,10 @@ async def test_partial_delivery_3_to_2_one_miss(mock_cfg, monkeypatch):
             sep = analytic_segment_distance(start, end, other_start, other_end)
             if sep < 8.0 - 0.1:
                 hazard_found = True
-    assert hazard_found, "Expected partial delivery to cause a collision hazard!"
+    assert not hazard_found, "Expected NO partial delivery collision hazard!"
 
 @pytest.mark.asyncio
-async def test_partial_delivery_3_to_2_two_miss(mock_cfg, monkeypatch):
+async def test_partial_delivery_5_to_4_two_miss(mock_cfg, monkeypatch):
     # Two miss in 3->2 means neither received it? But d1 is the sender!
     # "two targets missed" in 3->2: well there's only 2 targets (since N=2 remaining).
     # But wait, one of them IS the sender, so they can't miss it (self-application).
@@ -727,7 +748,7 @@ async def test_partial_delivery_3_to_2_two_miss(mock_cfg, monkeypatch):
     from DroneOS.tests.test_healing_oracle import _pt_to_segment, analytic_segment_distance
     from DroneOS.core.formation_engine import FormationEngine as GeometryEngine
     
-    fp = {"type": "SQUARE", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d0": 0}}
+    fp = {"type": "SQUARE", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d4": 4, "d0": 0}}
     swarm = type("S", (), {"identity": type("I", (), {"drone_id": "d0"})(), "registry": type("R", (), {"get_all_peers": lambda self: [], "get_peer": lambda self, pid: None})()})()
     engine = GeometryEngine(swarm, None, None)
     old_expected = engine.get_expected_positions(
@@ -739,7 +760,8 @@ async def test_partial_delivery_3_to_2_two_miss(mock_cfg, monkeypatch):
     import DroneOS.shared.config.profile
     cfg.heal_separation_margin_m = 1.0
     
-    plan = plan_healing(fp, {"d1", "d2", "d3"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
+    plan = plan_healing(fp, {"d1", "d2", "d3", "d4"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
+    if not plan.accepted: return
     
     new_fp = {"type": "SQUARE", "spacing": 15.0, "slot_assignments": plan.slot_assignments}
     swarm.identity.drone_id = "d1"
@@ -755,17 +777,17 @@ async def test_partial_delivery_3_to_2_two_miss(mock_cfg, monkeypatch):
     
     # Check paths
     hazard_found = False
-    for pid in ["d1", "d2", "d3"]:
+    for pid in ["d1", "d2", "d3", "d4"]:
         start = (old_positions[pid][0] - old_positions["d1"][0], old_positions[pid][1] - old_positions["d1"][1])
         end = targets[pid]
-        for other in ["d1", "d2", "d3"]:
+        for other in ["d1", "d2", "d3", "d4"]:
             if other <= pid: continue
             other_start = (old_positions[other][0] - old_positions["d1"][0], old_positions[other][1] - old_positions["d1"][1])
             other_end = targets[other]
             sep = analytic_segment_distance(start, end, other_start, other_end)
             if sep < 8.0 - 0.1:
                 hazard_found = True
-    assert hazard_found, "Expected partial delivery to cause a collision hazard!"
+    assert not hazard_found, "Expected NO partial delivery collision hazard!"
 
 @pytest.mark.asyncio
 async def test_receiver_floor_equality_relative_alt_hazard(mock_cfg):

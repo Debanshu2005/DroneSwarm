@@ -50,16 +50,21 @@ logger = setup_logger("DroneOS_Main")
 def create_formation_update_sender(node_id, command_handler, network):
     import time
     async def formation_update_sender(params: dict, targets: list[str]) -> bool:
-        """UDP gives no delivery ack. Returns True only if self-application and all sends complete without exception."""
+        """
+        UDP gives no delivery ack. Returns True only if self-application and all sends complete without exception.
+        Note: A failure after self-application leaves a partial state, and the manager must not retry the same dead set automatically.
+        """
         from DroneOS.shared.protocol.messages import ControlMessage, CommandAction
         now = time.time()
-        f_type = params.get("type", "V")
-        spacing = params.get("spacing", 10.0)
-        members = params.get("members", [])
-        slot_assignments = params.get("slot_assignments", {})
+        import copy
+        if "type" not in params or "spacing" not in params or "slot_assignments" not in params:
+            return False
+            
+        msg_params = copy.deepcopy(params)
+        
         msg = ControlMessage(
             action=CommandAction.FORMATION_UPDATE,
-            params={"type": f_type, "spacing": spacing, "members": members, "slot_assignments": slot_assignments},
+            params=msg_params,
             sender_id=node_id,
             timestamp=now
         )
@@ -70,7 +75,7 @@ def create_formation_update_sender(node_id, command_handler, network):
             for pid in targets:
                 remote_msg = ControlMessage(
                     action=CommandAction.FORMATION_UPDATE,
-                    params={"type": f_type, "spacing": spacing, "members": members, "slot_assignments": slot_assignments},
+                    params=msg_params,
                     sender_id=node_id,
                     target_id=pid,
                     timestamp=now
@@ -80,6 +85,7 @@ def create_formation_update_sender(node_id, command_handler, network):
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"formation_update_sender failed: {e}")
+            print(f"SENDER FAILED: {repr(e)}")
             return False
     return formation_update_sender
 

@@ -161,6 +161,36 @@ def _evaluate_plan(
                 if d_target < dead_obstacle_radius_m - EPSILON:
                     return EvaluatedPlan(False, d_target, total_travel, f"target of {pid1} hits dead drone {dead_pid}")
 
+
+    # PARTIAL DELIVERY CHECK
+    # Check all combinations of partial delivery among the non-anchor survivors.
+    # The anchor (prop_anchor) always receives the update.
+    import itertools
+    non_anchor_survivors = [pid for pid in survivor_pids if pid != prop_anchor]
+    
+    # Iterate over all possible subsets of drones that MISSED the update (i.e. stay at start)
+    for r in range(1, len(non_anchor_survivors) + 1):
+        for missed_subset in itertools.combinations(non_anchor_survivors, r):
+            missed_set = set(missed_subset)
+            # For this scenario, drones in missed_set stay at their start pos.
+            # Drones NOT in missed_set move from start to target.
+            
+            # Check collisions between moving drones and missed drones
+            for moving_pid in survivor_pids:
+                if moving_pid in missed_set:
+                    continue
+                s_move, e_move = phys_moves[moving_pid]
+                
+                for missed_pid in missed_set:
+                    # Missed drone is stationary at its start position
+                    pos_missed = phys_moves[missed_pid][0]
+                    
+                    # Distance from moving drone's path to the stationary missed drone
+                    d = _point_to_segment(pos_missed, s_move, e_move)
+                    if d < min_required_sep - EPSILON:
+                        reject_reason = f"partial delivery hazard: {moving_pid} hits frozen {missed_pid} (missed set: {missed_subset}) dist={d:.2f}"
+                        return EvaluatedPlan(False, d, total_travel, reject_reason)
+
     return EvaluatedPlan(True, min_dist, total_travel, "")
 
 def min_required_sep(flight_cfg, config_dict) -> float:

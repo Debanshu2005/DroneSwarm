@@ -205,6 +205,13 @@ class CoordinationManager:
 
 
     async def _handle_healing(self, now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status=None):
+        try:
+            await self._do_handle_healing(now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status)
+        except Exception as e:
+            logger.error(f"[coord] Unexpected exception in heal path: {e}")
+            self._heals_disabled = True
+
+    async def _do_handle_healing(self, now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status=None):
         if self.mode not in ("advisory", "active") or q_state.name != "QUORUM" or not fp:
             return
 
@@ -256,11 +263,7 @@ class CoordinationManager:
             return
             
         from DroneOS.core.coordination.healing import plan_healing, RejectKind
-        try:
-            plan = plan_healing(fp, healthy_members, current_anchor, prop_anchor, self.my_id, self.flight_cfg, self.membership, my_status)
-        except Exception as e:
-            logger.error(f"[coord] plan_healing raised exception: {e}")
-            return
+        plan = plan_healing(fp, healthy_members, current_anchor, prop_anchor, self.my_id, self.flight_cfg, self.membership, my_status)
         if not plan:
             return
             
