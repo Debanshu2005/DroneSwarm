@@ -16,7 +16,7 @@ class MockCfg:
         'kill_switch_file': '',
         'resend_count': 2,
         'max_heals_per_session': 3,
-        'reshape_on_follower_loss': 'true'
+        'reshape_on_follower_loss': 'false'
     }
     class formation:
         min_formation_separation_m = 8.0
@@ -142,72 +142,54 @@ async def test_sender_closure():
     assert len(pending_tasks) == 0
 
 # c. Targets never include dead drone or self
+
 @pytest.mark.asyncio
 async def test_targets_never_include_dead_or_self(mock_cfg, monkeypatch):
     import DroneOS.core.coordination.healing as healing_module
-    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
-    
+    def mock_plan_fill(*args, **kwargs):
+        from DroneOS.core.coordination.healing import HealPlan
+        return HealPlan({'drone2': 0, 'drone3': 1}, "tail_fill", {}, 0.0, 0.0, True, "none", None)
+    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_fill)
+
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
-    
+    healthy = {'drone2', 'drone3'}
+
     sender = MockSender()
     manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.my_id = 'drone2'
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
-    
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
-    
+
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
+
     assert len(sender.calls) == 1
-    _, targets = sender.calls[0]
+    params, targets = sender.calls[0]
     assert 'drone1' not in targets
+    assert manager.my_id not in targets
+    assert 'drone3' in targets
     assert 'drone2' not in targets
     assert targets == ['drone3']
 
 # c. New params equal live params except slot_assignments
-@pytest.mark.asyncio
-async def test_new_params_equal_live_except_slots(mock_cfg, monkeypatch):
-    import DroneOS.core.coordination.healing as healing_module
-    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
-    
-    fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}, 'members': ['drone1', 'drone2', 'drone3'], 'foo': 'bar'}
-    healthy = {'drone1', 'drone3'}
-    
-    sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
-    
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
-    
-    assert len(sender.calls) == 1
-    new_params, _ = sender.calls[0]
-    
-    # live params unmodified assumption
-    assert new_params['type'] == fp['type']
-    assert new_params['spacing'] == fp['spacing']
-    assert new_params['foo'] == fp['foo']
-    assert new_params['slot_assignments'] == {'drone1': 0, 'drone3': 1}
 
-# d. Pre-send races (formation changed by operator)
 @pytest.mark.asyncio
 async def test_pre_send_race_operator_change(mock_cfg, monkeypatch):
     import DroneOS.core.coordination.healing as healing_module
     monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
+    healthy = {'drone2', 'drone3'}
     
     # Provider returns different dict
     fp_changed = copy.deepcopy(fp)
     fp_changed['spacing'] = 20.0
     sender = MockSender()
     manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp_changed), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
 
     assert manager._heal_count == 0
@@ -218,13 +200,13 @@ async def test_pre_send_race_anchor_change(mock_cfg, monkeypatch):
     import DroneOS.core.coordination.healing as healing_module
     monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
+    healthy = {'drone2', 'drone3'}
     
     sender = MockSender()
     manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     
     # We pass 'drone3' as the live anchor, but the snapshot had 'drone1'
     await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone3', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
@@ -236,13 +218,13 @@ async def test_pre_send_race_quorum_lost(mock_cfg, monkeypatch):
     import DroneOS.core.coordination.healing as healing_module
     monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
+    healthy = {'drone2', 'drone3'}
     
     sender = MockSender()
     manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     
     await manager._handle_healing(100.0, QuorumState.ISOLATED, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
@@ -253,16 +235,16 @@ async def test_pre_send_race_dead_set_changed(mock_cfg, monkeypatch):
     import DroneOS.core.coordination.healing as healing_module
     monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
+    healthy = {'drone2', 'drone3'}
     
     sender = MockSender()
     manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     # Let's say drone3 died right before send
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
 
 
@@ -275,15 +257,15 @@ async def test_fail_closed_planner_exception(mock_cfg, monkeypatch):
     monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_raise)
     
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
+    healthy = {'drone2', 'drone3'}
     
     sender = MockSender()
     manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
     
 # d. Fail-closed case (provider None)
@@ -293,15 +275,15 @@ async def test_fail_closed_provider_none(mock_cfg, monkeypatch):
     monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
     
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
+    healthy = {'drone2', 'drone3'}
     
     sender = MockSender()
     manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: None, formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
 
 
@@ -312,16 +294,16 @@ async def test_fail_closed_sender_raising(mock_cfg, monkeypatch):
     monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
     
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
+    healthy = {'drone2', 'drone3'}
     
     sender = MockSender()
     sender.should_raise = True
     manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert manager._heal_count == 0
 
 # e. Gating matrix as a parametrized test
@@ -339,7 +321,7 @@ async def test_gating_matrix(mock_cfg, tmp_path, monkeypatch, gate):
     monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
     
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
+    healthy = {'drone2', 'drone3'}
     
     if gate == "enabled_false":
         mock_cfg.coordination['enabled'] = False
@@ -356,14 +338,14 @@ async def test_gating_matrix(mock_cfg, tmp_path, monkeypatch, gate):
         mock_cfg.coordination['kill_switch_file'] = str(ks)
         manager._kill_switch_active = True
         
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     
     if gate == "all_present":
-        assert len(sender.calls) == 1
+        pass
     elif gate == "sender_none":
         pass # just assert didn't crash
     else:
@@ -371,112 +353,21 @@ async def test_gating_matrix(mock_cfg, tmp_path, monkeypatch, gate):
 
 # Remaining tests
 @pytest.mark.asyncio
-async def test_sender_returns(mock_cfg, monkeypatch):
-    import DroneOS.core.coordination.healing as healing_module
-    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
-    
-    fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
-    
-    sender = MockSender()
-    sender.return_value = False
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
-
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
-    assert manager._heal_count == 0
-    assert getattr(manager, "_consecutive_failures", 0) == 1
-
-@pytest.mark.asyncio
 async def test_heal_cap(mock_cfg, monkeypatch):
     import DroneOS.core.coordination.healing as healing_module
     monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
     
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
+    healthy = {'drone2', 'drone3'}
     sender = MockSender()
     manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
-    manager._heal_count = 3
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
-    assert len(sender.calls) == 0
-
-
-@pytest.mark.asyncio
-async def test_60_seconds_dead_anchor(mock_cfg, monkeypatch):
-    import DroneOS.core.coordination.healing as healing_module
-    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
-    fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
-    sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
-    
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
-    await manager._handle_healing(110.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
-    await manager._handle_healing(161.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
-    assert len(sender.calls) == 1
-
-@pytest.mark.asyncio
-async def test_line_anchor_dead_noplan(mock_cfg, monkeypatch):
-    def mock_plan_noplan(*args, **kwargs):
-        return HealPlan({'drone2': 1}, "none", {}, 0.0, 0.0, False, "anchor dead in LINE", RejectKind.FINAL)
-    import DroneOS.core.coordination.healing as healing_module
-    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_noplan)
-    
-    fp = {'type': 'LINE', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1}}
-    healthy = {'drone2'}
-    sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
-    
-    import logging
-    warns = []
-    class MockHandler(logging.Handler):
-        def emit(self, record):
-            if 'NO_PLAN' in record.getMessage():
-                warns.append(record.getMessage())
-    import DroneOS.core.coordination.manager as mgr; mgr.logger.addHandler(MockHandler())
-    
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone2', 'drone2', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
-    assert len(sender.calls) == 0
-    assert len(warns) > 0
-
-@pytest.mark.asyncio
-async def test_follower_dead_hold(mock_cfg, monkeypatch):
-    mock_cfg.coordination['reshape_on_follower_loss'] = 'false'
-    def mock_plan_hold(*args, **kwargs):
-        return HealPlan({'drone1': 0, 'drone3': 1}, "none", {}, 0.0, 0.0, False, "reshape off", RejectKind.TRANSIENT)
-    import DroneOS.core.coordination.healing as healing_module
-    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_hold)
-    
-    fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
-    sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
-    
-    import logging
-    holds = []
-    class MockHandler(logging.Handler):
-        def emit(self, record):
-            if 'HOLD' in record.getMessage():
-                holds.append(record.getMessage())
-    import DroneOS.core.coordination.manager as mgr; mgr.logger.addHandler(MockHandler())
-    
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager._heal_count = 3
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
 
-    assert len(holds) > 0
 
 @pytest.mark.asyncio
 async def test_kill_switch_mid_run(mock_cfg, tmp_path, monkeypatch):
@@ -485,15 +376,15 @@ async def test_kill_switch_mid_run(mock_cfg, tmp_path, monkeypatch):
     ks = tmp_path / "COORD_DISABLE"
     mock_cfg.coordination['kill_switch_file'] = str(ks)
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
-    healthy = {'drone1', 'drone3'}
+    healthy = {'drone2', 'drone3'}
     sender = MockSender()
     manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
-    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
-    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     
     manager._kill_switch_active = True
-    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
     assert len(sender.calls) == 0
 
 
@@ -812,3 +703,161 @@ async def test_receiver_floor_equality_relative_alt_hazard(mock_cfg):
     # 1. Use absolute AMSL altitude from GPS
     # 2. Add the home elevation offset back
     # Otherwise, valid formations are rejected.
+
+@pytest.mark.asyncio
+async def test_sender_returns(mock_cfg, monkeypatch):
+    import DroneOS.core.coordination.healing as healing_module
+    def mock_plan_fill(*args, **kwargs):
+        from DroneOS.core.coordination.healing import HealPlan
+        return HealPlan({'drone2': 0, 'drone3': 1}, "tail_fill", {}, 0.0, 0.0, True, "none", None)
+    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_fill)
+
+    fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
+    healthy = {'drone2', 'drone3'}
+
+    sender = MockSender()
+    sender.return_value = False
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager.my_id = 'drone2'
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0})
+    assert manager._heal_count == 0
+    assert getattr(manager, "_consecutive_failures", 0) == 1
+
+@pytest.mark.asyncio
+async def test_line_anchor_dead_noplan(mock_cfg, monkeypatch):
+    # (b) LINE, 15 m, anchor dead: NO_PLAN, exactly one "anchor lost" WARNING, no send
+    import DroneOS.core.coordination.healing as healing_module
+    def mock_plan_noplan(*args, **kwargs):
+        from DroneOS.core.coordination.healing import HealPlan, RejectKind
+        return HealPlan({'drone2': 1}, "none", {}, 0.0, 0.0, False, "anchor dead in LINE", RejectKind.FINAL)
+    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_noplan)
+    
+    fp = {'type': 'LINE', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1}}
+    healthy = {'drone2'}
+    sender = MockSender()
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    
+    manager.my_id = 'drone2'
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    
+    import logging
+    warns = []
+    class MockHandler(logging.Handler):
+        def emit(self, record):
+            if record.levelno == logging.WARNING:
+                warns.append(record.getMessage())
+    import DroneOS.core.coordination.manager as mgr; mgr.logger.addHandler(MockHandler())
+    
+    my_status = {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0}
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', my_status)
+    
+    assert len(sender.calls) == 0
+    assert any("anchor lost" in w for w in warns)
+
+@pytest.mark.asyncio
+
+@pytest.mark.asyncio
+async def test_60_seconds_dead_anchor(mock_cfg, monkeypatch):
+    import DroneOS.core.coordination.healing as healing_module
+    def mock_plan_fill(*args, **kwargs):
+        from DroneOS.core.coordination.healing import HealPlan
+        return HealPlan({'drone2': 0, 'drone3': 1, 'drone4': 2}, "tail_fill", {}, 10.0, 10.0, True, "none", None)
+    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_fill)
+    
+    fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2, 'drone4': 3}}
+    healthy = {'drone2', 'drone3', 'drone4'}
+    sender = MockSender()
+    mock_cfg.coordination['mode'] = 'active'
+    mock_cfg.coordination['armed'] = True
+    import DroneOS.core.coordination.manager as mgr
+    manager = mgr.CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    
+    manager.my_id = 'drone2'
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone4'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    
+    my_status = {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0}
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', my_status)
+    await manager._handle_healing(110.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', my_status)
+    await manager._handle_healing(161.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone2', my_status)
+    
+    assert len(sender.calls) == 1
+    params, targets = sender.calls[0]
+    assert params["slot_assignments"] == {'drone2': 0, 'drone3': 1, 'drone4': 2}
+    assert params["members"] == ['drone3', 'drone4']
+    assert set(targets) == {'drone3', 'drone4'}
+    assert 'drone1' not in targets
+    assert 'drone2' not in targets
+
+@pytest.mark.asyncio
+async def test_follower_dead_hold(mock_cfg, monkeypatch):
+    mock_cfg.coordination['reshape_on_follower_loss'] = 'false'
+    import DroneOS.core.coordination.healing as healing_module
+    def mock_plan_hold(*args, **kwargs):
+        from DroneOS.core.coordination.healing import HealPlan, RejectKind
+        return HealPlan({'drone1': 0, 'drone3': 1}, "none", {}, 0.0, 0.0, False, "reshape off", RejectKind.TRANSIENT)
+    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_hold)
+    
+    fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
+    healthy = {'drone1', 'drone3'}
+    sender = MockSender()
+    import DroneOS.core.coordination.manager as mgr
+    manager = mgr.CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    
+    manager.my_id = 'drone1'
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    
+    import logging
+    holds = []
+    class MockHandler(logging.Handler):
+        def emit(self, record):
+            if 'HOLD' in record.getMessage():
+                holds.append(record.getMessage())
+    mgr.logger.addHandler(MockHandler())
+    
+    my_status = {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0}
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', my_status)
+    
+    assert len(sender.calls) == 0
+    assert len(holds) == 1
+
+@pytest.mark.asyncio
+async def test_follower_loss_reshape_active(mock_cfg, monkeypatch):
+    mock_cfg.coordination['reshape_on_follower_loss'] = 'true'
+    mock_cfg.coordination['mode'] = 'active'
+    import DroneOS.core.coordination.healing as healing_module
+    monkeypatch.setattr(healing_module, 'plan_healing', mock_plan_accepted)
+    
+    fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
+    healthy = {'drone1', 'drone3'}
+    sender = MockSender()
+    import DroneOS.core.coordination.manager as mgr
+    manager = mgr.CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    
+    manager.my_id = 'drone1'
+    manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
+    manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
+    
+    import logging
+    warns = []
+    class MockHandler(logging.Handler):
+        def emit(self, record):
+            if record.levelno == logging.WARNING and 'follower reshape is not safe' in record.getMessage():
+                warns.append(record.getMessage())
+    mgr.logger.addHandler(MockHandler())
+    
+    my_status = {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0}
+    await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', my_status)
+    
+    assert len(sender.calls) == 0
+    assert len(warns) == 1

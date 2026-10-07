@@ -226,7 +226,7 @@ class DroneOSApp:
             import time
             def formation_provider():
                 try:
-                    fp = getattr(self.flight_manager, 'formation_params', None)
+                    fp = getattr(self.flight_manager, 'current_formation', None)
                     return copy.deepcopy(fp) if fp else None
                 except Exception:
                     return None

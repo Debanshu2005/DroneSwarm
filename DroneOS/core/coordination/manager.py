@@ -254,7 +254,19 @@ class CoordinationManager:
         reshape_on_follower = str(self.config_dict.get("reshape_on_follower_loss", "false")).lower() == "true"
         dead_pid_str = ",".join(sorted(true_dead))
         is_anchor_dead = (current_anchor in true_dead)
-        
+
+        if not is_anchor_dead and reshape_on_follower:
+            if self.mode == "active":
+                if dead_pid_str not in self._hold_logged:
+                    self._hold_logged.add(dead_pid_str)
+                    logger.warning("[coord] follower reshape is not safe under partial delivery in active mode")
+                self._memoized_plans[memo_key] = True
+                return
+            elif self.mode == "advisory":
+                if dead_pid_str not in self._hold_logged:
+                    self._hold_logged.add(dead_pid_str)
+                    logger.info("[coord] follower reshape requested in advisory mode (not safe under partial delivery)")
+
         if not is_anchor_dead and not reshape_on_follower:
             if dead_pid_str not in self._hold_logged:
                 self._hold_logged.add(dead_pid_str)
@@ -350,6 +362,7 @@ class CoordinationManager:
             
         new_params = copy.deepcopy(live_fp)
         new_params["slot_assignments"] = plan.slot_assignments
+        new_params["members"] = sorted([pid for pid in plan.slot_assignments.keys() if pid != self.my_id])
         
         healthy_survivors = set(live_fp.get("slot_assignments", {}).keys()) - true_dead
         if set(new_params["slot_assignments"].keys()) != healthy_survivors:
