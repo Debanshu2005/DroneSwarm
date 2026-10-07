@@ -188,13 +188,53 @@ class DroneOSApp:
                     return copy.deepcopy(fp) if fp else None
                 except Exception:
                     return None
-                    
+
+            async def formation_update_sender(params: dict, targets: list[str]) -> bool:
+                """UDP gives no delivery ack. Returns True only if self-application and all sends complete without exception."""
+                from DroneOS.shared.protocol.messages import ControlMessage, CommandAction
+                import asyncio
+                now = time.time()
+                
+                f_type = params.get("type", "V")
+                spacing = params.get("spacing", 10.0)
+                members = params.get("members", [])
+                slot_assignments = params.get("slot_assignments", {})
+                
+                msg = ControlMessage(
+                    action=CommandAction.FORMATION_UPDATE,
+                    params={"type": f_type, "spacing": spacing, "members": members, "slot_assignments": slot_assignments},
+                    sender_id=self.node_id,
+                    timestamp=now
+                )
+                
+                try:
+                    self_success = await self.command_handler.handle_command(msg)
+                    if not self_success:
+                        return False
+                        
+                    for pid in targets:
+                        remote_msg = ControlMessage(
+                            action=CommandAction.FORMATION_UPDATE,
+                            params={"type": f_type, "spacing": spacing, "members": members, "slot_assignments": slot_assignments},
+                            sender_id=self.node_id,
+                            target_id=pid,
+                            timestamp=now
+                        )
+                        await self.network.broadcast_message(remote_msg)
+                        
+                    return True
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"formation_update_sender failed: {e}")
+                    return False
+
             self.coordination_manager = CoordinationManager(
                 self.swarm_manager, 
                 self.flight_cfg, 
                 hb_interval,
                 formation_provider=formation_provider,
-                self_status_provider=lambda: self_status_provider_fn(self.state_store)
+                self_status_provider=lambda: self_status_provider_fn(self.state_store),
+                formation_publisher=formation_update_sender
             )
         else:
             self.coordination_manager = None
