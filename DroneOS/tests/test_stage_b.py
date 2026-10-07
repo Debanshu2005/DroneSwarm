@@ -43,6 +43,35 @@ class MockSender:
             raise RuntimeError("Sender error")
         return self.return_value
 
+@pytest.mark.asyncio
+async def test_make_formation_provider_reads_and_copies_flight_manager_params():
+    from DroneOS.core.flight_manager import FlightManager
+    from DroneOS.core.flight_state import FlightStateStore
+    from DroneOS.main import make_formation_provider
+
+    flight_manager = FlightManager(MagicMock(), FlightStateStore())
+    flight_manager.set_swarm_manager(
+        type("FakeSwarm", (), {"identity": type("Identity", (), {"drone_id": "drone1"})()})()
+    )
+    provider = make_formation_provider(flight_manager)
+    params = {
+        "type": "V",
+        "spacing": 15.0,
+        "slot_assignments": {"drone1": 0},
+        "members": [],
+    }
+
+    assert provider() is None
+    assert await flight_manager.formation_update(params) is True
+    provided = provider()
+    assert provided == params
+    assert provided is not params
+    provided["slot_assignments"]["drone1"] = 9
+    assert flight_manager.formation_params["slot_assignments"]["drone1"] == 0
+
+    flight_manager._pre_land_rtl_cleanup()
+    assert provider() is None
+
 def mock_plan_accepted(*args, **kwargs):
     return HealPlan({'drone1': 0, 'drone3': 1}, "compaction", {}, 0.0, 0.0, True, None, None)
 

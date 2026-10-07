@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import time
 import sys
 from pathlib import Path
@@ -46,6 +47,15 @@ def self_status_provider_fn(state_store):
     except Exception: return {"battery_level": 0.0, "gps_valid": False, "position_age": None, "lat": None, "lon": None, "alt": None}
 
 logger = setup_logger("DroneOS_Main")
+
+def make_formation_provider(flight_manager):
+    def formation_provider():
+        try:
+            params = getattr(flight_manager, "formation_params", None)
+            return copy.deepcopy(params) if params is not None else None
+        except Exception:
+            return None
+    return formation_provider
 
 def create_formation_update_sender(node_id, command_handler, network):
     import time
@@ -222,14 +232,7 @@ class DroneOSApp:
             from DroneOS.core.coordination.manager import CoordinationManager
             hb_interval = getattr(self.network_cfg, 'heartbeat_interval', 1.0)
             
-            import copy
-            import time
-            def formation_provider():
-                try:
-                    fp = getattr(self.flight_manager, 'current_formation', None)
-                    return copy.deepcopy(fp) if fp else None
-                except Exception:
-                    return None
+            formation_provider = make_formation_provider(self.flight_manager)
 
             formation_update_sender = create_formation_update_sender(self.node_id, self.command_handler, self.network)
 
@@ -239,7 +242,7 @@ class DroneOSApp:
                 hb_interval,
                 formation_provider=formation_provider,
                 self_status_provider=lambda: self_status_provider_fn(self.state_store),
-                formation_publisher=formation_update_sender
+                formation_update_sender=formation_update_sender
             )
         else:
             self.coordination_manager = None
