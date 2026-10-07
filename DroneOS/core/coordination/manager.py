@@ -9,7 +9,7 @@ from DroneOS.core.coordination.membership import MembershipView, PeerState
 logger = setup_logger("CoordinationManager")
 
 class CoordinationManager:
-    def __init__(self, swarm_manager: SwarmMembership, flight_cfg: Any, heartbeat_interval: float = 1.0, formation_provider=None, self_status_provider=None, clock=None, formation_publisher=None):
+    def __init__(self, swarm_manager: SwarmMembership, flight_cfg: Any, heartbeat_interval: float = 1.0, formation_provider=None, self_status_provider=None, clock=None, formation_update_sender=None):
         self.clock = clock or time.monotonic
         self.swarm = swarm_manager
         self.hb_interval = heartbeat_interval
@@ -25,7 +25,7 @@ class CoordinationManager:
         self.mode = self.config_dict.get("mode", "advisory")
         self.armed = str(self.config_dict.get("armed", "false")).lower() == "true"
         self.kill_switch_file = self.config_dict.get("kill_switch_file", "COORD_DISABLE")
-        self.formation_publisher = formation_publisher
+        self.formation_update_sender = formation_update_sender
         self.max_heals_per_session = int(self.config_dict.get("max_heals_per_session", 3))
         self.resend_count = int(self.config_dict.get("resend_count", 2))
         
@@ -316,7 +316,7 @@ class CoordinationManager:
             await self._send_formation_update(memo_key, plan, fp, prop_anchor, healthy_members, true_dead)
 
     async def _send_formation_update(self, memo_key, plan, fp, prop_anchor, healthy_members, true_dead):
-        if not self.enabled or self.mode != "active" or not self.armed or getattr(self, "_kill_switch_active", False) or not getattr(self, "formation_publisher", None):
+        if not self.enabled or self.mode != "active" or not self.armed or getattr(self, "_kill_switch_active", False) or not getattr(self, "formation_update_sender", None):
             new_fp = copy.deepcopy(fp)
             new_fp["slot_assignments"] = plan.slot_assignments
             logger.info(f"[coord] would broadcast FORMATION_UPDATE: {fp} -> {new_fp}")
@@ -391,7 +391,7 @@ class CoordinationManager:
         targets = [pid for pid in plan.slot_assignments if pid != self.my_id]
         
         try:
-            success = await self.formation_publisher(new_params, targets)
+            success = await self.formation_update_sender(new_params, targets)
         except Exception as e:
             logger.error(f"[coord] Sender raised: {e}")
             success = False

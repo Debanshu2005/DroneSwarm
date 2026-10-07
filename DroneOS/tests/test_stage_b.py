@@ -155,7 +155,7 @@ async def test_targets_never_include_dead_or_self(mock_cfg, monkeypatch):
     healthy = {'drone2', 'drone3'}
 
     sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     manager.my_id = 'drone2'
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
@@ -184,7 +184,7 @@ async def test_pre_send_race_operator_change(mock_cfg, monkeypatch):
     fp_changed = copy.deepcopy(fp)
     fp_changed['spacing'] = 20.0
     sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp_changed), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp_changed), formation_update_sender=sender)
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
@@ -203,7 +203,7 @@ async def test_pre_send_race_anchor_change(mock_cfg, monkeypatch):
     healthy = {'drone2', 'drone3'}
     
     sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
@@ -221,7 +221,7 @@ async def test_pre_send_race_quorum_lost(mock_cfg, monkeypatch):
     healthy = {'drone2', 'drone3'}
     
     sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
@@ -238,7 +238,7 @@ async def test_pre_send_race_dead_set_changed(mock_cfg, monkeypatch):
     healthy = {'drone2', 'drone3'}
     
     sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     # Let's say drone3 died right before send
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 100.0})()
@@ -260,7 +260,7 @@ async def test_fail_closed_planner_exception(mock_cfg, monkeypatch):
     healthy = {'drone2', 'drone3'}
     
     sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
@@ -278,7 +278,7 @@ async def test_fail_closed_provider_none(mock_cfg, monkeypatch):
     healthy = {'drone2', 'drone3'}
     
     sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: None, formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: None, formation_update_sender=sender)
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
@@ -298,7 +298,7 @@ async def test_fail_closed_sender_raising(mock_cfg, monkeypatch):
     
     sender = MockSender()
     sender.should_raise = True
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
@@ -331,7 +331,7 @@ async def test_gating_matrix(mock_cfg, tmp_path, monkeypatch, gate):
         mock_cfg.coordination['armed'] = False
         
     sender = MockSender() if gate != "sender_none" else None
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     
     if gate == "kill_switch":
         ks = tmp_path / "COORD_DISABLE"
@@ -360,7 +360,7 @@ async def test_heal_cap(mock_cfg, monkeypatch):
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
     healthy = {'drone2', 'drone3'}
     sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
@@ -378,7 +378,7 @@ async def test_kill_switch_mid_run(mock_cfg, tmp_path, monkeypatch):
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2}}
     healthy = {'drone2', 'drone3'}
     sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone3'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
     manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
@@ -392,7 +392,7 @@ async def test_kill_switch_mid_run(mock_cfg, tmp_path, monkeypatch):
 async def test_excluded_drone_returns(mock_cfg):
     fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone3': 1}}
     sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     
     manager._excluded_members = {'drone2'}
     manager._excluded_warned = set()
@@ -717,7 +717,7 @@ async def test_sender_returns(mock_cfg, monkeypatch):
 
     sender = MockSender()
     sender.return_value = False
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     manager.my_id = 'drone2'
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
     manager.membership.nodes['drone2'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
@@ -739,7 +739,7 @@ async def test_line_anchor_dead_noplan(mock_cfg, monkeypatch):
     fp = {'type': 'LINE', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1}}
     healthy = {'drone2'}
     sender = MockSender()
-    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     
     manager.my_id = 'drone2'
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
@@ -775,7 +775,7 @@ async def test_60_seconds_dead_anchor(mock_cfg, monkeypatch):
     mock_cfg.coordination['mode'] = 'active'
     mock_cfg.coordination['armed'] = True
     import DroneOS.core.coordination.manager as mgr
-    manager = mgr.CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = mgr.CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     
     manager.my_id = 'drone2'
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.DEAD, 'dead_since': 50.0})()
@@ -809,7 +809,7 @@ async def test_follower_dead_hold(mock_cfg, monkeypatch):
     healthy = {'drone1', 'drone3'}
     sender = MockSender()
     import DroneOS.core.coordination.manager as mgr
-    manager = mgr.CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = mgr.CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     
     manager.my_id = 'drone1'
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
@@ -841,7 +841,7 @@ async def test_follower_loss_reshape_active(mock_cfg, monkeypatch):
     healthy = {'drone1', 'drone3'}
     sender = MockSender()
     import DroneOS.core.coordination.manager as mgr
-    manager = mgr.CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_publisher=sender)
+    manager = mgr.CoordinationManager(MockSwarm(), mock_cfg, clock=lambda: 100.0, formation_provider=lambda: copy.deepcopy(fp), formation_update_sender=sender)
     
     manager.my_id = 'drone1'
     manager.membership.nodes['drone1'] = type('MockNode', (), {'state': PeerState.ALIVE, 'battery_level': 100.0})()
