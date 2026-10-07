@@ -9,7 +9,7 @@ from DroneOS.core.coordination.membership import MembershipView, PeerState
 logger = setup_logger("CoordinationManager")
 
 class CoordinationManager:
-    def __init__(self, swarm_manager: SwarmMembership, flight_cfg: Any, heartbeat_interval: float = 1.0, formation_provider=None, self_status_provider=None, clock=None):
+    def __init__(self, swarm_manager: SwarmMembership, flight_cfg: Any, heartbeat_interval: float = 1.0, formation_provider=None, self_status_provider=None, clock=None, formation_publisher=None):
         self.clock = clock or time.monotonic
         self.swarm = swarm_manager
         self.hb_interval = heartbeat_interval
@@ -23,6 +23,11 @@ class CoordinationManager:
                 
         self.enabled = str(self.config_dict.get("enabled", "false")).lower() == "true"
         self.mode = self.config_dict.get("mode", "advisory")
+        self.armed = str(self.config_dict.get("armed", "false")).lower() == "true"
+        self.kill_switch_file = self.config_dict.get("kill_switch_file", "COORD_DISABLE")
+        self.formation_publisher = formation_publisher
+        self.max_heals_per_session = int(self.config_dict.get("max_heals_per_session", 3))
+        self.resend_count = int(self.config_dict.get("resend_count", 2))
         
         self.membership = MembershipView(self.config_dict, clock=self.clock)
         self.is_running = False
@@ -60,7 +65,12 @@ class CoordinationManager:
             logger.warning("[coord] WARNING: dead_drone_obstacle=false not allowed in active mode.")
 
         if self.mode == "active":
-            logger.warning("[coord] active mode is not implemented in this build; running advisory-only (no commands will be sent)")
+            if not self.armed:
+                logger.warning("[coord] active mode NOT armed (set coordination.armed: true)")
+            else:
+                logger.info("[coord] ACTIVE and ARMED: formation updates may be sent")
+        else:
+            logger.info("[coord] advisory only")
 
         self._memoized_plans: Dict[str, Any] = {}
 
@@ -80,6 +90,14 @@ class CoordinationManager:
             
             while self.is_running:
                 try:
+                    import os
+                    if os.path.exists(self.kill_switch_file):
+                        if not getattr(self, "_kill_switch_logged", False):
+                            logger.warning(f"[coord] kill switch file {self.kill_switch_file} detected, coordination is now passive.")
+                            self._kill_switch_logged = True
+                        self._kill_switch_active = True
+                    else:
+                        self._kill_switch_active = False
                     await asyncio.sleep(poll_interval)
                     
                     for peer_id in self.swarm.registry.get_all_peers():
@@ -127,6 +145,11 @@ class CoordinationManager:
                                 age = my_status.get("position_age")
                                 if age is not None and (heal_max_position_age_s <= 0 or age <= heal_max_position_age_s):
                                     healthy_members.add(pid)
+                                
+                            if pid not in slot_assignments and pid not in getattr(self, '_excluded_warned', set()) and hasattr(self, '_excluded_members') and pid in self._excluded_members:
+                                if not hasattr(self, '_excluded_warned'): self._excluded_warned = set()
+                                logger.warning(f"[coord] drone {pid} returned after heal; operator must re-issue the formation to re-add it")
+                                self._excluded_warned.add(pid)
                         else:
                             if is_healthy(pid, self.my_id, self.membership, self.swarm, anchor_min_battery, now, heal_max_position_age_s):
                                 healthy_members.add(pid)
@@ -160,7 +183,7 @@ class CoordinationManager:
                         logger.info(f"[coord] state={q_state.name} anchor={current_anchor} proposed={prop_anchor} healthy={len(healthy_members)}/{len(slot_assignments)}")
                         
                     # ── Healing (Phase 3 Advisory) ──────────────────────────
-                    self._handle_healing(now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status)
+                    await self._handle_healing(now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status)
 
                     
                 except asyncio.CancelledError:
@@ -180,7 +203,8 @@ class CoordinationManager:
     def stop(self):
         self.is_running = False
 
-    def _handle_healing(self, now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status=None):
+
+    async def _handle_healing(self, now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status=None):
         if self.mode not in ("advisory", "active") or q_state.name != "QUORUM" or not fp:
             return
 
@@ -270,8 +294,119 @@ class CoordinationManager:
                         logger.info(f"[coord] NO_PLAN: {plan.reject_reason} for {dead_pid_str}")
                 self._memoized_plans[memo_key] = True
         else:
+            await self._send_formation_update(memo_key, plan, fp, prop_anchor, healthy_members, true_dead)
+
+    async def _send_formation_update(self, memo_key, plan, fp, prop_anchor, healthy_members, true_dead):
+        if not self.enabled or self.mode != "active" or not self.armed or getattr(self, "_kill_switch_active", False) or not getattr(self, "formation_publisher", None):
             new_fp = copy.deepcopy(fp)
             new_fp["slot_assignments"] = plan.slot_assignments
             logger.info(f"[coord] would broadcast FORMATION_UPDATE: {fp} -> {new_fp}")
             logger.info(f"[coord] HealPlan: method={plan.reason} travel={plan.total_travel:.1f} min_sep={plan.min_separation:.1f} moves={plan.moves}")
             self._memoized_plans[memo_key] = plan
+            return
+
+        # B3 Pre-send checks
+        live_fp = self.formation_provider()
+        if not live_fp or live_fp != fp:
+            logger.warning("[coord] PRE-SEND ABORT: live formation params do not match planning snapshot")
+            return
+            
+        quorum_req = self.config_dict.get("quorum_required", True)
+        from DroneOS.core.coordination.quorum import compute_quorum
+        q_state = compute_quorum(self.my_id, live_fp.get("slot_assignments", {}), self.membership, quorum_req)
+        if q_state.name != "QUORUM":
+            logger.warning("[coord] PRE-SEND ABORT: quorum lost")
+            return
+            
+        from DroneOS.core.coordination.anchor import propose_anchor
+        live_prop_anchor, _ = propose_anchor(
+            live_fp.get("slot_assignments", {}), 
+            healthy_members, 
+            self.last_proposed_anchor, 
+            getattr(self, '_prop_time', None), 
+            float(self.config_dict.get("anchor_min_dwell_s", 10)), 
+            self.clock()
+        )
+        if prop_anchor != live_prop_anchor:
+            logger.warning("[coord] PRE-SEND ABORT: proposed anchor changed")
+            return
+            
+        for d in true_dead:
+            node = self.membership.nodes.get(d)
+            if not node or node.state.name != "DEAD":
+                logger.warning("[coord] PRE-SEND ABORT: dead set changed")
+                return
+
+        if not plan.accepted or plan.is_hold or plan.reject_kind is not None:
+            logger.warning("[coord] PRE-SEND ABORT: plan not accepted")
+            return
+            
+        new_params = copy.deepcopy(live_fp)
+        new_params["slot_assignments"] = plan.slot_assignments
+        
+        healthy_survivors = set(live_fp.get("slot_assignments", {}).keys()) - true_dead
+        if set(new_params["slot_assignments"].keys()) != healthy_survivors:
+            logger.warning("[coord] PRE-SEND ABORT: slots do not contain exactly healthy survivors")
+            return
+            
+        anchor_slots = [p for p, s in new_params["slot_assignments"].items() if s == 0]
+        if not anchor_slots or anchor_slots[0] != prop_anchor:
+            logger.warning("[coord] PRE-SEND ABORT: slot 0 is not promoted anchor")
+            return
+            
+        from DroneOS.core.coordination.healing import validate_formation_params
+        if not validate_formation_params(new_params, self.flight_cfg):
+            logger.warning("[coord] PRE-SEND ABORT: validator failed")
+            return
+            
+        if self._heal_count >= self.max_heals_per_session:
+            logger.warning("[coord] PRE-SEND ABORT: max heals reached")
+            return
+            
+        reslot_cooldown = float(self.config_dict.get("reslot_cooldown_s", 5.0))
+        if self.clock() - self._last_slot_change_time < reslot_cooldown:
+            logger.warning("[coord] PRE-SEND ABORT: cooldown not elapsed")
+            return
+
+        targets = [pid for pid in plan.slot_assignments if pid != self.my_id]
+        
+        try:
+            success = await self.formation_publisher(new_params, targets)
+        except Exception as e:
+            logger.error(f"[coord] Sender raised: {e}")
+            success = False
+            
+        if success:
+            self._heal_count += 1
+            self._last_heal_time = self.clock()
+            self._consecutive_failures = 0
+            self._memoized_plans[memo_key] = plan
+            if not hasattr(self, '_excluded_members'):
+                self._excluded_members = set()
+            self._excluded_members.update(true_dead)
+            logger.info(f"[coord] FORMATION_UPDATE SENT: {fp} -> {new_params} targets={targets}")
+            
+            asyncio.create_task(self._verify_application(plan.slot_assignments, fp))
+            
+        else:
+            self._consecutive_failures = getattr(self, "_consecutive_failures", 0) + 1
+            logger.error(f"[coord] SENDER RETURNED FALSE (failures: {self._consecutive_failures})")
+            if self._consecutive_failures >= 2:
+                self._heals_disabled = True
+                logger.error("[coord] SENDER FAILURES >= 2, healing disabled for session.")
+
+    async def _verify_application(self, new_slots, fp):
+        await asyncio.sleep(3.0)
+        if not self.formation_provider:
+            return
+        live = self.formation_provider()
+        if live and live.get("slot_assignments") != new_slots:
+            live_copy = dict(live)
+            live_copy.pop("slot_assignments", None)
+            fp_copy = dict(fp)
+            fp_copy.pop("slot_assignments", None)
+            if live_copy == fp_copy:
+                logger.error("[coord] OWN APPLICATION VERIFICATION FAILED: healing disabled for session.")
+                self._heals_disabled = True
+            else:
+                logger.info("[coord] OWN APPLICATION VERIFICATION FAILED: live params changed by operator.")

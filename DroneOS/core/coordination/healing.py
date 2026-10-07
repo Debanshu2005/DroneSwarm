@@ -410,13 +410,34 @@ def plan_healing(
     
     return best
 
-def validate_params(params: Dict[str, Any]) -> bool:
+def validate_formation_params(params: dict, flight_cfg: any) -> bool:
     slots = params.get("slot_assignments")
     if not isinstance(slots, dict) or not slots:
         return False
-    if not params.get("type"):
+        
+    try:
+        from DroneOS.core.formation_manager import FormationType
+        _ = FormationType(params.get("type", "V").upper())
+    except (ValueError, TypeError, AttributeError):
         return False
+        
+    try:
+        spacing = float(params.get("spacing", 0.0))
+        min_sep = 8.0
+        min_ca = 2.0
+        if flight_cfg is not None:
+            if getattr(flight_cfg, "formation", None):
+                min_sep = float(getattr(flight_cfg.formation, "min_formation_separation_m", min_sep))
+            if getattr(flight_cfg, "collision_avoidance", None):
+                min_ca = float(getattr(flight_cfg.collision_avoidance, "min_horizontal_distance", min_ca))
+        min_viable = 1.5 * max(min_sep, min_ca)
+        if spacing < min_viable:
+            return False
+    except (TypeError, ValueError):
+        return False
+        
     return True
+
 
 
 
