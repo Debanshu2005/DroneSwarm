@@ -18,3 +18,7 @@ coordination:
   heal_max_position_age_s: 5.0
   quorum_required: true
   reslot_cooldown_s: 15
+  armed: false
+  kill_switch_file: "COORD_DISABLE"
+  resend_count: 2
+  max_heals_per_session: 3
