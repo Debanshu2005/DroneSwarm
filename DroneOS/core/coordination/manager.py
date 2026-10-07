@@ -273,7 +273,10 @@ class CoordinationManager:
                 logger.info(f"[coord] HOLD: hole left at slot(s) {[slot_assignments[d] for d in true_dead]} (follower died, reshape_on_follower_loss=false)")
             self._memoized_plans[memo_key] = True
             return
-            
+
+        if self.my_id != prop_anchor:
+            return
+             
         from DroneOS.core.coordination.healing import plan_healing, RejectKind
         plan = plan_healing(fp, healthy_members, current_anchor, prop_anchor, self.my_id, self.flight_cfg, self.membership, my_status)
         if not plan:

@@ -72,6 +72,72 @@ async def test_make_formation_provider_reads_and_copies_flight_manager_params():
     flight_manager._pre_land_rtl_cleanup()
     assert provider() is None
 
+@pytest.mark.asyncio
+async def test_only_proposed_anchor_sends_with_three_real_managers(monkeypatch, mock_cfg):
+    from DroneOS.core.coordination.membership import MembershipView
+    import DroneOS.core.coordination.healing as healing_module
+
+    class FakeClock:
+        def __init__(self):
+            self.now = 20.0
+
+        def __call__(self):
+            return self.now
+
+    class FakeSwarm:
+        def __init__(self, drone_id):
+            self.identity = type("Identity", (), {"drone_id": drone_id})()
+
+    clock = FakeClock()
+    params = {
+        "type": "V",
+        "spacing": 15.0,
+        "slot_assignments": {"drone1": 0, "drone2": 1, "drone3": 2, "drone4": 3},
+    }
+    healthy = {"drone2", "drone3", "drone4"}
+    senders = {pid: MockSender() for pid in healthy}
+    managers = {}
+    for drone_id in sorted(healthy):
+        manager = CoordinationManager(
+            FakeSwarm(drone_id),
+            mock_cfg,
+            clock=clock,
+            formation_provider=lambda: copy.deepcopy(params),
+            formation_update_sender=senders[drone_id],
+        )
+        for peer_id in params["slot_assignments"]:
+            if peer_id != drone_id:
+                manager.membership.update_from_peer(peer_id, 1.0, 100.0, 0.0, 0.0, 0.0, 1.0)
+        manager.membership.nodes["drone1"].state = PeerState.DEAD
+        manager.membership.nodes["drone1"].dead_since = 0.0
+        manager._last_slot_change_time = 0.0
+        managers[drone_id] = manager
+
+    accepted = HealPlan(
+        {"drone2": 0, "drone3": 1, "drone4": 2},
+        "tail_fill",
+        {},
+        0.0,
+        20.0,
+        True,
+        "",
+        None,
+    )
+    monkeypatch.setattr(healing_module, "plan_healing", lambda *args, **kwargs: accepted)
+    status = {"gps_valid": True, "position_age": 0.0, "battery_level": 100.0}
+
+    for _ in range(60):
+        for drone_id, manager in managers.items():
+            await manager._handle_healing(
+                clock(), QuorumState.QUORUM, copy.deepcopy(params), healthy,
+                "drone1", "drone2", status,
+            )
+        clock.now += 1.0
+
+    assert len(senders["drone2"].calls) == 1
+    assert len(senders["drone3"].calls) == 0
+    assert len(senders["drone4"].calls) == 0
+
 def mock_plan_accepted(*args, **kwargs):
     return HealPlan({'drone1': 0, 'drone3': 1}, "compaction", {}, 0.0, 0.0, True, None, None)
 
