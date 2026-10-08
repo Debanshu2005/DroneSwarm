@@ -5,14 +5,15 @@ Requirements: 4.1 – 4.9
 
 PREREQUISITES
 ─────────────
-1. AirSim is running with the 4-drone settings from tests/airsim_settings_4drone.json
-   (copy that file to %USERPROFILE%/Documents/AirSim/settings.json before launching).
-2. All four DroneOS instances are running with flight.test.yaml (coordination enabled,
-   mode=active, armed=true).
-3. Set AIRSIM_HOST environment variable (e.g. AIRSIM_HOST=127.0.0.1).
-4. Set DRONE_PROCESSES env var as a JSON list of PIDs:
-   e.g. DRONE_PROCESSES=["<pid1>","<pid2>","<pid3>","<pid4>"]
-   OR the test will skip the process-kill step and only cut motors.
+1. Copy sim/airsim/settings.json to %USERPROFILE%\Documents\AirSim\settings.json
+   and launch your AirSim/Unreal environment. You should see Drone1–Drone4 spawn.
+2. From the repo root, run the TEST profile launcher (coordination active + armed):
+       sim\launch_sim_test.bat
+   This sets DRONEOS_PROFILE=test, which loads flight.yaml + flight.sim.yaml +
+   flight.test.yaml, enabling the healing coordinator on all four nodes.
+3. Set AIRSIM_HOST=127.0.0.1 in your test terminal.
+4. Optionally set DRONE4_PID to the PID of the DroneOS3 process to have the test
+   kill it when it terminates Drone4. Without it, only the motors are cut via AirSim.
 
 RUNNING
 ───────
@@ -340,3 +341,5 @@ async def test_heal_on_drone4_failure(airsim_client):
     for vehicle in ["Drone1", "Drone2", "Drone3"]:
         client.landAsync(vehicle_name=vehicle, timeout_sec=20).join()
         client.armDisarm(False, vehicle_name=vehicle)
+
+
