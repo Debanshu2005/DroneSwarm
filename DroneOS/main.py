@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import time
 import sys
 from pathlib import Path
@@ -29,7 +30,74 @@ from DroneOS.core.diagnostics import ConfigurationValidator, SystemHealthReporte
 from DroneOS.shared.config.loader import load_yaml_config
 from DroneOS.shared.config.models import DroneConfig, NetworkConfig, FlightConfig
 
+def self_status_provider_fn(state_store):
+    import time
+    try:
+        t = getattr(state_store, 'local_telemetry', None)
+        if not t: return {"battery_level": 0.0, "gps_valid": False, "position_age": None, "lat": None, "lon": None, "alt": None}
+        ts = getattr(t, 'timestamp', None)
+        return {
+            "battery_level": getattr(t, 'battery_level', 0.0) or 0.0,
+            "gps_valid": getattr(t, 'gps_valid', False),
+            "position_age": (time.time() - ts) if ts is not None else None, 
+            "lat": getattr(t, 'latitude', None),
+            "lon": getattr(t, 'longitude', None),
+            "alt": getattr(t, 'altitude', None),
+        }
+    except Exception: return {"battery_level": 0.0, "gps_valid": False, "position_age": None, "lat": None, "lon": None, "alt": None}
+
 logger = setup_logger("DroneOS_Main")
+
+def make_formation_provider(flight_manager):
+    def formation_provider():
+        try:
+            params = getattr(flight_manager, "formation_params", None)
+            return copy.deepcopy(params) if params is not None else None
+        except Exception:
+            return None
+    return formation_provider
+
+def create_formation_update_sender(node_id, command_handler, network):
+    import time
+    async def formation_update_sender(params: dict, targets: list[str]) -> bool:
+        """
+        UDP gives no delivery ack. Returns True only if self-application and all sends complete without exception.
+        Note: A failure after self-application leaves a partial state, and the manager must not retry the same dead set automatically.
+        """
+        from DroneOS.shared.protocol.messages import ControlMessage, CommandAction
+        now = time.time()
+        import copy
+        if "type" not in params or "spacing" not in params or "slot_assignments" not in params:
+            return False
+            
+        msg_params = copy.deepcopy(params)
+        
+        msg = ControlMessage(
+            action=CommandAction.FORMATION_UPDATE,
+            params=msg_params,
+            sender_id=node_id,
+            timestamp=now
+        )
+        try:
+            self_success = await command_handler.handle_command(msg)
+            if not self_success:
+                return False
+            for pid in targets:
+                remote_msg = ControlMessage(
+                    action=CommandAction.FORMATION_UPDATE,
+                    params=msg_params,
+                    sender_id=node_id,
+                    target_id=pid,
+                    timestamp=now
+                )
+                await network.broadcast_message(remote_msg)
+            return True
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"formation_update_sender failed: {e}")
+            print(f"SENDER FAILED: {repr(e)}")
+            return False
+    return formation_update_sender
 
 class DroneOSApp:
     def __init__(self):
@@ -155,6 +223,30 @@ class DroneOSApp:
             config=self.flight_cfg
         )
         
+        coord_cfg = getattr(self.flight_cfg, 'coordination', None)
+        is_enabled = False
+        if coord_cfg:
+            is_enabled = coord_cfg.get('enabled', False) if isinstance(coord_cfg, dict) else getattr(coord_cfg, 'enabled', False)
+            
+        if is_enabled:
+            from DroneOS.core.coordination.manager import CoordinationManager
+            hb_interval = getattr(self.network_cfg, 'heartbeat_interval', 1.0)
+            
+            formation_provider = make_formation_provider(self.flight_manager)
+
+            formation_update_sender = create_formation_update_sender(self.node_id, self.command_handler, self.network)
+
+            self.coordination_manager = CoordinationManager(
+                self.swarm_manager, 
+                self.flight_cfg, 
+                hb_interval,
+                formation_provider=formation_provider,
+                self_status_provider=lambda: self_status_provider_fn(self.state_store),
+                formation_update_sender=formation_update_sender
+            )
+        else:
+            self.coordination_manager = None
+        
         from DroneOS.core.flight_pipeline import FlightPipeline
         self.flight_pipeline = FlightPipeline(self.state_store, self.flight_controller, self.flight_cfg, self.decision_engine)
         self.flight_pipeline.on_intent_change = self._handle_intent_change
@@ -228,7 +320,7 @@ class DroneOSApp:
             timestamp=time.time(),
             peer_id=self.node_id,
             is_active=True,
-            current_task=task_name
+            current_task=task_name,
         )
         await self.network.broadcast_message(msg)
 
@@ -520,7 +612,8 @@ class DroneOSApp:
         
         self._dispatch_task(self._system_monitor_loop())
         self._dispatch_task(self.terminal_controller.run_repl())
-        
+        if self.coordination_manager:
+            self._dispatch_task(self.coordination_manager.run())
         # Start publisher loops
         self.telemetry_publisher.start()
         
