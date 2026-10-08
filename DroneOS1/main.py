@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import time
 import sys
 from pathlib import Path
@@ -604,6 +604,34 @@ if __name__ == "__main__":
         # App internal loop catches the cancel.
         logger.info("DroneOS shutdown complete.")
 
+
+
+def self_status_provider_fn(state_store):
+    import time
+    try:
+        t = getattr(state_store, 'local_telemetry', None)
+        if not t: return {"battery_level": 0.0, "gps_valid": False, "position_age": None, "lat": None, "lon": None, "alt": None}
+        ts = getattr(t, 'timestamp', None)
+        return {
+            "battery_level": getattr(t, 'battery_level', 0.0) or 0.0,
+            "gps_valid": getattr(t, 'gps_valid', False),
+            "position_age": (time.time() - ts) if ts is not None else None,
+            "lat": getattr(t, 'latitude', None),
+            "lon": getattr(t, 'longitude', None),
+            "alt": getattr(t, 'altitude', None),
+        }
+    except Exception: return {"battery_level": 0.0, "gps_valid": False, "position_age": None, "lat": None, "lon": None, "alt": None}
+
+
+def make_formation_provider(flight_manager):
+    def formation_provider():
+        try:
+            import copy
+            params = getattr(flight_manager, "formation_params", None)
+            return copy.deepcopy(params) if params is not None else None
+        except Exception:
+            return None
+    return formation_provider
 
 def create_formation_update_sender(node_id, command_handler, network):
     import time
