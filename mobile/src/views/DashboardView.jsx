@@ -287,10 +287,10 @@ export default function DashboardView() {
                   <Navigation size={16}/> RTL
                </button>
                <button className="action-btn" onClick={() => executeCommand(CommandAction.HOVER)} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
-                  <Activity size={16}/> HOLD
+                  <Activity size={16}/> LOITER
                </button>
-               <button className="action-btn" onClick={() => executeCommand(CommandAction.SET_MODE, {mode: 'ALTCTL'})} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
-                  <Activity size={16}/> ALTCTL
+               <button className="action-btn" onClick={() => executeCommand(CommandAction.SET_MODE, {mode: 'ALT_HOLD'})} disabled={primaryDrone.status !== 'CONNECTED' && primaryDrone.status !== 'DEGRADED'}>
+                  <Activity size={16}/> ALT_HOLD
                </button>
             </div>
           </div>

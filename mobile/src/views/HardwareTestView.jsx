@@ -20,13 +20,13 @@ export default function HardwareTestView({ setView }) {
     { id: 1, name: 'Connection', desc: 'Verify backend connection to vehicle' },
     { id: 2, name: 'Heartbeat', desc: 'Verify continuous heartbeat stream' },
     { id: 3, name: 'Telemetry', desc: 'Verify required telemetry attributes' },
-    { id: 4, name: 'PX4 Identity', desc: 'Fetch firmware and vehicle metadata' },
+    { id: 4, name: 'ArduPilot Identity', desc: 'Fetch firmware and vehicle metadata' },
     { id: 5, name: 'Parameter Discovery', desc: 'Request parameter list' },
     { id: 6, name: 'Parameter Read', desc: 'Verify parameter retrieval' },
     { id: 7, name: 'Safe parameter write/readback', desc: 'Test non-critical write loop' },
     { id: 8, name: 'Sensor health', desc: 'Verify pre-flight sensor checks' },
     { id: 9, name: 'Flight mode request', desc: 'Test mode change (disarmed)' },
-    { id: 10, name: 'ARM PRECHECK', desc: 'Verify PX4 pre-arm validation' },
+    { id: 10, name: 'ARM PRECHECK', desc: 'Verify ArduPilot pre-arm validation' },
     { id: 11, name: 'Control Readiness', desc: 'Test offboard/manual endpoints safely' },
   ];
 
@@ -87,10 +87,10 @@ export default function HardwareTestView({ setView }) {
         }, 500);
         break;
       case 9:
-        sendCommand(CommandAction.SET_MODE, { mode: 'HOLD' });
+        sendCommand(CommandAction.SET_MODE, { mode: 'LOITER' });
         setTimeout(() => {
            const currentTel = dronesRef.current[targetId]?.telemetry;
-           updateResult(9, currentTel?.flight_mode === 'HOLD' ? 'PASS' : 'FAIL', `Requested HOLD, got ${currentTel?.flight_mode}`);
+           updateResult(9, currentTel?.flight_mode === 'LOITER' ? 'PASS' : 'FAIL', `Requested LOITER, got ${currentTel?.flight_mode}`);
         }, 1000);
         break;
       case 10:
@@ -247,13 +247,13 @@ export default function HardwareTestView({ setView }) {
 
                {paramTestModal.step === 'verify' && (
                   <div>
-                     <p>Waiting for PX4 readback...</p>
+                     <p>Waiting for ArduPilot readback...</p>
                      <button className="btn btn-secondary" onClick={() => {
                          const current = drone.parameters?.[paramTestModal.name];
                          if (current === parseFloat(paramTestModal.val)) {
                             setParamTestModal({...paramTestModal, step: 'success'});
                          } else {
-                            setParamTestModal({...paramTestModal, error: `PARAMETER CONFLICT. Expected: ${paramTestModal.val}, PX4 reports: ${current}`});
+                            setParamTestModal({...paramTestModal, error: `PARAMETER CONFLICT. Expected: ${paramTestModal.val}, ArduPilot reports: ${current}`});
                          }
                      }}>Check Readback</button>
                      {paramTestModal.error && <p className="danger" style={{marginTop: '10px'}}>{paramTestModal.error}</p>}

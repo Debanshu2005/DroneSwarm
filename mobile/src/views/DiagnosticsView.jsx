@@ -66,7 +66,7 @@ export default function DiagnosticsView() {
             </div>
 
             <div className="card" style={{flex: 1, minWidth: '300px'}}>
-               <h3 style={{marginBottom: '16px', fontSize: '14px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px'}}><HardDrive size={16}/> PX4 (FLIGHT CONTROLLER)</h3>
+               <h3 style={{marginBottom: '16px', fontSize: '14px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px'}}><HardDrive size={16}/> ArduPilot (FLIGHT CONTROLLER)</h3>
                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '13px'}}>
                   <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Firmware:</span> <span>{targetDrone.diagnostics?.px4?.firmware_version || 'N/A'}</span></div>
                   <div style={{display: 'flex', justifyContent: 'space-between'}}><span className="text-muted">Vehicle:</span> <span>{targetDrone.diagnostics?.px4?.vehicle_type || 'N/A'}</span></div>

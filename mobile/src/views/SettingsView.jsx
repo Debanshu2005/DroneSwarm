@@ -138,7 +138,7 @@ export default function SettingsView() {
                <input type="checkbox" checked={indoorMode} onChange={(e) => setIndoorMode(e.target.checked)} style={{width: '20px', height: '20px'}} />
                <div>
                   <div style={{fontWeight: 600, color: indoorMode ? 'var(--warning)' : 'inherit'}}>Indoor / Bench Test Mode</div>
-                  <div style={{fontSize: '12px', color: 'var(--text-muted)'}}>Visually indicates GPS flight is disabled. PX4 still enforces safety.</div>
+                  <div style={{fontSize: '12px', color: 'var(--text-muted)'}}>Visually indicates GPS flight is disabled. ArduPilot still enforces safety.</div>
                </div>
             </label>
             

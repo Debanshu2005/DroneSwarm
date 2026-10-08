@@ -92,7 +92,7 @@ export default function AdvancedTestView() {
            <TestTube size={24} color="var(--warning)" />
            <div>
              <h2 style={{color: 'var(--warning)', margin: 0}}>ADVANCED TEST / ENGINEERING USE</h2>
-             <div style={{fontSize: '12px', color: 'var(--text-muted)'}}>PX4 physical safety gates are preserved. UI and software tests only.</div>
+             <div style={{fontSize: '12px', color: 'var(--text-muted)'}}>ArduPilot physical safety gates are preserved. UI and software tests only.</div>
            </div>
         </div>
         <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
@@ -165,7 +165,7 @@ export default function AdvancedTestView() {
             <button className="btn btn-secondary" onClick={() => handleCommand(CommandAction.TAKEOFF)}>TAKEOFF REQ</button>
             <button className="btn btn-secondary" onClick={() => handleCommand(CommandAction.LAND)}>LAND REQ</button>
             <button className="btn btn-secondary" onClick={() => handleCommand(CommandAction.RTL)}>RTL REQ</button>
-            <button className="btn btn-secondary" onClick={() => handleCommand(CommandAction.HOVER)}>HOLD REQ</button>
+            <button className="btn btn-secondary" onClick={() => handleCommand(CommandAction.HOVER)}>LOITER REQ</button>
           </div>
           {drone?.commandState?.action && (
             <div style={{marginTop: '12px', padding: '12px', background: 'var(--bg-card)', borderRadius: '6px', fontSize: '12px', border: '1px solid var(--border)'}}>

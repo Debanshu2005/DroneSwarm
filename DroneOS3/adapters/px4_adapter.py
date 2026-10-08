@@ -241,6 +241,7 @@ class PX4FlightController(IFlightController):
 
     async def takeoff(self, altitude: float = 10.0) -> bool:
         if not self._connected: return False
+        self._stop_mode_keepalive()
         
         telemetry = await self.get_telemetry()
         

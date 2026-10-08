@@ -107,7 +107,7 @@ export const DroneProvider = ({ children }) => {
           ...prev,
           "drone_test_01": {
             id: "drone_test_01", status: "CONNECTED", lastSeen: now,
-            telemetry: { armed_state: "DISARMED", flight_mode: "HOLD", battery_level: 85, gps_valid: true, altitude: 0.0, ground_speed: 0.0, satellites: 12, hdop: 0.8, latitude: 37.7749, longitude: -122.4194, heading: 90 },
+            telemetry: { armed_state: "DISARMED", flight_mode: "LOITER", battery_level: 85, gps_valid: true, altitude: 0.0, ground_speed: 0.0, satellites: 12, hdop: 0.8, latitude: 37.7749, longitude: -122.4194, heading: 90 },
             commandState: prev["drone_test_01"]?.commandState || { action: null, state: 'IDLE', cmd_id: null },
             missionState: prev["drone_test_01"]?.missionState || { status: 'none', count: 0 }
           },

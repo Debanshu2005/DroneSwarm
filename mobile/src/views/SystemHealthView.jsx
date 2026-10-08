@@ -47,7 +47,7 @@ export default function SystemHealthView() {
     { name: 'RELAY', icon: <Wifi/>, state: getStatus('RELAY'), error: isConnected === 'CONNECTED' ? null : 'WebSocket disconnect', action: 'Check network' },
     { name: 'DRONEOS', icon: <Activity/>, state: getStatus('DRONEOS'), error: drone.status === 'CONNECTED' ? null : 'Stale heartbeat', action: 'Check Raspberry Pi' },
     { name: 'MAVSDK', icon: <Settings/>, state: getStatus('MAVSDK'), error: getStatus('MAVSDK') === 'danger' ? 'MAVSDK not communicating' : null, action: 'Restart DroneOS' },
-    { name: 'PX4', icon: <Cpu/>, state: getStatus('PX4'), error: tel.system_health === 'OK' ? null : 'PX4 pre-arm error', action: 'Check hardware test' },
+    { name: 'ArduPilot', icon: <Cpu/>, state: getStatus('PX4'), error: tel.system_health === 'OK' ? null : 'ArduPilot pre-arm error', action: 'Check hardware test' },
     { name: 'GPS', icon: <Map/>, state: getStatus('GPS'), error: tel.gps_valid ? null : 'No 3D Fix', action: 'Move outdoors' },
     { name: 'ESTIMATOR', icon: <Navigation/>, state: getStatus('ESTIMATOR'), error: getStatus('ESTIMATOR') === 'danger' ? 'EKF2 error' : null, action: 'Recalibrate sensors' },
     { name: 'BATTERY', icon: <Battery/>, state: getStatus('BATTERY'), error: getStatus('BATTERY') === 'danger' ? 'Voltage critical' : null, action: 'Land and replace battery' },

@@ -61,7 +61,7 @@ export default function SafetyView() {
                      {renderStatus(!noGps, false, 'GPS', '3D FIX', '', 'NO FIX')}
                      {renderStatus(!lowBatt, false, 'BATTERY', `${batt}% (NORMAL)`, '', `${batt}% (LOW)`)}
                      {renderStatus(!isStale, false, 'TELEMETRY', 'FRESH', '', 'STALE')}
-                     {renderStatus(px4Connected, false, 'PX4', 'CONNECTED', '', 'DISCONNECTED')}
+                     {renderStatus(px4Connected, false, 'ArduPilot', 'CONNECTED', '', 'DISCONNECTED')}
                      {renderStatus(!isFailsafe, false, 'FAILSAFE', 'CLEAR', '', 'ACTIVE')}
                      {renderStatus(tel.system_health === 'OK', tel.system_health == null, 'FCU HEALTH', 'HEALTHY', 'UNKNOWN', 'ERROR')}
                      {renderStatus(tel.rc_status !== 'disconnected', tel.rc_status === 'weak', 'RC SIGNAL', 'ACTIVE', 'WEAK', 'DISCONNECTED')}

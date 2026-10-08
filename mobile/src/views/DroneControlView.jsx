@@ -350,7 +350,7 @@ export default function DroneControlView({ setView }) {
                 </div>
                 <div className="hud-status-item">
                    <div className={`status-dot ${isPx4Connected ? 'good' : 'danger'}`}></div>
-                   <span>PX4</span>
+                   <span>ArduPilot</span>
                 </div>
                 <div className={`hud-status-text ${tel.armed_state === 'ARMED' ? 'danger-text' : 'good-text'}`}>
                    {tel.armed_state || 'DISARMED'}
@@ -372,12 +372,12 @@ export default function DroneControlView({ setView }) {
                         }}
                     >
                         {!tel.flight_mode && <option value="" disabled>---</option>}
-                        <option value="HOLD">HOLD</option>
-                        <option value="ALTCTL">ALTCTL</option>
-                        <option value="OFFBOARD">OFFBOARD</option>
-                        <option value="RETURN_TO_LAUNCH">RTL</option>
+                        <option value="LOITER">LOITER</option>
+                        <option value="ALT_HOLD">ALT_HOLD</option>
+                        <option value="GUIDED">GUIDED</option>
+                        <option value="RTL">RTL</option>
                         <option value="LAND">LAND</option>
-                        {tel.flight_mode && !["HOLD", "ALTCTL", "OFFBOARD", "RETURN_TO_LAUNCH", "LAND"].includes(tel.flight_mode) &&
+                        {tel.flight_mode && !["LOITER", "ALT_HOLD", "GUIDED", "RTL", "LAND"].includes(tel.flight_mode) &&
                             <option value={tel.flight_mode}>{tel.flight_mode}</option>
                         }
                     </select>
@@ -455,10 +455,10 @@ export default function DroneControlView({ setView }) {
                {!indoorMode ? (
                    <>
                        <div className="control-panel preflight-panel">
-                          <div className="panel-header">PX4 PREFLIGHT</div>
+                          <div className="panel-header">ARDUPILOT PREFLIGHT</div>
                           <div className="preflight-list">
                              <div className={`pf-row ${isPx4Connected ? 'good' : 'danger'}`}>
-                                <span>MAVSDK / PX4</span> <span>{isPx4Connected ? 'READY' : 'NOT READY'}</span>
+                                <span>MAVSDK / ArduPilot</span> <span>{isPx4Connected ? 'READY' : 'NOT READY'}</span>
                              </div>
                              <div className={`pf-row ${isGpsValid ? 'good' : 'danger'}`}>
                                 <span>GPS FIX</span> <span>{isGpsValid ? 'FIX' : 'NO FIX'}</span>
@@ -640,7 +640,7 @@ export default function DroneControlView({ setView }) {
                 </button>
                 
                 <button className="command-btn btn-hold" onClick={() => requestCommand(CommandAction.HOVER, null, false)}>
-                   <div className="cmd-main"><Square size={14}/> HOLD</div>
+                   <div className="cmd-main"><Square size={14}/> LOITER</div>
                 </button>
                 
                 <button className={`command-btn btn-takeoff ${tel.armed_state !== 'ARMED' ? 'disabled' : ''}`} disabled={tel.armed_state !== 'ARMED'} onClick={() => requestCommand(CommandAction.TAKEOFF, { altitude_m: targetAltitude }, true)}>
