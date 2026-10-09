@@ -102,6 +102,17 @@ class LocalDecisionEngine:
         )
 
         if state != "NORMAL":
+            is_formation_peer = False
+            if self.nav.flight_manager.formation_params and threat_peer:
+                slot_assignments = self.nav.flight_manager.formation_params.get("slot_assignments", {})
+                if threat_peer in slot_assignments:
+                    is_formation_peer = True
+
+            if is_formation_peer and state == "WARNING":
+                logger.info("CA_IGNORED WARNING for formation peer %s (letting formation engine handle it)", threat_peer)
+                state = "NORMAL"
+
+        if state != "NORMAL":
             if correction and getattr(self.config, "max_velocity", None):
                 max_v = float(self.config.max_velocity)
                 speed = math.hypot(correction.get("north", 0.0), correction.get("east", 0.0))

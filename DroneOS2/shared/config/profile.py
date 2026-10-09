@@ -66,7 +66,7 @@ def resolve_network_config(config_dir: Path, network_config_cls):
     config_dir = Path(config_dir)
     with open(config_dir / "network.yaml", "r") as f:
         network_data = yaml.safe_load(f) or {}
-    if os.environ.get("DRONEOS_PROFILE", "hw") == "sim":
+    if os.environ.get("DRONEOS_PROFILE", "hw") in ("sim", "test"):
         sim_path = config_dir / "network.sim.yaml"
         if sim_path.exists():
             with open(sim_path, "r") as f:

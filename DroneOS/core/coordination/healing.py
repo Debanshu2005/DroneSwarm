@@ -50,7 +50,7 @@ class RejectKind(Enum):
 class HealPlan:
     def __init__(self, slot_assignments: Dict[str, int], reason: str, moves: Dict[str, Tuple[int, int]],
                  total_travel: float, min_separation: float, accepted: bool = True, reject_reason: str = "",
-                 reject_kind: RejectKind = RejectKind.FINAL, unsettled: Optional[Dict[str, float]] = None):
+                 reject_kind: Optional[RejectKind] = None, unsettled: Optional[Dict[str, float]] = None):
         self.slot_assignments = slot_assignments
         self.reason = reason
         self.moves = moves
@@ -64,7 +64,7 @@ class HealPlan:
         self.unsettled = unsettled
 
 class EvaluatedPlan:
-    def __init__(self, accepted: bool, min_separation: float, total_travel: float, reject_reason: str = "", reject_kind: RejectKind = RejectKind.FINAL):
+    def __init__(self, accepted: bool, min_separation: float, total_travel: float, reject_reason: str = "", reject_kind: Optional[RejectKind] = None):
         self.accepted = accepted
         self.min_separation = min_separation
         self.total_travel = total_travel

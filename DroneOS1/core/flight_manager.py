@@ -1,7 +1,7 @@
-from DroneOS1.core.interfaces import IFlightController
-from DroneOS1.shared.utils.logger import setup_logger
-from DroneOS1.core.intents import FlightIntent, IntentSource, IntentAction
-from DroneOS1.core.flight_state import FlightStateStore
+from DroneOS2.core.interfaces import IFlightController
+from DroneOS2.shared.utils.logger import setup_logger
+from DroneOS2.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS2.core.flight_state import FlightStateStore
 from typing import Dict, Any
 import time
 
@@ -102,11 +102,13 @@ class FlightManager:
         return True
 
     async def hover(self, params: Dict[str, Any] = None) -> bool:
+        self.formation_params = None
         intent = FlightIntent(IntentSource.MANUAL, IntentAction.HOVER, ttl_seconds=2.0)
         self.state_store.submit_intent(intent)
         return True
 
     async def stop(self, params: Dict[str, Any] = None) -> bool:
+        self.formation_params = None
         self.state_store.clear_intent(IntentSource.MANUAL)
         self.state_store.clear_intent(IntentSource.FORMATION)
         self.state_store.clear_intent(IntentSource.MISSION)
@@ -114,6 +116,7 @@ class FlightManager:
         return True
 
     async def move(self, params: Dict[str, Any]) -> bool:
+        self.formation_params = None
         self._active_navigation_frame = "LOCAL_NED"
         telemetry = self.state_store.local_telemetry
         if getattr(telemetry, "armed_state", None) != "ARMED":
@@ -183,7 +186,7 @@ class FlightManager:
                 slot_assignments[k] = int(slot_assignments[k])
 
             f_type_str = params.get("type", "V").upper()
-            from DroneOS1.core.formation_manager import FormationType
+            from DroneOS2.core.formation_manager import FormationType
             _ = FormationType(f_type_str)
         except (ValueError, TypeError, AttributeError) as e:
             reason = f"formation rejected: invalid parameters: {e}"
