@@ -69,7 +69,7 @@ class EvaluatedPlan:
         self.min_separation = min_separation
         self.total_travel = total_travel
         self.reject_reason = reject_reason
-        self.reject_kind = reject_kind
+        self.reject_kind = None if accepted else (reject_kind or RejectKind.FINAL)
 
 def _evaluate_plan(
     new_assignments: Dict[str, int],

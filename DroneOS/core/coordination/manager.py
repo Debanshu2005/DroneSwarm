@@ -256,13 +256,7 @@ class CoordinationManager:
         is_anchor_dead = (current_anchor in true_dead)
 
         if not is_anchor_dead and reshape_on_follower:
-            if self.mode == "active":
-                if dead_pid_str not in self._hold_logged:
-                    self._hold_logged.add(dead_pid_str)
-                    logger.warning("[coord] follower reshape is not safe under partial delivery in active mode")
-                self._memoized_plans[memo_key] = True
-                return
-            elif self.mode == "advisory":
+            if self.mode == "advisory":
                 if dead_pid_str not in self._hold_logged:
                     self._hold_logged.add(dead_pid_str)
                     logger.info("[coord] follower reshape requested in advisory mode (not safe under partial delivery)")

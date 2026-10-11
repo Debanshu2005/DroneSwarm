@@ -954,5 +954,7 @@ async def test_follower_loss_reshape_active(mock_cfg, monkeypatch):
     my_status = {'gps_valid': True, 'position_age': 0.0, 'battery_level': 100.0, 'lat': 0.0, 'lon': 0.0, 'alt': 0.0}
     await manager._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), healthy, 'drone1', 'drone1', my_status)
     
-    assert len(sender.calls) == 0
-    assert len(warns) == 1
+    assert len(sender.calls) == 1
+    sent_params, targets = sender.calls[0]
+    assert targets == ['drone3']
+    assert sent_params['slot_assignments'] == {'drone1': 0, 'drone3': 1}
