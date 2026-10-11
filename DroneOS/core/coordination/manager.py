@@ -29,7 +29,7 @@ class CoordinationManager:
         self.max_heals_per_session = int(self.config_dict.get("max_heals_per_session", 3))
         self.resend_count = int(self.config_dict.get("resend_count", 2))
         
-        self.membership = MembershipView(self.config_dict, clock=self.clock)
+        self.membership = MembershipView(self.config_dict, clock=self.clock, on_peer_alive=self.clear_peer_recovery_state)
         self.is_running = False
         self.formation_provider = formation_provider
         self.self_status_provider = self_status_provider
@@ -73,6 +73,24 @@ class CoordinationManager:
             logger.info("[coord] advisory only")
 
         self._memoized_plans: Dict[str, Any] = {}
+
+    def clear_peer_recovery_state(self, peer_id: str):
+        """When a peer returns to ALIVE, remove memoized plans and log throttle entries involving that peer."""
+        keys_to_remove = []
+        for k in list(self._memoized_plans.keys()):
+            if isinstance(k, tuple) and len(k) > 0 and isinstance(k[0], tuple):
+                if peer_id in k[0]:
+                    keys_to_remove.append(k)
+        for k in keys_to_remove:
+            self._memoized_plans.pop(k, None)
+
+        self._hold_logged = {entry for entry in self._hold_logged if peer_id not in entry.split(",")}
+
+        transient_keys = [k for k in list(self._transient_logged.keys()) if peer_id in k.split(",")]
+        for k in transient_keys:
+            self._transient_logged.pop(k, None)
+
+        self._settle_logged.pop(peer_id, None)
 
     async def run(self):
         from DroneOS.core.coordination.quorum import compute_quorum
