@@ -39,5 +39,6 @@ coordination:
   kill_switch_file: "COORD_DISABLE"
   resend_count: 2
   max_heals_per_session: 3
+  heal_settled_radius_m: 6.0
   reshape_on_follower_loss: true
   dead_drone_obstacle: true

@@ -1,11 +1,11 @@
 import copy
 import logging
 import pytest
-from DroneOS1.core.coordination.manager import CoordinationManager
-from DroneOS1.core.coordination.membership import PeerState, MemberNode, MembershipView
-from DroneOS1.core.coordination.quorum import QuorumState
-from DroneOS1.core.coordination.healing import HealPlan, RejectKind
-import DroneOS1.core.coordination.healing as healing_module
+from DroneOS.core.coordination.manager import CoordinationManager
+from DroneOS.core.coordination.membership import PeerState, MemberNode, MembershipView
+from DroneOS.core.coordination.quorum import QuorumState
+from DroneOS.core.coordination.healing import HealPlan, RejectKind
+import DroneOS.core.coordination.healing as healing_module
 
 
 class FakeClock:
@@ -339,3 +339,76 @@ async def test_returned_after_heal_warning_fires_exactly_once(caplog):
     warn_logs = [r.message for r in caplog.records if "returned after heal" in r.message]
     assert len(warn_logs) == 1
     assert "drone drone2 returned after heal; operator must re-issue the formation to re-add it" in warn_logs[0]
+
+
+def test_real_plan_healing_all_follower_losses():
+    """8. Real plan_healing without mocks: loss of drone2, drone3, or drone4 in 4-drone V-formation."""
+    import math
+    from DroneOS.core.coordination.healing import plan_healing, _get_slot_offset
+    from DroneOS.core.coordination.membership import MembershipView, MemberNode, PeerState
+
+    cfg = type('Cfg', (), {
+        'coordination': {
+            'enabled': True, 'mode': 'active', 'armed': True,
+            'reshape_on_follower_loss': 'true', 'dead_drone_obstacle': 'true',
+            'heal_settled_radius_m': 3.0,
+        },
+        'formation': type('Form', (), {'min_formation_separation_m': 3.0})(),
+        'collision_avoidance': type('CA', (), {'min_horizontal_distance': 4.0})()
+    })()
+
+    ref_lat, ref_lon = 47.641468, -122.140165
+
+    # Test Drone 3 loss
+    fp = {'type': 'V', 'spacing': 15.0, 'slot_assignments': {'drone1': 0, 'drone2': 1, 'drone3': 2, 'drone4': 3}}
+    healthy3 = {'drone1', 'drone2', 'drone4'}
+    view3 = MembershipView({}, lambda: 100.0)
+    for d, s in fp['slot_assignments'].items():
+        off = _get_slot_offset('V', s, 15.0, 4)
+        lat = ref_lat + off[0] / 111319.5
+        lon = ref_lon + off[1] / (111319.5 * math.cos(math.radians(ref_lat)))
+        n = MemberNode(d)
+        n.lat, n.lon, n.alt = lat, lon, 10.0
+        n.last_position_time = 100.0
+        n.state = PeerState.ALIVE if d in healthy3 else PeerState.DEAD
+        view3.nodes[d] = n
+    my_status = {'lat': ref_lat, 'lon': ref_lon, 'alt': 10.0, 'position_age': 0.1, 'gps_valid': True}
+    plan3 = plan_healing(fp, healthy3, 'drone1', 'drone1', 'drone1', cfg, view3, my_status)
+    assert plan3 is not None
+    assert plan3.accepted is True
+    assert plan3.slot_assignments == {'drone1': 0, 'drone2': 1, 'drone4': 2}
+
+    # Test Drone 2 loss
+    healthy2 = {'drone1', 'drone3', 'drone4'}
+    view2 = MembershipView({}, lambda: 100.0)
+    for d, s in fp['slot_assignments'].items():
+        off = _get_slot_offset('V', s, 15.0, 4)
+        lat = ref_lat + off[0] / 111319.5
+        lon = ref_lon + off[1] / (111319.5 * math.cos(math.radians(ref_lat)))
+        n = MemberNode(d)
+        n.lat, n.lon, n.alt = lat, lon, 10.0
+        n.last_position_time = 100.0
+        n.state = PeerState.ALIVE if d in healthy2 else PeerState.DEAD
+        view2.nodes[d] = n
+    plan2 = plan_healing(fp, healthy2, 'drone1', 'drone1', 'drone1', cfg, view2, my_status)
+    assert plan2 is not None
+    assert plan2.accepted is True
+    assert plan2.slot_assignments == {'drone1': 0, 'drone4': 1, 'drone3': 2}
+
+    # Test Drone 4 loss
+    healthy4 = {'drone1', 'drone2', 'drone3'}
+    view4 = MembershipView({}, lambda: 100.0)
+    for d, s in fp['slot_assignments'].items():
+        off = _get_slot_offset('V', s, 15.0, 4)
+        lat = ref_lat + off[0] / 111319.5
+        lon = ref_lon + off[1] / (111319.5 * math.cos(math.radians(ref_lat)))
+        n = MemberNode(d)
+        n.lat, n.lon, n.alt = lat, lon, 10.0
+        n.last_position_time = 100.0
+        n.state = PeerState.ALIVE if d in healthy4 else PeerState.DEAD
+        view4.nodes[d] = n
+    plan4 = plan_healing(fp, healthy4, 'drone1', 'drone1', 'drone1', cfg, view4, my_status)
+    assert plan4 is not None
+    assert plan4.accepted is True
+    assert plan4.slot_assignments == {'drone1': 0, 'drone2': 1, 'drone3': 2}
+

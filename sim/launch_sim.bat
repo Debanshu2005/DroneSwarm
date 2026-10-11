@@ -1,6 +1,6 @@
 @echo off
 setlocal
-set DRONEOS_PROFILE=sim
+set DRONEOS_PROFILE=test
 
 rem Remove only stale Python processes that occupy simulation-reserved ports.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop_sim.ps1"
@@ -14,4 +14,4 @@ start "DroneOS 3 (AirSim)" python start_drone3.py
 ping 127.0.0.1 -n 2 > nul
 start "DroneOS 4 (AirSim)" python start_drone4.py
 
-echo Launched 4 sim nodes.
+echo Launched 4 sim nodes in %DRONEOS_PROFILE% profile (coordination active + armed).

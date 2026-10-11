@@ -93,6 +93,8 @@ class CoordinationManager:
             self._transient_logged.pop(k, None)
 
         self._settle_logged.pop(peer_id, None)
+        if hasattr(self, "_evaluating_logged"):
+            self._evaluating_logged = {entry for entry in self._evaluating_logged if peer_id not in entry.split(",")}
 
     async def run(self):
         from DroneOS.core.coordination.quorum import compute_quorum
@@ -236,7 +238,7 @@ class CoordinationManager:
             self._heals_disabled = True
 
     async def _do_handle_healing(self, now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status=None):
-        if self.mode not in ("advisory", "active") or q_state.name != "QUORUM" or not fp:
+        if self.mode not in ("advisory", "active") or not q_state or getattr(q_state, "name", "") != "QUORUM" or not fp:
             return
 
         slot_assignments = fp.get("slot_assignments", {})
@@ -259,14 +261,25 @@ class CoordinationManager:
         if not true_dead or self._heals_disabled:
             return
 
+        dead_pid_str = ",".join(sorted(true_dead))
+        if dead_pid_str not in getattr(self, "_evaluating_logged", set()):
+            if not hasattr(self, "_evaluating_logged"):
+                self._evaluating_logged = set()
+            self._evaluating_logged.add(dead_pid_str)
+            logger.info(f"[coord] Confirmed dead slot member(s): {dead_pid_str} (evaluating healing plan)")
+
         # Safe memo key excluding mutable/unpredictable elements
         safe_slots = tuple(sorted(slot_assignments.items()))
         fp_safe = (fp.get('type'), fp.get('spacing'), safe_slots)
         memo_key = (tuple(sorted(true_dead)), fp_safe)
-        if memo_key in self._memoized_plans:
-            return
-
         reslot_cooldown = float(self.config_dict.get("reslot_cooldown_s", 5.0))
+        if memo_key in self._memoized_plans:
+            if self._memoized_plans[memo_key] is not True:
+                return
+            last_rej = getattr(self, "_last_reject_time", {}).get(memo_key, 0.0)
+            if now - last_rej < reslot_cooldown:
+                return
+
         time_since_change = now - self._last_slot_change_time
         if time_since_change < reslot_cooldown:
             return
@@ -287,11 +300,17 @@ class CoordinationManager:
                     self._hold_logged.add(dead_pid_str)
                     logger.info("[coord] follower reshape requested in advisory mode (not safe under partial delivery)")
 
+        def _record_plan_rejection(k):
+            self._memoized_plans[k] = True
+            if not hasattr(self, "_last_reject_time"):
+                self._last_reject_time = {}
+            self._last_reject_time[k] = now
+
         if not is_anchor_dead and not reshape_on_follower:
             if dead_pid_str not in self._hold_logged:
                 self._hold_logged.add(dead_pid_str)
                 logger.info(f"[coord] HOLD: hole left at slot(s) {[slot_assignments[d] for d in true_dead]} (follower died, reshape_on_follower_loss=false)")
-            self._memoized_plans[memo_key] = True
+            _record_plan_rejection(memo_key)
             return
 
         if self.my_id != prop_anchor:
@@ -306,7 +325,7 @@ class CoordinationManager:
             if dead_pid_str not in self._hold_logged:
                 self._hold_logged.add(dead_pid_str)
                 logger.info(f"[coord] HOLD: hole left at slot {plan.hold_slot} (no safe move for {dead_pid_str})")
-            self._memoized_plans[memo_key] = True
+            _record_plan_rejection(memo_key)
         elif not plan.accepted:
             if plan.reject_kind == RejectKind.TRANSIENT:
                 if plan.unsettled:
@@ -326,7 +345,7 @@ class CoordinationManager:
                 if dead_pid_str not in self._hold_logged:
                     self._hold_logged.add(dead_pid_str)
                     logger.warning(f"[coord] CONFIG REJECTION: {plan.reject_reason}")
-                self._memoized_plans[memo_key] = True
+                _record_plan_rejection(memo_key)
             else:
                 if dead_pid_str not in self._hold_logged:
                     self._hold_logged.add(dead_pid_str)
@@ -334,7 +353,7 @@ class CoordinationManager:
                         logger.warning(f"[coord] WARNING: anchor lost, no safe re-form plan; formation will hold until operator intervenes (reason: {plan.reject_reason})")
                     else:
                         logger.info(f"[coord] NO_PLAN: {plan.reject_reason} for {dead_pid_str}")
-                self._memoized_plans[memo_key] = True
+                _record_plan_rejection(memo_key)
         else:
             await self._send_formation_update(memo_key, plan, fp, prop_anchor, healthy_members, true_dead)
 
