@@ -90,12 +90,22 @@ def airsim_client():
 # Helper: position retrieval
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Vehicle spawn offsets from sim/airsim/settings.json (Y-axis spacing in AirSim world NED frame)
+SPAWN_OFFSETS = {
+    "Drone1": (0.0, 0.0, 0.0),
+    "Drone2": (0.0, 5.0, 0.0),
+    "Drone3": (0.0, 10.0, 0.0),
+    "Drone4": (0.0, 15.0, 0.0),
+}
+
+
 def get_ned_position(client, vehicle_name: str):
-    """Return (north_m, east_m, down_m) from AirSim kinematics."""
+    """Return (north_m, east_m, down_m) from AirSim kinematics in common world NED frame."""
     import airsim  # type: ignore
     state = client.getMultirotorState(vehicle_name=vehicle_name)
     pos = state.kinematics_estimated.position
-    return (pos.x_val, pos.y_val, pos.z_val)
+    spawn = SPAWN_OFFSETS.get(vehicle_name, (0.0, 0.0, 0.0))
+    return (pos.x_val + spawn[0], pos.y_val + spawn[1], pos.z_val + spawn[2])
 
 
 def horizontal_distance(p1, p2) -> float:
