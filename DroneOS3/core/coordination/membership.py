@@ -1,4 +1,4 @@
-﻿import time
+import time
 from enum import Enum
 from typing import Dict, Optional, List
 from DroneOS3.shared.utils.logger import setup_logger
@@ -17,6 +17,7 @@ class MemberNode:
         self.last_heartbeat_time: float = (clock or time.monotonic)()
         self.missed_beats: int = 0
         self.rejoin_stable_start: Optional[float] = None
+        self.dead_since: Optional[float] = None
         
         # Telemetry extracted from heartbeats
         self.battery: Optional[float] = None
@@ -29,10 +30,11 @@ class MemberNode:
         self.last_position_time: Optional[float] = None
         
 class MembershipView:
-    def __init__(self, config: dict, clock=None):
+    def __init__(self, config: dict, clock=None, on_peer_alive=None):
         self.clock = clock or time.monotonic
         self.config = config
         self.nodes: Dict[str, MemberNode] = {}
+        self.on_peer_alive = on_peer_alive
         
         self.suspect_missed = int(config.get("suspect_missed_beats", 3))
         self.dead_missed = int(config.get("dead_missed_beats", 6))
@@ -74,16 +76,23 @@ class MembershipView:
                         node._last_peer_position_stamp = peer_position_stamp
             
             if node.state == PeerState.DEAD:
-                if node.rejoin_stable_start is None:
+                rejoin_start = getattr(node, 'rejoin_stable_start', None)
+                if rejoin_start is None:
                     node.rejoin_stable_start = self.clock()
                     logger.info(f"[coord] {peer_id} started rejoin stabilization")
-                elif self.clock() - node.rejoin_stable_start >= self.rejoin_stable_s:
+                elif self.clock() - rejoin_start >= self.rejoin_stable_s:
                     node.state = PeerState.ALIVE
                     node.rejoin_stable_start = None
+                    node.dead_since = None
                     logger.info(f"[coord] {peer_id} fully rejoined as ALIVE")
+                    if self.on_peer_alive:
+                        self.on_peer_alive(peer_id)
             elif node.state == PeerState.SUSPECT:
                 node.state = PeerState.ALIVE
+                node.dead_since = None
                 logger.info(f"[coord] {peer_id} recovered from SUSPECT to ALIVE")
+                if self.on_peer_alive:
+                    self.on_peer_alive(peer_id)
 
     def evaluate_tick(self, hb_interval: float = 1.0):
         now = self.clock()
@@ -99,6 +108,10 @@ class MembershipView:
                 # Increment missed beats based on elapsed time to be robust
                 node.missed_beats = int((now - node.last_heartbeat_time) / hb_interval)
                 
+                if node.state == PeerState.DEAD and getattr(node, 'rejoin_stable_start', None) is not None:
+                    node.rejoin_stable_start = None
+                    logger.info(f"[coord] {peer_id} rejoin stabilization cancelled (heartbeats stopped)")
+
                 if node.state == PeerState.ALIVE and node.missed_beats >= self.suspect_missed:
                     node.state = PeerState.SUSPECT
                     logger.warning(f"[coord] {peer_id} marked SUSPECT ({node.missed_beats} missed beats)")
