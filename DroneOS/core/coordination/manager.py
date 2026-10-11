@@ -224,6 +224,8 @@ class CoordinationManager:
             if pid not in healthy_members:
                 node = self.membership.nodes.get(pid)
                 if node and node.state == PeerState.DEAD:
+                    if getattr(node, 'rejoin_stable_start', None) is not None:
+                        continue
                     if getattr(node, 'dead_since', None):
                         if now - node.dead_since >= heal_after_dead_s:
                             true_dead.add(pid)
@@ -349,7 +351,7 @@ class CoordinationManager:
             
         for d in true_dead:
             node = self.membership.nodes.get(d)
-            if not node or node.state.name != "DEAD":
+            if not node or node.state.name != "DEAD" or getattr(node, 'rejoin_stable_start', None) is not None:
                 logger.warning("[coord] PRE-SEND ABORT: dead set changed")
                 return
 
