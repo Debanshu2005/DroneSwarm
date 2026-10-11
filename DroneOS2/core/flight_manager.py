@@ -102,11 +102,13 @@ class FlightManager:
         return True
 
     async def hover(self, params: Dict[str, Any] = None) -> bool:
+        self.formation_params = None
         intent = FlightIntent(IntentSource.MANUAL, IntentAction.HOVER, ttl_seconds=2.0)
         self.state_store.submit_intent(intent)
         return True
 
     async def stop(self, params: Dict[str, Any] = None) -> bool:
+        self.formation_params = None
         self.state_store.clear_intent(IntentSource.MANUAL)
         self.state_store.clear_intent(IntentSource.FORMATION)
         self.state_store.clear_intent(IntentSource.MISSION)
@@ -114,6 +116,7 @@ class FlightManager:
         return True
 
     async def move(self, params: Dict[str, Any]) -> bool:
+        self.formation_params = None
         self._active_navigation_frame = "LOCAL_NED"
         telemetry = self.state_store.local_telemetry
         if getattr(telemetry, "armed_state", None) != "ARMED":

@@ -1,4 +1,4 @@
-import os
+﻿import os
 import logging
 import yaml
 from pathlib import Path
@@ -29,19 +29,29 @@ def resolve_flight_config(config_dir: Path, flight_config_cls):
     with open(base_flight_path, 'r') as f:
         base_data = yaml.safe_load(f) or {}
         
-    if profile == "sim":
+    if profile in ("sim", "test"):
         if sim_flight_path.exists():
             with open(sim_flight_path, 'r') as f:
                 sim_data = yaml.safe_load(f) or {}
             merged_data = deep_merge(base_data, sim_data)
         else:
-            logger.warning(f"Profile is 'sim' but {sim_flight_path} not found.")
+            logger.warning(f"Profile is '{profile}' but {sim_flight_path} not found.")
             merged_data = base_data
-            
+
+        # 'test' profile additionally overlays flight.test.yaml on top of sim
+        if profile == "test":
+            test_flight_path = config_dir / "flight.test.yaml"
+            if test_flight_path.exists():
+                with open(test_flight_path, 'r') as f:
+                    test_data = yaml.safe_load(f) or {}
+                merged_data = deep_merge(merged_data, test_data)
+            else:
+                logger.warning(f"Profile is 'test' but {test_flight_path} not found.")
+
         flight_cfg = flight_config_cls(**merged_data)
-        
+
         if flight_cfg.adapter_type == "px4":
-            logger.error("PROFILE is 'sim' but resolved adapter is 'px4'. Refusing to start.")
+            logger.error(f"PROFILE is '{profile}' but resolved adapter is 'px4'. Refusing to start.")
             import sys
             sys.exit(1)
     else:
@@ -56,7 +66,7 @@ def resolve_network_config(config_dir: Path, network_config_cls):
     config_dir = Path(config_dir)
     with open(config_dir / "network.yaml", "r") as f:
         network_data = yaml.safe_load(f) or {}
-    if os.environ.get("DRONEOS_PROFILE", "hw") == "sim":
+    if os.environ.get("DRONEOS_PROFILE", "hw") in ("sim", "test"):
         sim_path = config_dir / "network.sim.yaml"
         if sim_path.exists():
             with open(sim_path, "r") as f:
@@ -70,3 +80,4 @@ def log_startup_banner(drone_id: str, vehicle_name: str, adapter_type: str):
     msg = f"BACKEND={adapter_type} PROFILE={profile} drone={drone_id} vehicle={vehicle_name}"
     print(msg)
     logger.info(msg)
+

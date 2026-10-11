@@ -52,7 +52,7 @@ def main():
     from DroneOS2.shared.config.profile import resolve_flight_config
     flight_cfg = resolve_flight_config(config_dir, FlightConfig)
 
-    if os.environ.get("DRONEOS_PROFILE") == "sim":
+    if os.environ.get("DRONEOS_PROFILE") in ("sim", "test"):
         resolved_conn = "sim"
     else:
         resolved_conn = resolve_serial(drone_cfg.vehicle_name, flight_cfg.px4_connection_string)
@@ -61,7 +61,7 @@ def main():
 
     # 1. Kill any existing orphaned servers/relays
     import psutil
-    is_sim = os.environ.get("DRONEOS_PROFILE") == "sim"
+    is_sim = os.environ.get("DRONEOS_PROFILE") in ("sim", "test")
     server_port = 50051
     sim_ws_port = "8083"  # Drone 3 relay WS port
     drone_udp_port = 14552  # Drone 3 DroneOS UDP listen port

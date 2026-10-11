@@ -1,0 +1,43 @@
+﻿adapter_type: airsim
+airsim_host: 127.0.0.1
+airsim_port: 41451
+takeoff_altitude: 10.0
+max_velocity: 15.0
+pipeline_hz: 10.0
+collision_avoidance:
+  enabled: true
+  min_horizontal_distance: 4.0
+  min_vertical_distance: 2.0
+  warning_distance: 6.0
+  emergency_distance: 2.0
+  neighbor_timeout_sec: 3.0
+  lookahead_sec: 3.0
+  avoidance_speed: 5.0
+  emergency_speed: 8.0
+  max_peer_age_sec: 2.5
+  ground_altitude_m: 0.5
+formation:
+  spacing: 15.0
+  velocity_gain: 1.0
+  min_formation_separation_m: 3.0
+sim:
+  battery_drain_multiplier: 0.0
+  drop_gps: false
+coordination:
+  enabled: true
+  mode: active
+  armed: true
+  suspect_missed_beats: 2
+  dead_missed_beats: 4
+  heartbeat_interval: 1.0
+  rejoin_stable_s: 5
+  anchor_min_battery: 30
+  anchor_min_dwell_s: 5
+  heal_max_position_age_s: 5.0
+  quorum_required: true
+  reslot_cooldown_s: 5
+  kill_switch_file: "COORD_DISABLE"
+  resend_count: 2
+  max_heals_per_session: 3
+  reshape_on_follower_loss: false
+  dead_drone_obstacle: true

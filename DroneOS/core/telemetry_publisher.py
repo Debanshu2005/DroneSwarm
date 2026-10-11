@@ -24,7 +24,7 @@ class TelemetryPublisher:
         self.fm = flight_manager
         self.mission = mission_manager
         self.health_monitor = health_monitor
-        self.telemetry_interval = _SIM_TELEMETRY_INTERVAL if os.environ.get("DRONEOS_PROFILE") == "sim" else telemetry_interval
+        self.telemetry_interval = _SIM_TELEMETRY_INTERVAL if os.environ.get("DRONEOS_PROFILE") in ("sim", "test") else telemetry_interval
         self.heartbeat_interval = heartbeat_interval
         self.swarm_manager = swarm_manager
         self.state_store = state_store
