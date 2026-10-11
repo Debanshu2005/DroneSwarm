@@ -90,22 +90,27 @@ def airsim_client():
 # Helper: position retrieval
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Vehicle spawn offsets from sim/airsim/settings.json (Y-axis spacing in AirSim world NED frame)
-SPAWN_OFFSETS = {
-    "Drone1": (0.0, 0.0, 0.0),
-    "Drone2": (0.0, 5.0, 0.0),
-    "Drone3": (0.0, 10.0, 0.0),
-    "Drone4": (0.0, 15.0, 0.0),
-}
+# Reference GPS geodetic coordinates for AirSim NED conversion
+INITIAL_REF_GEO = None
 
 
 def get_ned_position(client, vehicle_name: str):
-    """Return (north_m, east_m, down_m) from AirSim kinematics in common world NED frame."""
-    import airsim  # type: ignore
+    """
+    Return (north_m, east_m, down_m) from AirSim GPS coordinates relative to Drone1's takeoff position.
+    Uses the exact same flat-earth geodetic conversion that FormationEngine uses.
+    """
+    global INITIAL_REF_GEO
+    from DroneOS.core.formation_manager import global_offset_local_m
     state = client.getMultirotorState(vehicle_name=vehicle_name)
-    pos = state.kinematics_estimated.position
-    spawn = SPAWN_OFFSETS.get(vehicle_name, (0.0, 0.0, 0.0))
-    return (pos.x_val + spawn[0], pos.y_val + spawn[1], pos.z_val + spawn[2])
+    if INITIAL_REF_GEO is None:
+        anchor_state = client.getMultirotorState(vehicle_name="Drone1")
+        INITIAL_REF_GEO = (anchor_state.gps_location.latitude, anchor_state.gps_location.longitude)
+    ref_lat, ref_lon = INITIAL_REF_GEO
+    lat = state.gps_location.latitude
+    lon = state.gps_location.longitude
+    alt = state.gps_location.altitude
+    dn, de = global_offset_local_m(ref_lat, ref_lon, lat, lon)
+    return (dn, de, alt)
 
 
 def horizontal_distance(p1, p2) -> float:
@@ -198,19 +203,29 @@ def wait_formation_converged(
     Poll until all drones in slot_assignments are within tolerance_m of their target positions.
     Returns True on success; raises AssertionError with diagnostics on timeout (Req 4.3).
     """
-    deadline = time.monotonic() + timeout_s
+    start_time = time.monotonic()
+    deadline = start_time + timeout_s
+    last_log_time = 0.0
     while time.monotonic() < deadline:
         targets = _compute_target_positions(client, slot_assignments, spacing, f_type)
         not_converged = []
+        dists = []
         for drone_id, slot in slot_assignments.items():
             vehicle = f"Drone{int(drone_id.replace('drone',''))}"
             pos = get_ned_position(client, vehicle)
             target = targets[drone_id]
             dist = horizontal_distance(pos, target)
+            dists.append(f"{drone_id}={dist:.2f}m")
             if dist > tolerance_m:
                 not_converged.append(f"{drone_id}: {dist:.1f}m from slot {slot} target")
         if not not_converged:
+            if timeout_s >= 5.0:
+                print(f"[FORMATION_CONVERGED] in {time.monotonic() - start_time:.1f}s | " + ", ".join(dists))
             return True
+        now = time.monotonic()
+        if timeout_s >= 5.0 and (now - last_log_time >= 3.0):
+            last_log_time = now
+            print(f"[FORMATION_POLL] Elapsed: {now - start_time:.1f}s | " + ", ".join(dists))
         time.sleep(0.2)
 
     # Timeout — collect final diagnostics
@@ -221,7 +236,7 @@ def wait_formation_converged(
         pos = get_ned_position(client, vehicle)
         target = targets[drone_id]
         dist = horizontal_distance(pos, target)
-        diag.append(f"  {drone_id} (slot {slot}): {dist:.2f}m from target (tolerance {tolerance_m}m)")
+        diag.append(f"  {drone_id} (slot {slot}): pos=({pos[0]:.2f}, {pos[1]:.2f}) target=({target[0]:.2f}, {target[1]:.2f}) {dist:.2f}m from target (tolerance {tolerance_m}m)")
     raise AssertionError(
         f"Formation did not converge within {timeout_s}s.\n" + "\n".join(diag)
     )
@@ -256,6 +271,11 @@ async def test_heal_on_drone4_failure(airsim_client):
         t.join()
 
     await asyncio.sleep(2.0)  # settle after takeoff
+
+    # Establish geodetic anchor from Drone1 steady state
+    global INITIAL_REF_GEO
+    ref_state = client.getMultirotorState(vehicle_name="Drone1")
+    INITIAL_REF_GEO = (ref_state.gps_location.latitude, ref_state.gps_location.longitude)
 
     # ── Phase 2: Command V-formation ──────────────────────────────────────
     # Send FORMATION_UPDATE to drones in the formation
