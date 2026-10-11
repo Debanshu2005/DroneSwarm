@@ -1,4 +1,4 @@
-﻿"""
+r"""
 AirSim integration test: self-healing formation when Drone4 fails.
 
 Requirements: 4.1 – 4.9
@@ -277,9 +277,25 @@ async def test_heal_on_drone4_failure(airsim_client):
 
     # Also terminate the DroneOS3 process if PID is available (Req 4.4)
     drone4_pid_str = os.environ.get("DRONE4_PID", "")
+    drone4_pid = None
     if drone4_pid_str:
         try:
             drone4_pid = int(drone4_pid_str)
+        except ValueError:
+            pass
+    if not drone4_pid:
+        try:
+            import psutil
+            for p in psutil.process_iter(['pid', 'cmdline']):
+                cmdline = ' '.join(p.info.get('cmdline') or [])
+                if 'start_drone4.py' in cmdline:
+                    drone4_pid = p.info['pid']
+                    break
+        except Exception:
+            pass
+
+    if drone4_pid:
+        try:
             if os.name == "nt":
                 subprocess.run(["taskkill", "/F", "/PID", str(drone4_pid)], capture_output=True)
             else:

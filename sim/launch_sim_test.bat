@@ -14,5 +14,22 @@ start "DroneOS 3 (AirSim TEST)" python start_drone3.py
 ping 127.0.0.1 -n 2 > nul
 start "DroneOS 4 (AirSim TEST)" python start_drone4.py
 
+echo.
+echo ======================================================================
 echo Launched 4 sim nodes in TEST profile (coordination active + armed).
-echo Run: python -m pytest DroneOS/tests/test_heal_airsim.py -m integration -v
+echo Waiting 5s for relays and nodes to initialize...
+echo ======================================================================
+ping 127.0.0.1 -n 6 > nul
+
+if "%1"=="--nodes-only" (
+    echo Nodes are running. Skipping automated test (--nodes-only specified).
+    goto :eof
+)
+
+if "%AIRSIM_HOST%"=="" set AIRSIM_HOST=127.0.0.1
+
+echo.
+echo ======================================================================
+echo Starting AirSim Follower-Loss Healing Test (single-command run)...
+echo ======================================================================
+python -m pytest DroneOS/tests/test_heal_airsim.py -m integration -v -s %*
