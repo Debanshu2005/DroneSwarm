@@ -55,6 +55,8 @@ class CoordinationManager:
         self._hold_logged: Set[str] = set()
         self._transient_logged: Dict[str, str] = {}
         self._settle_logged: Dict[str, float] = {}
+        self._excluded_members: Set[str] = set()
+        self._excluded_warned: Set[str] = set()
 
         # Legacy: kept for tests that directly read _last_heal_time
         self._last_heal_time: float = 0.0
@@ -163,14 +165,18 @@ class CoordinationManager:
                                 age = my_status.get("position_age")
                                 if age is not None and (heal_max_position_age_s <= 0 or age <= heal_max_position_age_s):
                                     healthy_members.add(pid)
-                                
-                            if pid not in slot_assignments and pid not in getattr(self, '_excluded_warned', set()) and hasattr(self, '_excluded_members') and pid in self._excluded_members:
-                                if not hasattr(self, '_excluded_warned'): self._excluded_warned = set()
-                                logger.warning(f"[coord] drone {pid} returned after heal; operator must re-issue the formation to re-add it")
-                                self._excluded_warned.add(pid)
                         else:
                             if is_healthy(pid, self.my_id, self.membership, self.swarm, anchor_min_battery, now, heal_max_position_age_s):
                                 healthy_members.add(pid)
+
+                    for pid in sorted(getattr(self, '_excluded_members', set())):
+                        if pid not in slot_assignments and pid not in getattr(self, '_excluded_warned', set()):
+                            node = self.membership.nodes.get(pid)
+                            if node and node.state == PeerState.ALIVE:
+                                if not hasattr(self, '_excluded_warned'):
+                                    self._excluded_warned = set()
+                                logger.warning(f"[coord] drone {pid} returned after heal; operator must re-issue the formation to re-add it")
+                                self._excluded_warned.add(pid)
                                 
                     current_anchor = None
                     for pid, slot in slot_assignments.items():
