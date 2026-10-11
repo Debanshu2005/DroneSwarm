@@ -1,4 +1,4 @@
-﻿adapter_type: airsim
+adapter_type: airsim
 airsim_host: 127.0.0.1
 airsim_port: 41451
 takeoff_altitude: 10.0
@@ -39,5 +39,5 @@ coordination:
   kill_switch_file: "COORD_DISABLE"
   resend_count: 2
   max_heals_per_session: 3
-  reshape_on_follower_loss: false
+  reshape_on_follower_loss: true
   dead_drone_obstacle: true
