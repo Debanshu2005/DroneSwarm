@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 setlocal
 set DRONEOS_PROFILE=test
 
