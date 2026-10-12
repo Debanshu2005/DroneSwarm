@@ -66,6 +66,8 @@ def wait_for_relay_ready(relay_proc, host: str, port: int, timeout: float = 5.0)
 
 
 def main():
+    if "DRONEOS_PROFILE" not in os.environ and sys.platform.startswith("win"):
+        os.environ["DRONEOS_PROFILE"] = "test"
     config_dir = Path(__file__).resolve().parent / "DroneOS" / "configs"
     drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
     from DroneOS.shared.config.profile import resolve_flight_config

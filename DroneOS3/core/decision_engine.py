@@ -1,14 +1,14 @@
 import asyncio
 import math
 import time
-from DroneOS2.shared.utils.logger import setup_logger
-from DroneOS2.core.collision_avoidance import ICollisionAvoidance
-from DroneOS2.core.mission_manager import MissionManager
-from DroneOS2.core.swarm_manager import SwarmMembership
-from DroneOS2.core.navigation_manager import NavigationManager
-from DroneOS2.core.flight_state import FlightStateStore
-from DroneOS2.core.intents import FlightIntent, IntentSource, IntentAction
-from DroneOS2.shared.protocol.messages import TelemetryData
+from DroneOS3.shared.utils.logger import setup_logger
+from DroneOS3.core.collision_avoidance import ICollisionAvoidance
+from DroneOS3.core.mission_manager import MissionManager
+from DroneOS3.core.swarm_manager import SwarmMembership
+from DroneOS3.core.navigation_manager import NavigationManager
+from DroneOS3.core.flight_state import FlightStateStore
+from DroneOS3.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS3.shared.protocol.messages import TelemetryData
 
 logger = setup_logger("DecisionEngine")
 
@@ -38,7 +38,7 @@ class LocalDecisionEngine:
         self.is_active = True
         self.active_bids = {}
 
-        from DroneOS2.core.formation_engine import FormationEngine
+        from DroneOS3.core.formation_engine import FormationEngine
         self.formation_engine = FormationEngine(swarm_manager, state_store, config=config)
 
     def calculate_bid(self, my_telemetry: TelemetryData, target_lat: float, target_lon: float) -> float:
@@ -75,7 +75,7 @@ class LocalDecisionEngine:
             for peer_id, peer_t in peer_telemetry.items():
                 age = (now - peer_t.timestamp) if peer_t.timestamp is not None else float('inf')
                 if current_telemetry.latitude is not None and peer_t.latitude is not None:
-                    from DroneOS2.core.collision_avoidance import _haversine_ne
+                    from DroneOS3.core.collision_avoidance import _haversine_ne
                     rn, re = _haversine_ne(
                         current_telemetry.latitude, current_telemetry.longitude,
                         peer_t.latitude, peer_t.longitude

@@ -46,7 +46,28 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
 
 
 
+def wait_for_relay_ready(relay_proc, host: str, port: int, timeout: float = 5.0) -> None:
+    """Fail fast if a stale relay owns this drone's WebSocket endpoint."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        exit_code = relay_proc.poll()
+        if exit_code is not None:
+            raise RuntimeError(f"Relay exited before becoming ready (exit code {exit_code}).")
+        try:
+            with socket.create_connection((host, port), timeout=0.2):
+                time.sleep(0.2)
+                if relay_proc.poll() is None:
+                    return
+        except OSError:
+            pass
+        time.sleep(0.1)
+    relay_proc.terminate()
+    raise RuntimeError(f"Relay did not listen on {host}:{port} within {timeout:.1f}s.")
+
+
 def main():
+    if "DRONEOS_PROFILE" not in os.environ and sys.platform.startswith("win"):
+        os.environ["DRONEOS_PROFILE"] = "test"
     config_dir = Path(__file__).resolve().parent / "DroneOS2" / "configs"
     drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
     from DroneOS2.shared.config.profile import resolve_flight_config
@@ -107,8 +128,12 @@ def main():
                       "--udp-target", "drone3=127.0.0.1:14552",
                       "--udp-target", "drone4=127.0.0.1:14553"]
     relay_proc = subprocess.Popen(
-        [sys.executable, str(relay_script)] + relay_args
+        [sys.executable, str(relay_script)] + relay_args,
+        stdout=None if os.environ.get("DRONEOS_DIAGNOSTIC_TRACE") else subprocess.DEVNULL,
+        stderr=None if os.environ.get("DRONEOS_DIAGNOSTIC_TRACE") else subprocess.DEVNULL
     )
+    if is_sim:
+        wait_for_relay_ready(relay_proc, "127.0.0.1", int(sim_ws_port))
 
     # 5. Run the DroneOS2 application
     from DroneOS2.main import DroneOSApp

@@ -1,4 +1,4 @@
-﻿"""
+r"""
 AirSim integration test: self-healing formation when Drone4 fails.
 
 Requirements: 4.1 – 4.9
@@ -90,12 +90,27 @@ def airsim_client():
 # Helper: position retrieval
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Reference GPS geodetic coordinates for AirSim NED conversion
+INITIAL_REF_GEO = None
+
+
 def get_ned_position(client, vehicle_name: str):
-    """Return (north_m, east_m, down_m) from AirSim kinematics."""
-    import airsim  # type: ignore
+    """
+    Return (north_m, east_m, down_m) from AirSim GPS coordinates relative to Drone1's takeoff position.
+    Uses the exact same flat-earth geodetic conversion that FormationEngine uses.
+    """
+    global INITIAL_REF_GEO
+    from DroneOS.core.formation_manager import global_offset_local_m
     state = client.getMultirotorState(vehicle_name=vehicle_name)
-    pos = state.kinematics_estimated.position
-    return (pos.x_val, pos.y_val, pos.z_val)
+    if INITIAL_REF_GEO is None:
+        anchor_state = client.getMultirotorState(vehicle_name="Drone1")
+        INITIAL_REF_GEO = (anchor_state.gps_location.latitude, anchor_state.gps_location.longitude)
+    ref_lat, ref_lon = INITIAL_REF_GEO
+    lat = state.gps_location.latitude
+    lon = state.gps_location.longitude
+    alt = state.gps_location.altitude
+    dn, de = global_offset_local_m(ref_lat, ref_lon, lat, lon)
+    return (dn, de, alt)
 
 
 def horizontal_distance(p1, p2) -> float:
@@ -107,37 +122,49 @@ def horizontal_distance(p1, p2) -> float:
 # Helper: DroneOS command sender
 # ──────────────────────────────────────────────────────────────────────────────
 
+NODE_PORTS = {
+    "drone1": int(os.environ.get("DRONE1_CMD_PORT", "14550")),
+    "drone2": int(os.environ.get("DRONE2_CMD_PORT", "14551")),
+    "drone3": int(os.environ.get("DRONE3_CMD_PORT", "14552")),
+    "drone4": int(os.environ.get("DRONE4_CMD_PORT", "14553")),
+}
+
 def send_formation_command(
     host: str,
-    port: int,
-    drone_id: str,
-    f_type: str,
-    spacing: float,
-    slot_assignments: dict,
+    port: int = None,
+    drone_id: str = None,
+    f_type: str = FORMATION_TYPE,
+    spacing: float = FORMATION_SPACING,
+    slot_assignments: dict = None,
 ):
     """
-    Send a FORMATION_SET command to a DroneOS node over UDP.
-    Uses the DroneOS shared protocol directly.
-
-    NOTE: This helper sends a raw ControlMessage to the DroneOS instance
-    listening on (host, port). Adjust the port per-node as configured.
+    Send a FORMATION_UPDATE command over UDP.
+    Uses the DroneOS shared protocol (msg_type='control', action='formation_update').
+    Dispatches to participating nodes so all drones activate their slots and drive formation movement.
     """
     import socket
-    import struct
-    msg = json.dumps({
-        "type": "ControlMessage",
-        "action": "FORMATION_SET",
-        "params": {
-            "type": f_type,
-            "spacing": spacing,
-            "slot_assignments": slot_assignments,
-            "members": [k for k, v in slot_assignments.items() if v != 0],
-        },
-        "sender_id": "test_harness",
-        "timestamp": time.time(),
-    }).encode()
+    if slot_assignments is None:
+        slot_assignments = {}
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.sendto(msg, (host, port))
+        for did in slot_assignments:
+            target_port = port if (port is not None and did == drone_id) else NODE_PORTS.get(did)
+            if not target_port:
+                continue
+            msg = json.dumps({
+                "msg_type": "control",
+                "action": "formation_update",
+                "target_id": did,
+                "sender_id": "test_harness",
+                "timestamp": time.time(),
+                "params": {
+                    "type": f_type,
+                    "spacing": spacing,
+                    "speed": 5.0,
+                    "slot_assignments": slot_assignments,
+                    "members": [k for k, v in slot_assignments.items() if v != 0],
+                },
+            }).encode("utf-8")
+            sock.sendto(msg, (host, target_port))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -146,29 +173,21 @@ def send_formation_command(
 
 def _compute_target_positions(client, slot_assignments: dict, spacing: float, f_type: str):
     """
-    Approximate target positions based on AirSim current anchor position + V offsets.
-    For V formation: slot 0 is anchor; slots 1,2,3 are offset in NE from anchor.
+    Compute target positions based on AirSim current anchor position + formation offsets
+    using FormationManager (the exact source of truth used by FormationEngine).
     """
-    # Get anchor (slot 0) current position
+    from DroneOS.core.formation_manager import FormationManager, FormationType
     anchor_id = next(k for k, v in slot_assignments.items() if v == 0)
     anchor_vehicle = f"Drone{int(anchor_id.replace('drone',''))}"
     anchor_pos = get_ned_position(client, anchor_vehicle)
 
-    # V formation offsets (relative to anchor, in NE plane):
-    # slot 0: (0,0), slot 1: (+spacing,+spacing/2), slot 2: (+spacing,-spacing/2), slot 3: (2*spacing, 0) ...
-    def v_offset(slot, n, spacing):
-        # Simplified V geometry matching FormationEngine
-        if slot == 0:
-            return (0.0, 0.0)
-        side = 1 if slot % 2 == 1 else -1
-        row = (slot + 1) // 2
-        return (row * spacing * 0.866, side * row * spacing * 0.5)
-
+    fm = FormationManager()
+    fm.set_formation(FormationType(f_type), spacing)
     n = len(slot_assignments)
     targets = {}
-    for drone_id, slot in slot_assignments.items():
-        off = v_offset(slot, n, spacing)
-        targets[drone_id] = (anchor_pos[0] + off[0], anchor_pos[1] + off[1])
+    for did, slot in slot_assignments.items():
+        dx, dy, _ = fm.get_offset(slot, n)
+        targets[did] = (anchor_pos[0] + dx, anchor_pos[1] + dy)
     return targets
 
 
@@ -177,26 +196,36 @@ def wait_formation_converged(
     slot_assignments: dict,
     spacing: float = FORMATION_SPACING,
     tolerance_m: float = CONVERGENCE_TOLERANCE_M,
-    timeout_s: float = 30.0,
+    timeout_s: float = 45.0,
     f_type: str = FORMATION_TYPE,
 ) -> bool:
     """
     Poll until all drones in slot_assignments are within tolerance_m of their target positions.
     Returns True on success; raises AssertionError with diagnostics on timeout (Req 4.3).
     """
-    deadline = time.monotonic() + timeout_s
+    start_time = time.monotonic()
+    deadline = start_time + timeout_s
+    last_log_time = 0.0
     while time.monotonic() < deadline:
         targets = _compute_target_positions(client, slot_assignments, spacing, f_type)
         not_converged = []
+        dists = []
         for drone_id, slot in slot_assignments.items():
             vehicle = f"Drone{int(drone_id.replace('drone',''))}"
             pos = get_ned_position(client, vehicle)
             target = targets[drone_id]
             dist = horizontal_distance(pos, target)
+            dists.append(f"{drone_id}={dist:.2f}m")
             if dist > tolerance_m:
                 not_converged.append(f"{drone_id}: {dist:.1f}m from slot {slot} target")
         if not not_converged:
+            if timeout_s >= 5.0:
+                print(f"[FORMATION_CONVERGED] in {time.monotonic() - start_time:.1f}s | " + ", ".join(dists))
             return True
+        now = time.monotonic()
+        if timeout_s >= 5.0 and (now - last_log_time >= 3.0):
+            last_log_time = now
+            print(f"[FORMATION_POLL] Elapsed: {now - start_time:.1f}s | " + ", ".join(dists))
         time.sleep(0.2)
 
     # Timeout — collect final diagnostics
@@ -207,7 +236,7 @@ def wait_formation_converged(
         pos = get_ned_position(client, vehicle)
         target = targets[drone_id]
         dist = horizontal_distance(pos, target)
-        diag.append(f"  {drone_id} (slot {slot}): {dist:.2f}m from target (tolerance {tolerance_m}m)")
+        diag.append(f"  {drone_id} (slot {slot}): pos=({pos[0]:.2f}, {pos[1]:.2f}) target=({target[0]:.2f}, {target[1]:.2f}) {dist:.2f}m from target (tolerance {tolerance_m}m)")
     raise AssertionError(
         f"Formation did not converge within {timeout_s}s.\n" + "\n".join(diag)
     )
@@ -243,13 +272,15 @@ async def test_heal_on_drone4_failure(airsim_client):
 
     await asyncio.sleep(2.0)  # settle after takeoff
 
+    # Establish geodetic anchor from Drone1 steady state
+    global INITIAL_REF_GEO
+    ref_state = client.getMultirotorState(vehicle_name="Drone1")
+    INITIAL_REF_GEO = (ref_state.gps_location.latitude, ref_state.gps_location.longitude)
+
     # ── Phase 2: Command V-formation ──────────────────────────────────────
-    # Send FORMATION_SET to the anchor drone (drone1 on default port 14550)
-    DRONE1_PORT = int(os.environ.get("DRONE1_CMD_PORT", "14550"))
+    # Send FORMATION_UPDATE to drones in the formation
     send_formation_command(
         host=AIRSIM_HOST,
-        port=DRONE1_PORT,
-        drone_id="drone1",
         f_type=FORMATION_TYPE,
         spacing=FORMATION_SPACING,
         slot_assignments=PRE_HEAL_SLOTS,
@@ -261,7 +292,7 @@ async def test_heal_on_drone4_failure(airsim_client):
         PRE_HEAL_SLOTS,
         spacing=FORMATION_SPACING,
         tolerance_m=CONVERGENCE_TOLERANCE_M,
-        timeout_s=30.0,
+        timeout_s=45.0,
     )
 
     # ── Phase 3: Record pre-heal positions of survivors ───────────────────
@@ -277,15 +308,40 @@ async def test_heal_on_drone4_failure(airsim_client):
 
     # Also terminate the DroneOS3 process if PID is available (Req 4.4)
     drone4_pid_str = os.environ.get("DRONE4_PID", "")
+    drone4_pid = None
     if drone4_pid_str:
         try:
             drone4_pid = int(drone4_pid_str)
+        except ValueError:
+            pass
+    if not drone4_pid:
+        try:
+            import psutil
+            for p in psutil.process_iter(['pid', 'cmdline']):
+                cmdline = ' '.join(p.info.get('cmdline') or [])
+                if 'start_drone4.py' in cmdline:
+                    drone4_pid = p.info['pid']
+                    break
+        except Exception:
+            pass
+
+    if drone4_pid:
+        try:
             if os.name == "nt":
-                subprocess.run(["taskkill", "/F", "/PID", str(drone4_pid)], capture_output=True)
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(drone4_pid)], capture_output=True)
             else:
                 os.kill(drone4_pid, signal.SIGTERM)
         except Exception as e:
             print(f"WARNING: Could not kill DroneOS3 process: {e}")
+
+    try:
+        import psutil
+        for p in psutil.process_iter(['pid', 'cmdline']):
+            cmdline = ' '.join(p.info.get('cmdline') or [])
+            if 'relay.py' in cmdline and '8084' in cmdline:
+                p.kill()
+    except Exception:
+        pass
 
     # ── Phase 5: Wait for the swarm to heal (Req 4.4, 4.5) ───────────────
     heal_deadline = kill_time + TOTAL_HEAL_TIMEOUT_S

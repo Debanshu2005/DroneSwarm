@@ -1,10 +1,10 @@
-﻿import asyncio
+import asyncio
 import time
 import copy
 from typing import Dict, Any, Optional, Set
-from DroneOS3.shared.utils.logger import setup_logger
-from DroneOS3.core.swarm_manager import SwarmMembership
-from DroneOS3.core.coordination.membership import MembershipView, PeerState
+from DroneOS.shared.utils.logger import setup_logger
+from DroneOS.core.swarm_manager import SwarmMembership
+from DroneOS.core.coordination.membership import MembershipView, PeerState
 
 logger = setup_logger("CoordinationManager")
 
@@ -29,7 +29,7 @@ class CoordinationManager:
         self.max_heals_per_session = int(self.config_dict.get("max_heals_per_session", 3))
         self.resend_count = int(self.config_dict.get("resend_count", 2))
         
-        self.membership = MembershipView(self.config_dict, clock=self.clock)
+        self.membership = MembershipView(self.config_dict, clock=self.clock, on_peer_alive=self.clear_peer_recovery_state)
         self.is_running = False
         self.formation_provider = formation_provider
         self.self_status_provider = self_status_provider
@@ -40,7 +40,7 @@ class CoordinationManager:
         self.last_log_time = 0.0
         self.my_id = self.swarm.identity.drone_id
 
-        # â”€â”€ Settle gate (req 4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # ── Settle gate (req 4) ─────────────────────────────────────────────
         # Clock resets whenever we observe a *change* in slot_assignments from
         # the formation_provider, regardless of its source (operator, prior heal).
         self._last_slot_change_time: float = 0.0       # monotonic
@@ -55,6 +55,8 @@ class CoordinationManager:
         self._hold_logged: Set[str] = set()
         self._transient_logged: Dict[str, str] = {}
         self._settle_logged: Dict[str, float] = {}
+        self._excluded_members: Set[str] = set()
+        self._excluded_warned: Set[str] = set()
 
         # Legacy: kept for tests that directly read _last_heal_time
         self._last_heal_time: float = 0.0
@@ -74,9 +76,29 @@ class CoordinationManager:
 
         self._memoized_plans: Dict[str, Any] = {}
 
+    def clear_peer_recovery_state(self, peer_id: str):
+        """When a peer returns to ALIVE, remove memoized plans and log throttle entries involving that peer."""
+        keys_to_remove = []
+        for k in list(self._memoized_plans.keys()):
+            if isinstance(k, tuple) and len(k) > 0 and isinstance(k[0], tuple):
+                if peer_id in k[0]:
+                    keys_to_remove.append(k)
+        for k in keys_to_remove:
+            self._memoized_plans.pop(k, None)
+
+        self._hold_logged = {entry for entry in self._hold_logged if peer_id not in entry.split(",")}
+
+        transient_keys = [k for k in list(self._transient_logged.keys()) if peer_id in k.split(",")]
+        for k in transient_keys:
+            self._transient_logged.pop(k, None)
+
+        self._settle_logged.pop(peer_id, None)
+        if hasattr(self, "_evaluating_logged"):
+            self._evaluating_logged = {entry for entry in self._evaluating_logged if peer_id not in entry.split(",")}
+
     async def run(self):
-        from DroneOS3.core.coordination.quorum import compute_quorum
-        from DroneOS3.core.coordination.anchor import is_healthy, propose_anchor
+        from DroneOS.core.coordination.quorum import compute_quorum
+        from DroneOS.core.coordination.anchor import is_healthy, propose_anchor
 
         try:
             if not self.enabled:
@@ -122,7 +144,7 @@ class CoordinationManager:
                     
                     slot_assignments = fp.get("slot_assignments", {}) if fp else {}
 
-                    # â”€â”€ Settle gate: track when slot_assignments last changed â”€â”€
+                    # ── Settle gate: track when slot_assignments last changed ──
                     if slot_assignments != self._last_slot_assignments:
                         self._last_slot_assignments = dict(slot_assignments)
                         self._last_slot_change_time = now
@@ -145,14 +167,18 @@ class CoordinationManager:
                                 age = my_status.get("position_age")
                                 if age is not None and (heal_max_position_age_s <= 0 or age <= heal_max_position_age_s):
                                     healthy_members.add(pid)
-                                
-                            if pid not in slot_assignments and pid not in getattr(self, '_excluded_warned', set()) and hasattr(self, '_excluded_members') and pid in self._excluded_members:
-                                if not hasattr(self, '_excluded_warned'): self._excluded_warned = set()
-                                logger.warning(f"[coord] drone {pid} returned after heal; operator must re-issue the formation to re-add it")
-                                self._excluded_warned.add(pid)
                         else:
                             if is_healthy(pid, self.my_id, self.membership, self.swarm, anchor_min_battery, now, heal_max_position_age_s):
                                 healthy_members.add(pid)
+
+                    for pid in sorted(getattr(self, '_excluded_members', set())):
+                        if pid not in slot_assignments and pid not in getattr(self, '_excluded_warned', set()):
+                            node = self.membership.nodes.get(pid)
+                            if node and node.state == PeerState.ALIVE:
+                                if not hasattr(self, '_excluded_warned'):
+                                    self._excluded_warned = set()
+                                logger.warning(f"[coord] drone {pid} returned after heal; operator must re-issue the formation to re-add it")
+                                self._excluded_warned.add(pid)
                                 
                     current_anchor = None
                     for pid, slot in slot_assignments.items():
@@ -182,7 +208,7 @@ class CoordinationManager:
                         self.last_log_time = now
                         logger.info(f"[coord] state={q_state.name} anchor={current_anchor} proposed={prop_anchor} healthy={len(healthy_members)}/{len(slot_assignments)}")
                         
-                    # â”€â”€ Healing (Phase 3 Advisory) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    # ── Healing (Phase 3 Advisory) ──────────────────────────
                     await self._handle_healing(now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status)
 
                     
@@ -212,18 +238,20 @@ class CoordinationManager:
             self._heals_disabled = True
 
     async def _do_handle_healing(self, now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status=None):
-        if self.mode not in ("advisory", "active") or q_state.name != "QUORUM" or not fp:
+        if self.mode not in ("advisory", "active") or not q_state or getattr(q_state, "name", "") != "QUORUM" or not fp:
             return
 
         slot_assignments = fp.get("slot_assignments", {})
         heal_after_dead_s = float(self.config_dict.get("heal_after_dead_s", 10.0))
         
         true_dead = set()
-        from DroneOS3.core.coordination.quorum import PeerState
+        from DroneOS.core.coordination.quorum import PeerState
         for pid in slot_assignments:
             if pid not in healthy_members:
                 node = self.membership.nodes.get(pid)
                 if node and node.state == PeerState.DEAD:
+                    if getattr(node, 'rejoin_stable_start', None) is not None:
+                        continue
                     if getattr(node, 'dead_since', None):
                         if now - node.dead_since >= heal_after_dead_s:
                             true_dead.add(pid)
@@ -233,14 +261,25 @@ class CoordinationManager:
         if not true_dead or self._heals_disabled:
             return
 
+        dead_pid_str = ",".join(sorted(true_dead))
+        if dead_pid_str not in getattr(self, "_evaluating_logged", set()):
+            if not hasattr(self, "_evaluating_logged"):
+                self._evaluating_logged = set()
+            self._evaluating_logged.add(dead_pid_str)
+            logger.info(f"[coord] Confirmed dead slot member(s): {dead_pid_str} (evaluating healing plan)")
+
         # Safe memo key excluding mutable/unpredictable elements
         safe_slots = tuple(sorted(slot_assignments.items()))
         fp_safe = (fp.get('type'), fp.get('spacing'), safe_slots)
         memo_key = (tuple(sorted(true_dead)), fp_safe)
-        if memo_key in self._memoized_plans:
-            return
-
         reslot_cooldown = float(self.config_dict.get("reslot_cooldown_s", 5.0))
+        if memo_key in self._memoized_plans:
+            if self._memoized_plans[memo_key] is not True:
+                return
+            last_rej = getattr(self, "_last_reject_time", {}).get(memo_key, 0.0)
+            if now - last_rej < reslot_cooldown:
+                return
+
         time_since_change = now - self._last_slot_change_time
         if time_since_change < reslot_cooldown:
             return
@@ -248,7 +287,7 @@ class CoordinationManager:
         if self._heal_count >= self.max_heals_per_session:
             if not self._heals_disabled:
                 logger.warning(f"[coord] max_heals_per_session={self.max_heals_per_session} reached; healing disabled for this session.")
-                self._heals_disabled = True
+            self._heals_disabled = True
             return
 
         reshape_on_follower = str(self.config_dict.get("reshape_on_follower_loss", "false")).lower() == "true"
@@ -256,22 +295,22 @@ class CoordinationManager:
         is_anchor_dead = (current_anchor in true_dead)
 
         if not is_anchor_dead and reshape_on_follower:
-            if self.mode == "active":
-                if dead_pid_str not in self._hold_logged:
-                    self._hold_logged.add(dead_pid_str)
-                    logger.warning("[coord] follower reshape is not safe under partial delivery in active mode")
-                self._memoized_plans[memo_key] = True
-                return
-            elif self.mode == "advisory":
+            if self.mode == "advisory":
                 if dead_pid_str not in self._hold_logged:
                     self._hold_logged.add(dead_pid_str)
                     logger.info("[coord] follower reshape requested in advisory mode (not safe under partial delivery)")
+
+        def _record_plan_rejection(k):
+            self._memoized_plans[k] = True
+            if not hasattr(self, "_last_reject_time"):
+                self._last_reject_time = {}
+            self._last_reject_time[k] = now
 
         if not is_anchor_dead and not reshape_on_follower:
             if dead_pid_str not in self._hold_logged:
                 self._hold_logged.add(dead_pid_str)
                 logger.info(f"[coord] HOLD: hole left at slot(s) {[slot_assignments[d] for d in true_dead]} (follower died, reshape_on_follower_loss=false)")
-            self._memoized_plans[memo_key] = True
+            _record_plan_rejection(memo_key)
             return
 
         if self.my_id != prop_anchor:
@@ -286,7 +325,7 @@ class CoordinationManager:
             if dead_pid_str not in self._hold_logged:
                 self._hold_logged.add(dead_pid_str)
                 logger.info(f"[coord] HOLD: hole left at slot {plan.hold_slot} (no safe move for {dead_pid_str})")
-            self._memoized_plans[memo_key] = True
+            _record_plan_rejection(memo_key)
         elif not plan.accepted:
             if plan.reject_kind == RejectKind.TRANSIENT:
                 if plan.unsettled:
@@ -306,7 +345,7 @@ class CoordinationManager:
                 if dead_pid_str not in self._hold_logged:
                     self._hold_logged.add(dead_pid_str)
                     logger.warning(f"[coord] CONFIG REJECTION: {plan.reject_reason}")
-                self._memoized_plans[memo_key] = True
+                _record_plan_rejection(memo_key)
             else:
                 if dead_pid_str not in self._hold_logged:
                     self._hold_logged.add(dead_pid_str)
@@ -314,7 +353,7 @@ class CoordinationManager:
                         logger.warning(f"[coord] WARNING: anchor lost, no safe re-form plan; formation will hold until operator intervenes (reason: {plan.reject_reason})")
                     else:
                         logger.info(f"[coord] NO_PLAN: {plan.reject_reason} for {dead_pid_str}")
-                self._memoized_plans[memo_key] = True
+                _record_plan_rejection(memo_key)
         else:
             await self._send_formation_update(memo_key, plan, fp, prop_anchor, healthy_members, true_dead)
 
@@ -334,13 +373,13 @@ class CoordinationManager:
             return
             
         quorum_req = self.config_dict.get("quorum_required", True)
-        from DroneOS3.core.coordination.quorum import compute_quorum
+        from DroneOS.core.coordination.quorum import compute_quorum
         q_state = compute_quorum(self.my_id, live_fp.get("slot_assignments", {}), self.membership, quorum_req)
         if q_state.name != "QUORUM":
             logger.warning("[coord] PRE-SEND ABORT: quorum lost")
             return
             
-        from DroneOS3.core.coordination.anchor import propose_anchor
+        from DroneOS.core.coordination.anchor import propose_anchor
         live_prop_anchor, _ = propose_anchor(
             live_fp.get("slot_assignments", {}), 
             healthy_members, 
@@ -355,7 +394,7 @@ class CoordinationManager:
             
         for d in true_dead:
             node = self.membership.nodes.get(d)
-            if not node or node.state.name != "DEAD":
+            if not node or node.state.name != "DEAD" or getattr(node, 'rejoin_stable_start', None) is not None:
                 logger.warning("[coord] PRE-SEND ABORT: dead set changed")
                 return
 
@@ -377,7 +416,7 @@ class CoordinationManager:
             logger.warning("[coord] PRE-SEND ABORT: slot 0 is not promoted anchor")
             return
             
-        from DroneOS3.core.coordination.healing import validate_formation_params
+        from DroneOS.core.coordination.healing import validate_formation_params
         if not validate_formation_params(new_params, self.flight_cfg):
             logger.warning("[coord] PRE-SEND ABORT: validator failed")
             return

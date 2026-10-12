@@ -1,7 +1,7 @@
-from DroneOS2.core.interfaces import IFlightController
-from DroneOS2.shared.utils.logger import setup_logger
-from DroneOS2.core.intents import FlightIntent, IntentSource, IntentAction
-from DroneOS2.core.flight_state import FlightStateStore
+from DroneOS.core.interfaces import IFlightController
+from DroneOS.shared.utils.logger import setup_logger
+from DroneOS.core.intents import FlightIntent, IntentSource, IntentAction
+from DroneOS.core.flight_state import FlightStateStore
 from typing import Dict, Any
 import time
 
@@ -186,7 +186,7 @@ class FlightManager:
                 slot_assignments[k] = int(slot_assignments[k])
 
             f_type_str = params.get("type", "V").upper()
-            from DroneOS2.core.formation_manager import FormationType
+            from DroneOS.core.formation_manager import FormationType
             _ = FormationType(f_type_str)
         except (ValueError, TypeError, AttributeError) as e:
             reason = f"formation rejected: invalid parameters: {e}"

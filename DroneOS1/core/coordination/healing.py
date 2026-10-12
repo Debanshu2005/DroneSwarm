@@ -2,8 +2,8 @@ import math
 import copy
 from typing import Dict, Set, Tuple, List, Optional, Any
 
-from DroneOS.core.formation_manager import FormationManager, FormationType, global_offset_local_m
-from DroneOS.core.formation_engine import FormationEngine
+from DroneOS1.core.formation_manager import FormationManager, FormationType, global_offset_local_m
+from DroneOS1.core.formation_engine import FormationEngine
 
 
 def _get_slot_offset(f_type: str, slot: int, spacing: float, total: int) -> Tuple[float, float, float]:
@@ -69,7 +69,7 @@ class EvaluatedPlan:
         self.min_separation = min_separation
         self.total_travel = total_travel
         self.reject_reason = reject_reason
-        self.reject_kind = reject_kind
+        self.reject_kind = None if accepted else (reject_kind or RejectKind.FINAL)
 
 def _evaluate_plan(
     new_assignments: Dict[str, int],
@@ -197,8 +197,8 @@ def min_required_sep(flight_cfg, config_dict) -> float:
     form_cfg = getattr(flight_cfg, "formation", None)
     ca_cfg = getattr(flight_cfg, "collision_avoidance", None)
     
-    from DroneOS.core.formation_engine import _DEFAULT_MIN_SEP_M
-    from DroneOS.shared.config.models import CollisionAvoidanceConfig
+    from DroneOS1.core.formation_engine import _DEFAULT_MIN_SEP_M
+    from DroneOS1.shared.config.models import CollisionAvoidanceConfig
     
     default_ca = CollisionAvoidanceConfig().min_horizontal_distance
     min_form_sep = float(getattr(form_cfg, "min_formation_separation_m", _DEFAULT_MIN_SEP_M)) if form_cfg else _DEFAULT_MIN_SEP_M
@@ -223,7 +223,7 @@ def plan_healing(
     Core algorithm for healing formations.
     Assumption: dead_drone_model is "hover", meaning dead drones remain statically at their last known positions.
     """
-    from DroneOS.core.coordination.manager import logger
+    from DroneOS1.core.coordination.manager import logger
     
     old_slots = current_params.get("slot_assignments", {})
     if not old_slots:
@@ -248,10 +248,15 @@ def plan_healing(
         except:
             config_dict = {}
 
+    dead_drone_obstacle = str(config_dict.get("dead_drone_obstacle", "true")).lower() == "true"
+    reshape_on_follower = str(config_dict.get("reshape_on_follower_loss", "false")).lower() == "true"
+
     # Config thresholds
     min_req_sep = min_required_sep(flight_cfg, config_dict)
+    if reshape_on_follower and spacing > 0:
+        min_ca = float(getattr(getattr(flight_cfg, "collision_avoidance", None), "min_horizontal_distance", 2.0)) if flight_cfg else 2.0
+        min_req_sep = min(min_req_sep, max(min_ca + 1.0, spacing * 0.6))
     
-    dead_drone_obstacle = str(config_dict.get("dead_drone_obstacle", "true")).lower() == "true"
     dead_obstacle_radius_m = min_req_sep
     
     is_advisory = config_dict.get("mode", "advisory").lower() == "advisory"
@@ -353,7 +358,9 @@ def plan_healing(
             
             start_positions[pid] = actual_pos
         else:
-            dead_positions[pid] = actual_pos
+            is_follower_death = (current_anchor in healthy_members and pid != current_anchor)
+            if not (reshape_on_follower and is_follower_death):
+                dead_positions[pid] = actual_pos
             
     if used_nominal_for:
         advisory_suffix += f" (nominal positions used for {','.join(used_nominal_for)})"
@@ -446,7 +453,7 @@ def validate_formation_params(params: dict, flight_cfg: any) -> bool:
         return False
         
     try:
-        from DroneOS.core.formation_manager import FormationType
+        from DroneOS1.core.formation_manager import FormationType
         _ = FormationType(params.get("type", "V").upper())
     except (ValueError, TypeError, AttributeError):
         return False
