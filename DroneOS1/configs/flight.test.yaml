@@ -16,6 +16,7 @@ collision_avoidance:
   emergency_speed: 8.0
   max_peer_age_sec: 2.5
   ground_altitude_m: 0.5
+  multi_threat_avoidance: true
 formation:
   spacing: 15.0
   velocity_gain: 1.0

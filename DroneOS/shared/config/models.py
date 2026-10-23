@@ -28,6 +28,9 @@ class CollisionAvoidanceConfig(BaseModel):
     emergency_speed: float = 5.0
     max_peer_age_sec: float = 2.5
     ground_altitude_m: float = 0.5
+    multi_threat_avoidance: bool = False
+    vertical_escape_enabled: bool = True
+    vertical_escape_speed: float = 1.5
 
 class SafetyLimitsConfig(BaseModel):
     max_horizontal_velocity: float = 5.0
