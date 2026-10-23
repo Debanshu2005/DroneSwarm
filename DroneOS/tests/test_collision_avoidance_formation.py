@@ -148,3 +148,53 @@ async def test_no_active_formation():
     # Should be passed directly to evaluate_threats without filtering
     args, kwargs = engine.ca.evaluate_threats.call_args
     assert "drone2" in args[1]
+
+
+@pytest.mark.asyncio
+async def test_warning_all_threats_formation_peers_exempt():
+    """When all threats in last_threats are in slot_assignments, WARNING is exempted."""
+    state_store = Mock()
+    state_store.submit_intent = Mock()
+    engine = LocalDecisionEngine(Mock(), MockSwarm(), Mock(), Mock(), Mock(), state_store)
+    engine.nav = MockNav()
+    engine.safety.is_failsafe_active = False
+    engine.nav.flight_manager.formation_params = {
+        'type': 'V',
+        'slot_assignments': {'drone2': 1, 'drone3': 2}
+    }
+
+    current_telemetry = TelemetryData(flight_mode="HOLD", gps_valid=True, latitude=37.0, longitude=-122.0)
+    engine.ca.last_threats = [("drone2", "WARNING", 7.0), ("drone3", "WARNING", 8.0)]
+    engine.ca.evaluate_threats = MagicMock(
+        return_value=("WARNING", {"north": 1.0, "east": 0.0, "down": 0.0, "duration": 1.0}, "drone2", 7.0)
+    )
+
+    await engine.evaluate_tick(current_telemetry)
+    # WARNING should be ignored because ALL threats are in slot_assignments (no COLLISION intent submitted)
+    assert not any(call[0][0].source == IntentSource.COLLISION for call in state_store.submit_intent.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_warning_mixed_threats_not_exempt():
+    """When at least one threat in last_threats is NOT in slot_assignments, WARNING is NOT exempted."""
+    state_store = Mock()
+    state_store.submit_intent = Mock()
+    engine = LocalDecisionEngine(Mock(), MockSwarm(), Mock(), Mock(), Mock(), state_store)
+    engine.nav = MockNav()
+    engine.safety.is_failsafe_active = False
+    engine.nav.flight_manager.formation_params = {
+        'type': 'V',
+        'slot_assignments': {'drone2': 1}  # drone3 is NOT in slot_assignments
+    }
+
+    current_telemetry = TelemetryData(flight_mode="HOLD", gps_valid=True, latitude=37.0, longitude=-122.0)
+    engine.ca.last_threats = [("drone2", "WARNING", 7.0), ("drone3", "WARNING", 8.0)]
+    engine.ca.evaluate_threats = MagicMock(
+        return_value=("WARNING", {"north": 1.0, "east": 0.0, "down": 0.0, "duration": 1.0}, "drone2", 7.0)
+    )
+
+    await engine.evaluate_tick(current_telemetry)
+    # WARNING must NOT be ignored because drone3 is an external/non-formation threat!
+    state_store.submit_intent.assert_called_once()
+    intent = state_store.submit_intent.call_args[0][0]
+    assert intent.source == IntentSource.COLLISION

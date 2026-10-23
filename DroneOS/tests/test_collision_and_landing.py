@@ -392,3 +392,109 @@ async def test_pipeline_real_ca_formation_plus_collision():
     result = await CommandWriter(mock_fc).execute(winner)
     assert result is True
     mock_fc.move_velocity_ned.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Test 11 – DecisionEngine WARNING formation exemption: all formation vs mixed
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_decision_engine_warning_formation_peer_exempt():
+    from DroneOS.core.decision_engine import LocalDecisionEngine
+    from DroneOS.core.collision_avoidance import StandardCollisionAvoidance
+    from DroneOS.core.swarm_manager import SwarmMembership, PeerStateManager
+    from DroneOS.core.flight_state import FlightStateStore
+
+    ca_cfg = _cfg(
+        min_horizontal_distance=4.0,
+        emergency_distance=2.0,
+        warning_distance=10.0,
+        neighbor_timeout_sec=5.0,
+    )
+    ca = StandardCollisionAvoidance(ca_cfg, drone_id="drone1")
+    swarm = SwarmMembership("drone1")
+    state_store = FlightStateStore()
+
+    safety = MagicMock()
+    safety.is_failsafe_active = False
+    mission = MagicMock()
+    mission.get_current_state.return_value = "IDLE"
+    nav = MagicMock()
+    nav.flight_manager.formation_params = {"slot_assignments": {"drone2": 1}}
+
+    engine = LocalDecisionEngine(
+        mission_manager=mission,
+        swarm_manager=swarm,
+        collision_avoidance=ca,
+        navigation_manager=nav,
+        safety_module=safety,
+        state_store=state_store,
+    )
+
+    now = time.time()
+    self_t = _telem(lat=0.0, lon=0.0, alt=10.0, ts=now)
+    # Peer at ~7.0 m (lat 0.000063) -> WARNING
+    peer_t = _telem(lat=0.000063, lon=0.0, alt=10.0, ts=now)
+
+    peer_state = PeerStateManager("drone2")
+    peer_state.telemetry = peer_t
+    swarm.registry.peers["drone2"] = peer_state
+
+    await engine.evaluate_tick(self_t)
+    assert IntentSource.COLLISION not in state_store.get_intents(), (
+        "WARNING from formation peer must be exempt"
+    )
+
+
+@pytest.mark.asyncio
+async def test_decision_engine_warning_non_formation_peer_not_exempt():
+    from DroneOS.core.decision_engine import LocalDecisionEngine
+    from DroneOS.core.collision_avoidance import StandardCollisionAvoidance
+    from DroneOS.core.swarm_manager import SwarmMembership, PeerStateManager
+    from DroneOS.core.flight_state import FlightStateStore
+
+    ca_cfg = _cfg(
+        min_horizontal_distance=4.0,
+        emergency_distance=2.0,
+        warning_distance=10.0,
+        neighbor_timeout_sec=5.0,
+    )
+    ca = StandardCollisionAvoidance(ca_cfg, drone_id="drone1")
+    swarm = SwarmMembership("drone1")
+    state_store = FlightStateStore()
+
+    safety = MagicMock()
+    safety.is_failsafe_active = False
+    mission = MagicMock()
+    mission.get_current_state.return_value = "IDLE"
+    nav = MagicMock()
+    # drone2 is a formation peer, but drone3 is NOT
+    nav.flight_manager.formation_params = {"slot_assignments": {"drone2": 1}}
+
+    engine = LocalDecisionEngine(
+        mission_manager=mission,
+        swarm_manager=swarm,
+        collision_avoidance=ca,
+        navigation_manager=nav,
+        safety_module=safety,
+        state_store=state_store,
+    )
+
+    now = time.time()
+    self_t = _telem(lat=0.0, lon=0.0, alt=10.0, ts=now)
+    # Peer 2 at ~7.0 m -> WARNING (formation peer)
+    p2_t = _telem(lat=0.000063, lon=0.0, alt=10.0, ts=now)
+    p2_state = PeerStateManager("drone2")
+    p2_state.telemetry = p2_t
+    swarm.registry.peers["drone2"] = p2_state
+
+    # Peer 3 at ~8.0 m -> WARNING (non-formation peer)
+    p3_t = _telem(lat=-0.000072, lon=0.0, alt=10.0, ts=now)
+    p3_state = PeerStateManager("drone3")
+    p3_state.telemetry = p3_t
+    swarm.registry.peers["drone3"] = p3_state
+
+    await engine.evaluate_tick(self_t)
+    assert IntentSource.COLLISION in state_store.get_intents(), (
+        "WARNING with non-formation peer present must NOT be exempt"
+    )
