@@ -354,7 +354,7 @@ class PX4FlightController(IFlightController):
             logger.exception(f"PX4 RTL failed: {e}")
             return False
 
-    async def hover(self) -> bool:
+    async def hover(self, force: bool = False) -> bool:
         if not self._connected: return False
         try:
             self._stop_mode_keepalive()

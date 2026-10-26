@@ -78,10 +78,10 @@ class IFlightController(ABC):
         pass
 
     @abstractmethod
-    async def hover(self) -> bool:
+    async def hover(self, force: bool = False) -> bool:
         """
         Commands the drone to hold its current position and altitude.
-        Inputs: None
+        Inputs: force (bool, optional) - if True, forces hover even if in LAND/RTL
         Outputs: True if hover initiated, False if rejected.
         Failure Modes: FC rejecting command, GPS lock lost.
         """
