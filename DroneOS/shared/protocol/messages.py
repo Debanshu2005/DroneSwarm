@@ -90,6 +90,9 @@ class TelemetryData(BaseModel):
     mission_state: str = "IDLE"      # Added for decentralized mission awareness
     future_intent: str = "NONE"      # Added for collision avoidance and swarm intent
     active_injections: List[str] = Field(default_factory=list) # Marks injected states
+    autopilot: Optional[str] = "px4"
+    native_flight_mode: Optional[str] = None
+    available_modes: List[str] = Field(default_factory=list)
 
 class TelemetryMessage(BaseMessage):
     msg_type: MessageType = MessageType.TELEMETRY
