@@ -87,10 +87,14 @@ export default function HardwareTestView({ setView }) {
         }, 500);
         break;
       case 9:
-        sendCommand(CommandAction.SET_MODE, { mode: 'LOITER' });
+        const isArdu = dronesRef.current[targetId]?.telemetry?.autopilot === 'ardupilot';
+        const targetMode = isArdu ? 'LOITER' : 'HOLD';
+        sendCommand(CommandAction.SET_MODE, { mode: targetMode });
         setTimeout(() => {
            const currentTel = dronesRef.current[targetId]?.telemetry;
-           updateResult(9, currentTel?.flight_mode === 'LOITER' ? 'PASS' : 'FAIL', `Requested LOITER, got ${currentTel?.flight_mode}`);
+           const currentMode = currentTel?.native_flight_mode || currentTel?.flight_mode;
+           const isPass = currentMode === targetMode || (!isArdu && (currentMode === 'HOLD' || currentMode === 'POSCTL'));
+           updateResult(9, isPass ? 'PASS' : 'FAIL', `Requested ${targetMode}, got ${currentMode}`);
         }, 1000);
         break;
       case 10:

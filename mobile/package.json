@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node src/utils/modeHelper.test.js",
     "preview": "vite preview",
     "android:debug": "npx cap sync android && cd android && export JAVA_HOME=$HOME/jdk/jdk-17.0.12+7 && export ANDROID_HOME=$HOME/Android/Sdk && export PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH && ./gradlew assembleDebug",
     "android:release": "npx cap sync android && cd android && export JAVA_HOME=$HOME/jdk/jdk-17.0.12+7 && export ANDROID_HOME=$HOME/Android/Sdk && export PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH && ./gradlew assembleRelease"

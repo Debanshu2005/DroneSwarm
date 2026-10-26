@@ -16,6 +16,7 @@ import { useDeviceLocation } from '../hooks/useDeviceLocation';
 import { DEFAULT_MAP_CENTER, resolveAirspaceZone } from '../utils/airspace';
 import AirspaceZonePanel from '../components/AirspaceZonePanel';
 import { buildFormationParams } from '../utils/formation';
+import { resolveModeOptions, resolveModeCommand } from '../utils/modeHelper';
 
 
 // Fix Leaflet's default icon path issues in React
@@ -350,37 +351,60 @@ export default function DroneControlView({ setView }) {
                 </div>
                 <div className="hud-status-item">
                    <div className={`status-dot ${isPx4Connected ? 'good' : 'danger'}`}></div>
-                   <span>ArduPilot</span>
+                   <span>{tel.autopilot ? (tel.autopilot.toLowerCase() === 'ardupilot' ? 'ArduPilot' : tel.autopilot.toUpperCase()) : 'FCU'}</span>
                 </div>
                 <div className={`hud-status-text ${tel.armed_state === 'ARMED' ? 'danger-text' : 'good-text'}`}>
                    {tel.armed_state || 'DISARMED'}
                 </div>
                  <div className="hud-status-text muted" style={{ display: 'flex', alignItems: 'center' }}>
-                    <select
-                        value={tel.flight_mode || ''}
-                        onChange={(e) => requestCommand(CommandAction.SET_MODE, { mode: e.target.value })}
-                        style={{
-                            background: 'transparent',
-                            color: 'inherit',
-                            border: '1px solid var(--border)',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            fontWeight: 'bold',
-                            outline: 'none',
-                            padding: '2px 4px',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        {!tel.flight_mode && <option value="" disabled>---</option>}
-                        <option value="LOITER">LOITER</option>
-                        <option value="ALT_HOLD">ALT_HOLD</option>
-                        <option value="GUIDED">GUIDED</option>
-                        <option value="RTL">RTL</option>
-                        <option value="LAND">LAND</option>
-                        {tel.flight_mode && !["LOITER", "ALT_HOLD", "GUIDED", "RTL", "LAND"].includes(tel.flight_mode) &&
-                            <option value={tel.flight_mode}>{tel.flight_mode}</option>
-                        }
-                    </select>
+                    {(() => {
+                       const currentMode = tel.native_flight_mode || tel.flight_mode || '';
+                       const options = resolveModeOptions(tel.available_modes, currentMode);
+                       return (
+                           <>
+                               <select
+                                   value={currentMode}
+                                   onChange={(e) => {
+                                       const cmd = resolveModeCommand(e.target.value);
+                                       requestCommand(cmd.action, cmd.params);
+                                   }}
+                                   style={{
+                                       background: 'transparent',
+                                       color: 'inherit',
+                                       border: '1px solid var(--border)',
+                                       borderRadius: '4px',
+                                       fontSize: '10px',
+                                       fontWeight: 'bold',
+                                       outline: 'none',
+                                       padding: '2px 4px',
+                                       cursor: 'pointer'
+                                   }}
+                               >
+                                   {!currentMode && <option value="" disabled>---</option>}
+                                   {options.map((m) => (
+                                       <option key={m} value={m}>{m}</option>
+                                   ))}
+                               </select>
+                               {activeDrone?.commandState?.state === 'REJECTED' && activeDrone?.commandState?.reason && (
+                                   <span
+                                       className="danger-text"
+                                       style={{
+                                           fontSize: '10px',
+                                           fontWeight: 'bold',
+                                           marginLeft: '6px',
+                                           maxWidth: '140px',
+                                           whiteSpace: 'nowrap',
+                                           overflow: 'hidden',
+                                           textOverflow: 'ellipsis'
+                                       }}
+                                       title={activeDrone.commandState.reason}
+                                   >
+                                       {activeDrone.commandState.reason}
+                                   </span>
+                               )}
+                           </>
+                       );
+                    })()}
                  </div>
                 <div className={`hud-mode-pill ${indoorMode ? 'warning-bg' : 'primary-bg'}`}>
                    {indoorMode ? 'INDOOR' : 'OUTDOOR'}
