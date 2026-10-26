@@ -1,20 +1,33 @@
 import asyncio
+import json
+import time
 from typing import Optional, Tuple
 from DroneOS2.core.interfaces import IFlightController
 from DroneOS2.shared.config.models import FlightConfig
 from DroneOS2.shared.utils.logger import setup_logger
 from DroneOS2.shared.protocol.messages import TelemetryData
+from DroneOS2.adapters.flight_modes import (
+    normalize_firmware,
+    normalize_mode_alias,
+    get_settable_modes,
+    decode_custom_mode,
+    get_do_set_mode_params,
+    detect_autopilot_from_heartbeat,
+)
 
 logger = setup_logger("PX4Adapter")
 
 try:
     from mavsdk import System
     from mavsdk.offboard import VelocityBodyYawspeed, VelocityNedYaw
+    from mavsdk.mavlink_direct import MavlinkDirect, MavlinkMessage
 except ImportError:
     logger.warning("MAVSDK module not found. Adapter will fail if instantiated without a mock.")
     System = None
     VelocityBodyYawspeed = None
     VelocityNedYaw = None
+    MavlinkDirect = None
+    MavlinkMessage = None
 
 class PX4FlightController(IFlightController):
     """
@@ -26,6 +39,16 @@ class PX4FlightController(IFlightController):
         self.config = config
         self.client: Optional['System'] = None
         self._connected = False
+        self.last_rejection_reason: str = ""
+        self._fc_system_id: int = 1
+        self._fc_component_id: int = 1
+        cfg_autopilot = getattr(config, "autopilot", "auto")
+        self._autopilot: str = normalize_firmware(cfg_autopilot) if cfg_autopilot in ["ardupilot", "px4"] else "px4"
+        self._autopilot_detected: bool = False
+        self._autopilot_warned: bool = False
+        self._last_heartbeat_custom_mode: Optional[int] = None
+        self._last_heartbeat_time: float = 0.0
+        self._last_native_mode: Optional[str] = None
         self._telemetry = self._empty_telemetry()
         self._active_tasks = set()
         self._mode_keepalive_task = None
@@ -173,8 +196,9 @@ class PX4FlightController(IFlightController):
         t8 = asyncio.create_task(self._subscribe_health())
         t9 = asyncio.create_task(self._subscribe_status_text())
         t10 = asyncio.create_task(self._subscribe_altitude())
+        t11 = asyncio.create_task(self._subscribe_heartbeat())
 
-        self._active_tasks.update([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10])
+        self._active_tasks.update([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11])
         
         return True
 
@@ -507,83 +531,99 @@ class PX4FlightController(IFlightController):
 
     async def set_mode(self, mode: str) -> bool:
         if not self._connected:
+            self.last_rejection_reason = "Flight controller not connected"
             raise RuntimeError("Not connected")
-        mode_upper = mode.upper().replace("-", "_").replace(" ", "_")
-        expected_modes = set()
-        
+
+        self.last_rejection_reason = ""
+        fw = self._autopilot
+        normalized = normalize_mode_alias(mode, fw)
+        settable = get_settable_modes(fw)
+
+        if normalized not in settable:
+            self.last_rejection_reason = f"Mode '{mode}' (normalized: '{normalized}') is not settable for {fw}"
+            logger.warning(f"set_mode rejected: {self.last_rejection_reason}")
+            return False
+
+        # Safety: reject MANUAL and ACRO while armed unless explicitly configured
+        if normalized in ["MANUAL", "ACRO"]:
+            is_armed = (self._telemetry.armed_state == "ARMED")
+            allow_armed_manual = getattr(self.config, "allow_manual_when_armed", False)
+            if is_armed and not allow_armed_manual:
+                self.last_rejection_reason = f"Cannot switch to {normalized} while armed"
+                logger.warning(f"set_mode safety rejected: {self.last_rejection_reason}")
+                return False
+
+        # Stop existing keepalive before initiating mode switch
+        self._stop_mode_keepalive()
+
+        # If switching to OFFBOARD on PX4, send zero velocity setpoint so FC allows offboard switch
+        if normalized == "OFFBOARD" and fw == "px4" and hasattr(self.client, "offboard"):
+            try:
+                await self.client.offboard.set_velocity_body(VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0))
+            except Exception as e:
+                logger.debug(f"Pre-offboard setpoint warning: {e}")
+
+        cmd_params = get_do_set_mode_params(normalized, fw)
+        if not cmd_params:
+            self.last_rejection_reason = f"Could not determine DO_SET_MODE parameters for '{normalized}'"
+            return False
+
+        param1, param2, param3 = cmd_params
+
+        # Send MAV_CMD_DO_SET_MODE through mavlink_direct
         try:
-            if mode_upper in ["RTL", "RETURN", "RETURN_TO_LAUNCH"]:
-                self._stop_mode_keepalive()
-                await self.client.action.return_to_launch()
-                expected_modes = {"RTL", "RETURN", "RETURN_TO_LAUNCH"}
-            elif mode_upper == "LAND":
-                self._stop_mode_keepalive()
-                await self.client.action.land()
-                expected_modes = {"LAND"}
-            elif mode_upper in ["LOITER", "HOLD", "POSHOLD", "POSITION", "POSCTL"]:
-                self._stop_mode_keepalive()
-                await self.client.action.hold()
-                expected_modes = {"LOITER", "HOLD", "POSHOLD", "POSITION", "POSCTL"}
-            elif mode_upper in ["ALTCTL", "ALT_HOLD", "ALTHOLD", "ALTITUDE"]:
-                self._stop_mode_keepalive()
-                for _ in range(3):
-                    await self.client.manual_control.set_manual_control_input(0.0, 0.0, 0.5, 0.0)
-                    await asyncio.sleep(0.05)
-                await self.client.manual_control.start_altitude_control()
-                self._start_mode_keepalive("ALTCTL")
-                expected_modes = {"ALTCTL", "ALT_HOLD", "ALTHOLD", "ALTITUDE"}
-            elif mode_upper in ["MANUAL", "STABILIZE", "STABILIZED", "ACRO"]:
-                raise RuntimeError(
-                    f"{mode} cannot currently be set via this interface - MAVSDK's "
-                    "installed Action API does not expose a generic custom-mode-set "
-                    "call, and this function will not guess a raw mode-encoding "
-                    "value on a potentially-armed vehicle. Set this mode via the "
-                    "transmitter or GCS directly for now."
-                )
-            elif mode_upper in ["AUTO", "MISSION"]:
-                raise RuntimeError(
-                    "AUTO mode requires an uploaded mission and must be started via "
-                    "the mission plugin (mission.start_mission()), not set_mode(). "
-                    "No mission-start integration exists in set_mode() currently."
-                )
-            elif mode_upper in ["GUIDED", "OFFBOARD"]:
-                # In ArduPilot, GUIDED is equivalent to PX4 OFFBOARD.
-                # MAVSDK requires a setpoint before starting offboard mode.
-                self._stop_mode_keepalive()
-                await self.client.offboard.set_velocity_body(
-                    VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
-                )
-                await self.client.offboard.start()
-                self._start_mode_keepalive("OFFBOARD")
-                expected_modes = {"GUIDED", "OFFBOARD"}
-            else:
-                # Based on audit, MAVSDK-Python action class in this environment
-                # does NOT expose set_custom_mode. We cannot fake it.
-                raise RuntimeError(f"Mode {mode} is not supported by the current flight-control interface.")
-            
-            # Verify mode change via telemetry
-            last_seen_mode = None
-            last_status_text = None
-            for _ in range(30):
-                await asyncio.sleep(0.1)
-                t = await self.get_telemetry()
-                last_seen_mode = t.flight_mode
-                last_status_text = getattr(t, "status_text", None)
-                telemetry_mode = (t.flight_mode or "").upper().replace("-", "_").replace(" ", "_")
-                if telemetry_mode and telemetry_mode in expected_modes:
-                    return True
-                    
-            logger.warning(
-                f"Mode command for {mode} was accepted by MAVSDK, but telemetry did not "
-                f"confirm it within 3 seconds. Last telemetry mode={last_seen_mode or 'UNKNOWN'}, "
-                f"expected={sorted(expected_modes)}, status_text={last_status_text or 'NONE'}."
+            fields = {
+                "target_system": int(self._fc_system_id),
+                "target_component": int(self._fc_component_id),
+                "command": 176,  # MAV_CMD_DO_SET_MODE
+                "confirmation": 0,
+                "param1": float(param1),
+                "param2": float(param2),
+                "param3": float(param3),
+                "param4": 0.0,
+                "param5": 0.0,
+                "param6": 0.0,
+                "param7": 0.0,
+            }
+            if MavlinkMessage is None:
+                raise RuntimeError("MavlinkMessage class is not available in MAVSDK")
+            msg = MavlinkMessage(
+                message_name="COMMAND_LONG",
+                system_id=255,
+                component_id=0,
+                target_system_id=int(self._fc_system_id),
+                target_component_id=int(self._fc_component_id),
+                fields_json=json.dumps(fields),
             )
-            return True
-            
+            await self.client.mavlink_direct.send_message(msg)
+            logger.info(f"Sent MAV_CMD_DO_SET_MODE for {normalized} (p1={param1}, p2={param2}, p3={param3})")
         except Exception as e:
-            if isinstance(e, RuntimeError):
-                raise e
-            raise RuntimeError(f"PX4 Set Mode failed: {e}")
+            self.last_rejection_reason = f"Failed to send DO_SET_MODE via mavlink_direct: {e}"
+            logger.error(self.last_rejection_reason)
+            return False
+
+        # Confirm by decoding HEARTBEAT custom_mode within 3 seconds
+        for _ in range(30):
+            await asyncio.sleep(0.1)
+            current_mode = self._last_native_mode or self._telemetry.native_flight_mode
+            if not current_mode and self._last_heartbeat_custom_mode is not None:
+                current_mode = decode_custom_mode(self._last_heartbeat_custom_mode, fw)
+            if not current_mode and self._telemetry.flight_mode:
+                current_mode = self._telemetry.flight_mode
+            if current_mode:
+                current_norm = normalize_mode_alias(current_mode, fw)
+                if current_norm == normalized:
+                    if normalized == "OFFBOARD" and fw == "px4":
+                        self._start_mode_keepalive("OFFBOARD")
+                    logger.info(f"Mode change confirmed: {normalized}")
+                    return True
+
+        current_fc = self._last_native_mode or self._telemetry.native_flight_mode or self._telemetry.flight_mode or "UNKNOWN"
+        self.last_rejection_reason = f"requested {normalized}, FC is in {current_fc}"
+        logger.warning(
+            f"Mode command for {mode} ({normalized}) unconfirmed after 3s: {self.last_rejection_reason}"
+        )
+        return False
 
     def set_test_injection(self, injection_type: str, active: bool):
         self._injections[injection_type] = active
@@ -791,10 +831,67 @@ class PX4FlightController(IFlightController):
                 self._connected = False
                 await asyncio.sleep(2.0)
 
+    async def _subscribe_heartbeat(self):
+        """Listen to incoming HEARTBEAT MAVLink messages to detect autopilot and decode custom_mode."""
+        while self._connected:
+            try:
+                if not hasattr(self.client, "mavlink_direct") or not hasattr(self.client.mavlink_direct, "message"):
+                    break
+                async for msg in self.client.mavlink_direct.message():
+                    if msg.message_name == "HEARTBEAT":
+                        self._handle_heartbeat(msg)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.debug(f"PX4 HEARTBEAT subscription error: {e}")
+                await asyncio.sleep(1.0)
+
+    def _handle_heartbeat(self, msg) -> None:
+        try:
+            fields = json.loads(msg.fields_json) if isinstance(msg.fields_json, str) else (msg.fields_json or {})
+        except Exception:
+            fields = {}
+
+        comp_id = getattr(msg, "component_id", 1)
+        if comp_id == 1 or not self._fc_component_id:
+            self._fc_system_id = getattr(msg, "system_id", 1)
+            self._fc_component_id = comp_id
+
+        cfg_autopilot = getattr(self.config, "autopilot", "auto")
+        if cfg_autopilot == "auto":
+            detected = detect_autopilot_from_heartbeat(fields)
+            if detected:
+                if self._autopilot != detected:
+                    logger.info(f"Detected FC autopilot: {detected} (from HEARTBEAT autopilot={fields.get('autopilot')})")
+                    self._autopilot = detected
+                self._autopilot_detected = True
+            elif not self._autopilot_detected and not self._autopilot_warned:
+                logger.warning(
+                    f"Could not detect autopilot type from HEARTBEAT (autopilot={fields.get('autopilot')}), "
+                    "falling back to px4"
+                )
+                self._autopilot_warned = True
+        else:
+            self._autopilot = normalize_firmware(cfg_autopilot)
+
+        custom_mode = fields.get("custom_mode", 0)
+        self._last_heartbeat_custom_mode = custom_mode
+        self._last_heartbeat_time = time.monotonic()
+        native_mode = decode_custom_mode(custom_mode, self._autopilot)
+        self._last_native_mode = native_mode
+
+        self._telemetry.autopilot = self._autopilot
+        self._telemetry.native_flight_mode = native_mode
+        self._telemetry.available_modes = get_settable_modes(self._autopilot)
+
     def _empty_telemetry(self) -> TelemetryData:
+        ap = getattr(self, "_autopilot", "px4")
         return TelemetryData(
             battery_level=None, altitude=None, latitude=None, longitude=None,
-            velocity_x=None, velocity_y=None, velocity_z=None, flight_mode="disconnected"
+            velocity_x=None, velocity_y=None, velocity_z=None, flight_mode="disconnected",
+            autopilot=ap,
+            native_flight_mode=None,
+            available_modes=get_settable_modes(ap),
         )
 
     async def get_all_params(self) -> dict:

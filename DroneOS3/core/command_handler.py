@@ -258,10 +258,10 @@ class CommandHandler:
 
                 if not success:
                     logger.warning(f"Command {message.action.value} failed to execute properly.")
-                    # For FORMATION_UPDATE read the specific reason from FlightManager so the
+                    # For FORMATION_UPDATE and SET_MODE read the specific reason from FlightManager so the
                     # app can show it rather than the generic rejection text.
                     error_text = f"{message.action.name} rejected by FlightManager."
-                    if message.action == CommandAction.FORMATION_UPDATE and self.flight_manager:
+                    if message.action in (CommandAction.FORMATION_UPDATE, CommandAction.SET_MODE) and self.flight_manager:
                         fm_reason = getattr(self.flight_manager, "last_rejection_reason", "")
                         if fm_reason:
                             error_text = fm_reason

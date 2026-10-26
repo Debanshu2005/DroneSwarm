@@ -7,3 +7,5 @@ airsim_host: "127.0.0.1"
 
 airsim_port: 41451
 
+autopilot: "auto"
+allow_manual_when_armed: false

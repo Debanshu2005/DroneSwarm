@@ -67,6 +67,8 @@ class FlightConfig(BaseModel):
     smart_rtl: Optional[SmartRtlConfig] = None
     sim: Optional[SimFaultConfig] = None
     coordination: Optional[Dict[str, Any]] = None
+    autopilot: str = "auto"
+    allow_manual_when_armed: bool = False
 
 class SafetyConfig(BaseModel):
     low_battery_threshold: float = 20.0

@@ -163,8 +163,12 @@ class FlightManager:
     async def set_mode(self, params: Dict[str, Any]) -> bool:
         mode = params.get("mode")
         if not mode:
+            self.last_rejection_reason = "missing mode parameter"
             return False
-        return await self.fc.set_mode(mode)
+        success = await self.fc.set_mode(mode)
+        if not success:
+            self.last_rejection_reason = getattr(self.fc, "last_rejection_reason", "") or f"failed to set mode {mode}"
+        return success
 
     async def formation_update(self, params: Dict[str, Any]) -> bool:
         if not self.swarm_manager:

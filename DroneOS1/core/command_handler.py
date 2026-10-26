@@ -265,6 +265,10 @@ class CommandHandler:
                         fm_reason = getattr(self.flight_manager, "last_rejection_reason", "")
                         if fm_reason:
                             error_text = fm_reason
+                    elif message.action == CommandAction.SET_MODE and self.flight_manager:
+                        fm_reason = getattr(self.flight_manager, "last_rejection_reason", "")
+                        if fm_reason:
+                            error_text = fm_reason
                     elif message.action == CommandAction.ARM:
                         error_text = "ARM rejected by Pixhawk; check Pixhawk pre-arm checks."
                     self._send_lifecycle(message.sender_id, message.action, "REJECTED", reason=error_text, cmd_id=message.cmd_id)

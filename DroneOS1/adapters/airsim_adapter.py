@@ -8,6 +8,7 @@ from DroneOS1.core.interfaces import IFlightController
 from DroneOS1.shared.config.models import FlightConfig
 from DroneOS1.shared.utils.logger import setup_logger
 from DroneOS1.shared.protocol.messages import TelemetryData
+from DroneOS1.adapters.flight_modes import get_settable_modes
 
 logger = setup_logger("AirSimAdapter")
 
@@ -57,7 +58,10 @@ class AirSimFlightController(IFlightController):
     def _empty_telemetry(self) -> TelemetryData:
         return TelemetryData(
             battery_level=100.0, altitude=0.0, latitude=0.0, longitude=0.0,
-            velocity_x=0.0, velocity_y=0.0, velocity_z=0.0, flight_mode="disconnected"
+            velocity_x=0.0, velocity_y=0.0, velocity_z=0.0, flight_mode="disconnected",
+            autopilot="px4",
+            native_flight_mode="disconnected",
+            available_modes=get_settable_modes("px4")
         )
 
     def _log_rate_limited(self, msg: str):
@@ -528,6 +532,7 @@ class AirSimFlightController(IFlightController):
     async def set_mode(self, mode: str) -> bool:
         if not self._connected or self.client is None: return False
         self._mode = mode
+        self._telemetry.native_flight_mode = mode
         if mode == "HOLD":
             await self.hover()
         else:
@@ -627,6 +632,9 @@ class AirSimFlightController(IFlightController):
                 
                 self._telemetry.armed_state = "ARMED" if self._armed else "DISARMED"
                 self._telemetry.flight_mode = self._mode
+                self._telemetry.native_flight_mode = self._mode
+                self._telemetry.autopilot = "px4"
+                self._telemetry.available_modes = get_settable_modes("px4")
                 self._telemetry.heartbeat_age = time.time() - self._last_ok
                 
             except asyncio.CancelledError:
@@ -634,5 +642,6 @@ class AirSimFlightController(IFlightController):
             except Exception as e:
                 self._log_rate_limited(f"AirSim telemetry loop error: {e}")
                 self._telemetry.flight_mode = "disconnected"
+                self._telemetry.native_flight_mode = "disconnected"
                 self._telemetry.heartbeat_age = time.time() - self._last_ok
             await asyncio.sleep(0.1)

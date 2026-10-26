@@ -87,6 +87,9 @@ class TelemetryData(BaseModel):
     heartbeat_age: Optional[float] = None
     flight_mode: str
     armed_state: Optional[str] = None
+    autopilot: Optional[str] = "px4"
+    native_flight_mode: Optional[str] = None
+    available_modes: Optional[List[str]] = None
     mission_state: str = "IDLE"      # Added for decentralized mission awareness
     future_intent: str = "NONE"      # Added for collision avoidance and swarm intent
     active_injections: List[str] = Field(default_factory=list) # Marks injected states
