@@ -102,22 +102,22 @@ def test_main_app_instantiation():
     with patch.object(sys, 'argv', ['main.py', configs_dir]):
         app = DroneOSApp()
         
-        # Since config defaults to disabled, it should be None
-        assert app.coordination_manager is None
+        # Since config is enabled, it should be instantiated
+        assert app.coordination_manager is not None
+        assert app.coordination_manager.enabled is True
         
         from DroneOS.shared.config.profile import resolve_flight_config as original_resolve
         
-        def mock_resolve(*args, **kwargs):
+        def mock_resolve_disabled(*args, **kwargs):
             cfg = original_resolve(*args, **kwargs)
             if not getattr(cfg, 'coordination', None):
                 cfg.coordination = {}
-            cfg.coordination["enabled"] = True
+            cfg.coordination["enabled"] = False
             return cfg
 
-        with patch('DroneOS.shared.config.profile.resolve_flight_config', side_effect=mock_resolve):
-            app_enabled = DroneOSApp()
-            assert app_enabled.coordination_manager is not None
-            assert app_enabled.coordination_manager.enabled is True
+        with patch('DroneOS.shared.config.profile.resolve_flight_config', side_effect=mock_resolve_disabled):
+            app_disabled = DroneOSApp()
+            assert app_disabled.coordination_manager is None
 
 @pytest.mark.asyncio
 async def test_manager_exception_handling():
