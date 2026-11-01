@@ -1,4 +1,4 @@
-﻿from typing import Optional, Dict
+from typing import Optional, Dict
 from DroneOS2.core.coordination.membership import MembershipView, PeerState
 from DroneOS2.core.swarm_manager import SwarmMembership
 

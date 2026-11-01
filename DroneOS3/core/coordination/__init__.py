@@ -1,3 +1,3 @@
-﻿"""
+"""
 Coordination module
 """

@@ -1,11 +1,11 @@
 import copy
 import logging
 import pytest
-from DroneOS.core.coordination.manager import CoordinationManager
-from DroneOS.core.coordination.membership import PeerState, MemberNode, MembershipView
-from DroneOS.core.coordination.quorum import QuorumState
-from DroneOS.core.coordination.healing import HealPlan, RejectKind
-import DroneOS.core.coordination.healing as healing_module
+from DroneOS1.core.coordination.manager import CoordinationManager
+from DroneOS1.core.coordination.membership import PeerState, MemberNode, MembershipView
+from DroneOS1.core.coordination.quorum import QuorumState
+from DroneOS1.core.coordination.healing import HealPlan, RejectKind
+import DroneOS1.core.coordination.healing as healing_module
 
 
 class FakeClock:
@@ -344,8 +344,8 @@ async def test_returned_after_heal_warning_fires_exactly_once(caplog):
 def test_real_plan_healing_all_follower_losses():
     """8. Real plan_healing without mocks: loss of drone2, drone3, or drone4 in 4-drone V-formation."""
     import math
-    from DroneOS.core.coordination.healing import plan_healing, _get_slot_offset
-    from DroneOS.core.coordination.membership import MembershipView, MemberNode, PeerState
+    from DroneOS1.core.coordination.healing import plan_healing, _get_slot_offset
+    from DroneOS1.core.coordination.membership import MembershipView, MemberNode, PeerState
 
     cfg = type('Cfg', (), {
         'coordination': {

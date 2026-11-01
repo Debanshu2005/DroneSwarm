@@ -2,9 +2,9 @@ import math
 import time
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Optional
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.shared.protocol.messages import TelemetryData
-from DroneOS.shared.config.models import CollisionAvoidanceConfig
+from DroneOS3.shared.utils.logger import setup_logger
+from DroneOS3.shared.protocol.messages import TelemetryData
+from DroneOS3.shared.config.models import CollisionAvoidanceConfig
 
 logger = setup_logger("CollisionAvoidance")
 

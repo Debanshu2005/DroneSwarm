@@ -72,7 +72,7 @@ async def test_swarm_state_message_construction(swarm_mgr):
     fc.get_telemetry.return_value = tel
     
     # Formation params indicate active formation
-    fm.formation_params = {"type": "V", "spacing": 5.0}
+    fm.formation_params = {"type": "V", "spacing": 5.0, "slot_assignments": {"drone_02": 0}}
     
     # Add an active peer to the registry
     join_msg = DroneJoinMessage(
@@ -125,9 +125,11 @@ async def test_peer_state_message_fires_on_intent_change():
     # Setup FlightPipeline
     state_store = MagicMock()
     state_store.smart_rtl_active = False
+    state_store.is_landing_latched.return_value = False
     fc = AsyncMock()
     config = MagicMock()
     config.pipeline_hz = 10
+    config.safety_limits = None
     decision_engine = AsyncMock()
     
     # Provide sequence of intents: first IDLE, then FORMATION, then FORMATION

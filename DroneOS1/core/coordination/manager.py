@@ -2,9 +2,9 @@ import asyncio
 import time
 import copy
 from typing import Dict, Any, Optional, Set
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.core.swarm_manager import SwarmMembership
-from DroneOS.core.coordination.membership import MembershipView, PeerState
+from DroneOS1.shared.utils.logger import setup_logger
+from DroneOS1.core.swarm_manager import SwarmMembership
+from DroneOS1.core.coordination.membership import MembershipView, PeerState
 
 logger = setup_logger("CoordinationManager")
 
@@ -97,8 +97,8 @@ class CoordinationManager:
             self._evaluating_logged = {entry for entry in self._evaluating_logged if peer_id not in entry.split(",")}
 
     async def run(self):
-        from DroneOS.core.coordination.quorum import compute_quorum
-        from DroneOS.core.coordination.anchor import is_healthy, propose_anchor
+        from DroneOS1.core.coordination.quorum import compute_quorum
+        from DroneOS1.core.coordination.anchor import is_healthy, propose_anchor
 
         try:
             if not self.enabled:
@@ -245,7 +245,7 @@ class CoordinationManager:
         heal_after_dead_s = float(self.config_dict.get("heal_after_dead_s", 10.0))
         
         true_dead = set()
-        from DroneOS.core.coordination.quorum import PeerState
+        from DroneOS1.core.coordination.quorum import PeerState
         for pid in slot_assignments:
             if pid not in healthy_members:
                 node = self.membership.nodes.get(pid)
@@ -373,13 +373,13 @@ class CoordinationManager:
             return
             
         quorum_req = self.config_dict.get("quorum_required", True)
-        from DroneOS.core.coordination.quorum import compute_quorum
+        from DroneOS1.core.coordination.quorum import compute_quorum
         q_state = compute_quorum(self.my_id, live_fp.get("slot_assignments", {}), self.membership, quorum_req)
         if q_state.name != "QUORUM":
             logger.warning("[coord] PRE-SEND ABORT: quorum lost")
             return
             
-        from DroneOS.core.coordination.anchor import propose_anchor
+        from DroneOS1.core.coordination.anchor import propose_anchor
         live_prop_anchor, _ = propose_anchor(
             live_fp.get("slot_assignments", {}), 
             healthy_members, 
@@ -416,7 +416,7 @@ class CoordinationManager:
             logger.warning("[coord] PRE-SEND ABORT: slot 0 is not promoted anchor")
             return
             
-        from DroneOS.core.coordination.healing import validate_formation_params
+        from DroneOS1.core.coordination.healing import validate_formation_params
         if not validate_formation_params(new_params, self.flight_cfg):
             logger.warning("[coord] PRE-SEND ABORT: validator failed")
             return
