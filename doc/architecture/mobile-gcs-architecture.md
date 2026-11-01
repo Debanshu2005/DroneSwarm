@@ -9,23 +9,23 @@ The **PhoneOS Mobile GCS** (`mobile/`) is a responsive, cross-platform Ground Co
 ## 2. Technology Stack
 
 ```mermaid
-graph TD
-    subgraph Presentation["Presentation & UI Layer"]
+flowchart TD
+    subgraph Presentation["Presentation and UI Layer"]
         Views["React Views (Dashboard, Swarm, Map, Terminal, Mission)"]
-        Components["Shared Components (Artificial Horizon, Joystick, Telemetry Gauges)"]
-        Leaflet["Leaflet / React-Leaflet (Map Rendering)"]
+        Components["Shared Components (Artificial Horizon, Joystick)"]
+        Leaflet["Leaflet and React-Leaflet Map Rendering"]
     end
 
-    subgraph State["State & Networking Layer"]
+    subgraph StateLayer["State and Networking Layer"]
         Context["DroneContext (Global State Store)"]
         WSManager["WebSocket Connection Manager"]
-        Protocol["JSON Protocol Serializer / Deserializer"]
+        Protocol["JSON Protocol Serializer"]
     end
 
-    subgraph Native["Native Mobile Runtime"]
-        CapCore["@capacitor/core"]
+    subgraph NativeLayer["Native Mobile Runtime"]
+        CapCore["Capacitor Core"]
         CapAndroid["Capacitor Android Shell"]
-        ScreenLock["@capacitor/screen-orientation"]
+        ScreenLock["Capacitor Screen Orientation"]
     end
 
     Views --> Context
@@ -33,7 +33,8 @@ graph TD
     Leaflet --> Context
     Context --> WSManager
     WSManager --> Protocol
-    Context --> Native
+    Context --> CapCore
+    Context --> CapAndroid
 ```
 
 - **Frontend Core:** React 18.3.1, JavaScript (ES modules), Vite 5.4.
@@ -102,4 +103,3 @@ cd android
 
 The compiled APK will be generated at:
 `mobile/android/app/build/outputs/apk/debug/app-debug.apk`
-

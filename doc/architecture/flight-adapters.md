@@ -5,31 +5,31 @@
 DroneOS abstracts low-level flight control hardware using the **Adapter Pattern**. By decoupling high-level swarm logic from specific flight controller protocols, DroneOS can execute identically against real Pixhawk hardware (via PX4/MAVSDK) or simulated multirotors in Unreal Engine (via Microsoft AirSim), or offline mocks during unit testing.
 
 ```mermaid
-graph TD
+flowchart TD
     subgraph CoreOS["DroneOS Core (FlightManager / CommandWriter)"]
         Interface["IFlightController Interface"]
     end
 
-    subgraph Factory["Adapter Factory (factory.py)"]
+    subgraph FactoryCluster["Adapter Factory (factory.py)"]
         BuildAdapter["AdapterFactory.create_adapter(config)"]
     end
 
-    subgraph Adapters["Hardware & Simulation Adapters"]
+    subgraph Adapters["Hardware and Simulation Adapters"]
         PX4["PX4Adapter (px4_adapter.py)"]
         AirSim["AirSimAdapter (airsim_adapter.py)"]
         Mock["MockFlightController (Offline Test)"]
     end
 
-    subgraph Backends["Flight Hardware & Sim Engines"]
+    subgraph Backends["Flight Hardware and Sim Engines"]
         Pixhawk["Pixhawk Autopilot (MAVLink / Serial)"]
         MAVServer["MAVSDK Server (gRPC)"]
         UnrealAirSim["Microsoft AirSim / Unreal Engine (msgpack-rpc)"]
     end
 
-    Interface --> Factory
-    Factory --> PX4
-    Factory --> AirSim
-    Factory --> Mock
+    Interface --> BuildAdapter
+    BuildAdapter --> PX4
+    BuildAdapter --> AirSim
+    BuildAdapter --> Mock
 
     PX4 --> MAVServer --> Pixhawk
     AirSim --> UnrealAirSim
@@ -160,4 +160,3 @@ class AdapterFactory:
         else:
             raise ValueError(f"Unknown adapter type: {config.adapter_type}")
 ```
-

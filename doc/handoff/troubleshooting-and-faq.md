@@ -3,20 +3,20 @@
 ## 1. Quick Diagnostic Flowchart
 
 ```mermaid
-graph TD
-    Issue["Symptom / Failure Reported"] --> CheckType{"What is failing?"}
+flowchart TD
+    Issue["Symptom or Failure Reported"] --> CheckType{"What is failing?"}
 
-    CheckType -->|Commands timeout / No Reply| Zombie["Port Conflict / Stale Process holding UDP"]
-    CheckType -->|Drones won't heal after loss| Healing["Self-Healing Rejected (NO_PLAN / Settle Gate)"]
-    CheckType -->|MAVSDK won't connect| Hardware["Serial Port / Baudrate / Pre-Arm Check"]
-    CheckType -->|AirSim errors| Sim["RPC Port 41451 / settings.json Mismatch"]
-    CheckType -->|Mobile GCS disconnected| Relay["WebSocket Relay not running / Firewall"]
+    CheckType -->|Commands Timeout or No Reply| Zombie["Port Conflict or Stale Process Holding UDP"]
+    CheckType -->|Drones Do Not Heal After Loss| Healing["Self-Healing Rejected: NO_PLAN or Settle Gate"]
+    CheckType -->|MAVSDK Fails to Connect| Hardware["Serial Port, Baudrate, or Pre-Arm Check"]
+    CheckType -->|AirSim Connection Fails| Sim["RPC Port 41451 or settings.json Mismatch"]
+    CheckType -->|Mobile GCS Disconnected| Relay["WebSocket Relay Offline or Firewall"]
 
     Zombie --> FixZombie["Run sim/stop_sim.ps1 or psutil port cleanup"]
-    Healing --> FixHealing["Check logs for [coord] rejection reason & spacing >= 10m"]
-    Hardware --> FixHardware["Verify /dev/serial0 permissions & 115200 baud"]
+    Healing --> FixHealing["Check logs for coord rejection reason and spacing 10m or more"]
+    Hardware --> FixHardware["Verify /dev/serial0 permissions and 115200 baud"]
     Sim --> FixSim["Run sim/airsim/validate_settings.py"]
-    Relay --> FixRelay["Check relay.py logs & verify ports 8081-8084"]
+    Relay --> FixRelay["Check relay.py logs and verify ports 8081-8084"]
 ```
 
 ---
@@ -93,4 +93,3 @@ graph TD
      ```
   2. **Firewall:** Windows Defender or Linux `ufw` may block incoming connections on ports `8080`-`8084`. Add an inbound rule allowing TCP traffic on these ports.
   3. **Authentication Token:** If `RELAY_AUTH_TOKEN` is set on the companion computer, ensure the same token is entered in **Settings** on the GCS.
-

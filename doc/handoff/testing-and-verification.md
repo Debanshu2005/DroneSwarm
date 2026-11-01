@@ -5,11 +5,11 @@
 PhoneOS Swarm features an exhaustive testing framework designed to validate every layer of the operating system—from mathematical formation offsets to network protocol serialization, failsafe triggers, and multi-agent mid-air self-healing.
 
 ```mermaid
-graph TD
+flowchart TD
     subgraph Suites["Test Suites (1,100+ Tests)"]
         Unit["Unit Tests (Pipeline, Safety, Formation, Serializers)"]
-        Coord["Coordination & Healing (Quorum, Anchor, Recovery)"]
-        Integration["Swarm Integration & Lifecycle (Multi-Node Live)"]
+        Coord["Coordination and Healing (Quorum, Anchor, Recovery)"]
+        Integration["Swarm Integration and Lifecycle (Multi-Node Live)"]
         Property["Property-Based Testing (Hypothesis)"]
         SimSmoke["AirSim SITL Smoke Tests (Unreal 3D Physics)"]
     end
@@ -109,4 +109,3 @@ Before submitting any pull request or merging a feature branch:
 2. Regression tests pass across `DroneOS1`, `DroneOS2`, and `DroneOS3`.
 3. Zero illegal `from DroneOS.` imports exist inside `DroneOS1`, `DroneOS2`, or `DroneOS3`.
 4. Working tree is clean (`git status`).
-

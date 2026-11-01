@@ -17,8 +17,8 @@ stateDiagram-v2
     ALIVE --> SUSPECT: Missed 2 consecutive heartbeats
     SUSPECT --> ALIVE: Heartbeat Received
     SUSPECT --> DEAD: Missed 4 consecutive heartbeats
-    DEAD --> STABILIZING: Heartbeat Restored (Flap Guard)
-    STABILIZING --> ALIVE: Stable heartbeats for rejoin_stable_s (5s)
+    DEAD --> STABILIZING: Heartbeat Restored - Flap Guard
+    STABILIZING --> ALIVE: Stable heartbeats for 5s - rejoin_stable_s
     DEAD --> [*]
 ```
 
@@ -78,27 +78,28 @@ The `FormationEngine` computes 3D local NED offsets $(x, y, z)$ relative to the 
 When a member is confirmed `DEAD`, the surviving anchor invokes `plan_healing()`.
 
 ```mermaid
-graph TD
+flowchart TD
     DeadNode["Node Confirmed DEAD"] --> LossType{"Loss Type?"}
     
-    LossType -->|Leader (Anchor) Loss| GenAnchor["Anchor Promotion Strategy"]
+    LossType -->|Leader Loss| GenAnchor["Anchor Promotion Strategy"]
     LossType -->|Follower Loss| CheckFlag{"reshape_on_follower_loss?"}
     
-    CheckFlag -->|False| LogHold["Log HOLD & Keep Current Formation"]
-    CheckFlag -->|True| GenFollower["Candidate Generators: Compaction & Tail-Fill"]
+    CheckFlag -->|False| LogHold["Log HOLD and Keep Current Formation"]
+    CheckFlag -->|True| GenFollower["Candidate Generators: Compaction and Tail-Fill"]
     
-    GenAnchor --> EvalPlan["Safety Evaluator (_evaluate_plan)"]
-    GenFollower --> EvalPlan
+    GenAnchor --> SepCheck
+    GenFollower --> SepCheck
 
-    subgraph EvalPlan["Multi-Layer Safety Verification"]
-        direction TB
+    subgraph SafetyPipeline["Multi-Layer Safety Verification Pipeline"]
         SepCheck["Time-Synchronized Pair Separation (_pair_separation)"]
         HoverCheck["Stationary Drone Target-to-Start Clearance"]
         DeadCheck["Dead Drone Obstacle Sphere (dead_drone_obstacle)"]
         PartialCheck["Partial Delivery Hazard Simulation"]
+
+        SepCheck --> HoverCheck --> DeadCheck --> PartialCheck
     end
 
-    EvalPlan --> PlanDecision{"Plan Accepted?"}
+    PartialCheck --> PlanDecision{"Plan Accepted?"}
     PlanDecision -->|Rejected| EmitNoPlan["Log [coord] NO_PLAN (Throttled 5s)"]
     PlanDecision -->|Accepted| Dispatched["Send FORMATION_UPDATE via Network Broadcast"]
 ```

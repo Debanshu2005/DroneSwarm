@@ -11,12 +11,12 @@ DroneOS uses structured **YAML** files located in each instance's `configs/` dir
 DroneOS supports multiple deployment profiles via the `DRONEOS_PROFILE` environment variable:
 
 ```mermaid
-graph TD
+flowchart TD
     BaseConfig["1. Load Base configs/flight.yaml"]
     CheckProfile{"DRONEOS_PROFILE set?"}
     
-    CheckProfile -->|No (Hardware Default)| ReturnBase["Return Base Config (PX4)"]
-    CheckProfile -->|Yes (sim / test)| LoadOverlay["2. Load configs/flight.<profile>.yaml"]
+    CheckProfile -->|No - Hardware Default| ReturnBase["Return Base Config (PX4)"]
+    CheckProfile -->|Yes - sim or test| LoadOverlay["2. Load configs/flight.PROFILE.yaml"]
     
     LoadOverlay --> Merge["3. Deep Merge Overlay on top of Base"]
     Merge --> Validate["4. Validate against Pydantic FlightConfig Model"]
@@ -136,4 +136,3 @@ Unique identifier for the drone instance:
 drone_id: "drone1"                     # Unique swarm identifier ("drone1" - "drone4")
 vehicle_name: "Drone1"                 # Target vehicle name in AirSim / MAVLink
 ```
-

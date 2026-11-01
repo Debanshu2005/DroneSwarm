@@ -11,7 +11,7 @@
 At the heart of DroneOS is the **Flight Pipeline** (`core/flight_pipeline.py`), which runs at a deterministic rate (default: `10 Hz`).
 
 ```mermaid
-graph TD
+flowchart TD
     subgraph Inputs["Concurrent Input Sources"]
         FailSafe["Safety Failsafes (Heartbeat, Battery)"]
         Manual["Manual Pilot Commands (GCS WebSocket)"]
@@ -34,7 +34,7 @@ graph TD
         FC["Flight Controller (PX4 / AirSim)"]
     end
 
-    FailSafe -->|Priority: EMERGENCY / SAFETY| Intents
+    FailSafe -->|"Priority: EMERGENCY / SAFETY"| Intents
     Manual -->|Priority: MANUAL| Intents
     Mission -->|Priority: MISSION| Intents
     Autonomous -->|Priority: AUTONOMOUS| Intents
@@ -113,15 +113,15 @@ During autonomous flight, the `SmartRTLEngine` records a historical path of 3D c
 DroneOS provides two complementary layers of inter-drone collision avoidance:
 
 ```mermaid
-graph LR
+flowchart LR
     subgraph Detection["Proximity Detection"]
         PeerTelem["Peer Telemetry (P2P UDP)"]
-        DistCalc["Distance & Closing Velocity"]
+        DistCalc["Distance and Closing Velocity"]
     end
 
     subgraph Avoidance["Active Safety Reaction"]
-        Warning["Warning Zone (6.0m): Repulsion Vector Bias"]
-        Emergency["Emergency Zone (2.0m): Hard Braking / Divergence"]
+        Warning["Warning Zone (6.0m) - Repulsion Vector Bias"]
+        Emergency["Emergency Zone (2.0m) - Hard Braking / Divergence"]
     end
 
     PeerTelem --> DistCalc

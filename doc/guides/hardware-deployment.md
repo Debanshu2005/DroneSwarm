@@ -5,9 +5,9 @@
 In real-world operations, each drone in the swarm is equipped with an independent companion computer executing an instance of DroneOS.
 
 ```mermaid
-graph TD
+flowchart TD
     subgraph DronePhysical["Physical Drone Assembly"]
-        subgraph Companion["Companion Computer (Raspberry Pi 4/5)"]
+        subgraph CompanionNode["Companion Computer (Raspberry Pi 4 / 5)"]
             OS["DroneOS Companion Core"]
             Relay["Relay Server (relay.py)"]
             MAVSDK["MAVSDK Server"]
@@ -15,20 +15,20 @@ graph TD
 
         subgraph FlightHardware["Flight Stack"]
             Pixhawk["Pixhawk 4 / 6C Autopilot (PX4)"]
-            GPS["RTK / Standard GPS & Compass"]
-            ESC["Electronic Speed Controllers (ESCs) & Motors"]
+            GPS["RTK / Standard GPS and Compass"]
+            ESC["Electronic Speed Controllers and Motors"]
             TelemetryRadio["Telemetry Radio / Wi-Fi Mesh"]
         end
     end
 
-    subgraph Ground["Ground Operations"]
+    subgraph GroundStation["Ground Operations"]
         GCS["Mobile GCS / Pilot Laptop (Wi-Fi 5GHz)"]
     end
 
     GPS --> Pixhawk
     Pixhawk --> ESC
-    Pixhawk <-->|UART Serial (TELEM2 @ 115200 or 921600 baud)| Companion
-    Companion <-->|Wi-Fi 802.11ac / Mesh| Ground
+    Pixhawk <-->|"UART Serial (TELEM2 @ 115200 baud)"| OS
+    OS <-->|Wi-Fi 802.11ac Mesh| GCS
 ```
 
 ---
@@ -165,4 +165,3 @@ sudo systemctl stop phoneos-drone1
 5. **Takeoff & Assembly:**
    - Issue Takeoff command. Aircraft will climb vertically to `takeoff_altitude` (10m) and hold position.
    - Select desired formation (`V`, `DIAMOND`, etc.) with minimum spacing $\ge 12\text{ m}$.
-

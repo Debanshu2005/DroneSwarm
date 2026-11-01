@@ -22,11 +22,11 @@ The PhoneOS Ground Control Station (GCS) provides a unified command center for o
 The **Swarm View** (`SwarmView.jsx`) is the primary interface for coordinating multi-drone flights:
 
 ```mermaid
-graph LR
-    SelectShape["1. Select Formation Shape (V, Diamond, Column, Circle, etc.)"]
+flowchart LR
+    SelectShape["1. Select Formation Shape"]
     SetSpacing["2. Adjust Spacing Slider (10m - 25m)"]
-    ReviewSlots["3. Review Slot Allocations (Anchor at Slot 0)"]
-    Dispatch["4. Click 'Apply Formation'"]
+    ReviewSlots["3. Review Slot Allocations"]
+    Dispatch["4. Click Apply Formation"]
 
     SelectShape --> SetSpacing --> ReviewSlots --> Dispatch
 ```
@@ -109,4 +109,3 @@ Before outdoor flight, ensure sensors are properly calibrated using **Sensor Cal
    - Slowly rotate aircraft $360^\circ$ through all three spatial axes away from large metallic structures.
 3. **Gyro Calibration:**
    - Ensure the drone is completely stationary, click **Calibrate Gyro**. Takes $\sim 5$ seconds.
-

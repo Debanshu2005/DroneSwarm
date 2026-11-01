@@ -40,34 +40,34 @@ PhoneOS Swarm (DroneSwarm) is an advanced, distributed autonomous drone operatin
 PhoneOS Swarm utilizes a clear separation of concerns, routing human or autonomous commands through a fast UDP-to-WebSocket relay, into a safety-checked OS environment (DroneOS), and finally to the flight controller.
 
 ```mermaid
-graph TD
-    subgraph Ground Control Station
-        GCS[Mobile App - React/Capacitor]
+flowchart TD
+    subgraph GCS_Cluster["Ground Control Station"]
+        GCS["Mobile App - React / Capacitor"]
     end
 
-    subgraph Network Bridge
-        Relay[Relay Server - relay.py]
+    subgraph Net_Bridge["Network Bridge"]
+        Relay["Relay Server - relay.py"]
     end
 
-    subgraph Drone 1 Node
-        OS1[DroneOS Core 1]
-        MAV1[MAVSDK Server 1]
-        FC1((PX4 FC 1))
+    subgraph D1_Node["Drone 1 Node"]
+        OS1["DroneOS Core 1"]
+        MAV1["MAVSDK Server 1"]
+        FC1["PX4 FC 1"]
     end
     
-    subgraph Drone 2 Node
-        OS2[DroneOS Core 2]
-        MAV2[MAVSDK Server 2]
-        FC2((PX4 FC 2))
+    subgraph D2_Node["Drone 2 Node"]
+        OS2["DroneOS Core 2"]
+        MAV2["MAVSDK Server 2"]
+        FC2["PX4 FC 2"]
     end
 
-    GCS <-->|WebSocket :8080| Relay
-    GCS <-->|WebSocket :8081| Relay
+    GCS <-->|WebSocket 8080| Relay
+    GCS <-->|WebSocket 8081| Relay
     
-    Relay <-->|UDP :14550| OS1
-    Relay <-->|UDP :14551| OS2
+    Relay <-->|UDP 14550| OS1
+    Relay <-->|UDP 14551| OS2
     
-    OS1 <-->|Peer-to-Peer UDP| OS2
+    OS1 <-->|P2P UDP Mesh| OS2
 
     OS1 <-->|gRPC| MAV1
     MAV1 <-->|Serial| FC1
@@ -213,16 +213,16 @@ Supports distributed mission workflows:
 Built for multi-drone coordination (up to 4 drones natively):
 
 ```mermaid
-graph LR
-    subgraph Swarm Network
-        D1[Drone 1]
-        D2[Drone 2]
-        D3[Drone 3]
+flowchart LR
+    subgraph SwarmNet["Swarm Network"]
+        D1["Drone 1"]
+        D2["Drone 2"]
+        D3["Drone 3"]
     end
 
-    D1 <-->|Heartbeats & Telemetry| D2
-    D2 <-->|Heartbeats & Telemetry| D3
-    D3 <-->|Heartbeats & Telemetry| D1
+    D1 <-->|Heartbeats and Telemetry| D2
+    D2 <-->|Heartbeats and Telemetry| D3
+    D3 <-->|Heartbeats and Telemetry| D1
     
     D1 -.->|DroneJoinMessage| D2
     D2 -.->|SwarmStateMessage| D1

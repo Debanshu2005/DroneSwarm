@@ -36,8 +36,8 @@ doc/
 ## High-Level System Architecture
 
 ```mermaid
-graph TB
-    subgraph GCS["Ground Control Station (Mobile / Web)"]
+flowchart TB
+    subgraph GCS["Ground Control Station"]
         UI["React 18 / Vite UI (Swarm, Map, Terminal, Horizon)"]
         Capacitor["Capacitor Android Shell"]
         WSClient["Multi-Drone WebSocket Client"]
@@ -50,18 +50,22 @@ graph TB
         Relay4["Relay 4 (:8084 / :14653)"]
     end
 
-    subgraph SwarmMesh["Drone Swarm P2P UDP Mesh (14550 - 14553)"]
-        direction LR
-        Drone1["Drone 1 (DroneOS1)"] <-->|Heartbeats & Telemetry| Drone2["Drone 2 (DroneOS2)"]
-        Drone2 <-->|Heartbeats & Telemetry| Drone3["Drone 3 (DroneOS3)"]
-        Drone3 <-->|Heartbeats & Telemetry| Drone4["Drone 4 (DroneOS)"]
-        Drone4 <-->|Heartbeats & Telemetry| Drone1
+    subgraph SwarmMesh["Drone Swarm P2P UDP Mesh"]
+        Drone1["Drone 1 (DroneOS1)"]
+        Drone2["Drone 2 (DroneOS2)"]
+        Drone3["Drone 3 (DroneOS3)"]
+        Drone4["Drone 4 (DroneOS)"]
     end
 
-    subgraph HAL["Hardware Abstraction Layer (IFlightController)"]
-        PX4["PX4 Autopilot (Pixhawk via MAVSDK gRPC & Serial)"]
-        AirSim["Microsoft AirSim (Unreal Engine SITL via msgpack-rpc)"]
+    subgraph HAL["Hardware Abstraction Layer"]
+        PX4["PX4 Autopilot (Pixhawk via MAVSDK)"]
+        AirSim["Microsoft AirSim (Unreal Engine SITL)"]
     end
+
+    Drone1 <-->|"Heartbeats and Telemetry"| Drone2
+    Drone2 <-->|"Heartbeats and Telemetry"| Drone3
+    Drone3 <-->|"Heartbeats and Telemetry"| Drone4
+    Drone4 <-->|"Heartbeats and Telemetry"| Drone1
 
     UI --> WSClient
     WSClient <-->|WebSocket JSON| Relay1
@@ -74,10 +78,14 @@ graph TB
     Relay3 <-->|UDP Loopback / LAN| Drone3
     Relay4 <-->|UDP Loopback / LAN| Drone4
 
-    Drone1 --> HAL
-    Drone2 --> HAL
-    Drone3 --> HAL
-    Drone4 --> HAL
+    Drone1 --> PX4
+    Drone1 --> AirSim
+    Drone2 --> PX4
+    Drone2 --> AirSim
+    Drone3 --> PX4
+    Drone3 --> AirSim
+    Drone4 --> PX4
+    Drone4 --> AirSim
 ```
 
 ---

@@ -5,9 +5,9 @@
 PhoneOS Swarm utilizes a hybrid network architecture designed to balance real-time control latency against browser/mobile compatibility:
 
 ```mermaid
-graph TB
+flowchart TB
     subgraph GCS["Operator Ground Station (Web / Android)"]
-        WS[WebSocket Client]
+        WS["WebSocket Client"]
     end
 
     subgraph RelayBridge["Relay Layer (relay.py)"]
@@ -29,8 +29,10 @@ graph TB
 
     WS <-->|JSON over WebSocket| WSServer
     WSServer <--> HMACAuth <--> UDPClient
-    UDPClient <-->|UDP Datagrams (Local/LAN)| OSUDP
-    OSUDP <-->|UDP Broadcast / P2P Mesh| Peers
+    UDPClient <-->|"UDP Datagrams (Local / LAN)"| OSUDP
+    OSUDP <-->|UDP Broadcast / P2P Mesh| PeerA
+    OSUDP <-->|UDP Broadcast / P2P Mesh| PeerB
+    OSUDP <-->|UDP Broadcast / P2P Mesh| PeerC
 ```
 
 ---
