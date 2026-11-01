@@ -226,6 +226,14 @@ class CoordinationManager:
             self.enabled = False
             logger.error("[coord] Coordination module has entered FATAL FAULT state and disabled itself.")
 
+    def _log_throttled(self, reason: str, msg: str, now: float, interval: float = 5.0, level: int = 20):
+        if not hasattr(self, "_throttled_diag_logs"):
+            self._throttled_diag_logs = {}
+        last = self._throttled_diag_logs.get(reason, 0.0)
+        if now - last >= interval:
+            self._throttled_diag_logs[reason] = now
+            logger.log(level, f"[coord] {msg}")
+
     def stop(self):
         self.is_running = False
 
@@ -238,7 +246,7 @@ class CoordinationManager:
             self._heals_disabled = True
 
     async def _do_handle_healing(self, now, q_state, fp, healthy_members, current_anchor, prop_anchor, my_status=None):
-        if self.mode not in ("advisory", "active") or not q_state or getattr(q_state, "name", "") != "QUORUM" or not fp:
+        if self.mode not in ("advisory", "active") or not fp:
             return
 
         slot_assignments = fp.get("slot_assignments", {})
@@ -258,10 +266,33 @@ class CoordinationManager:
                     else:
                         node.dead_since = now
                         
-        if not true_dead or self._heals_disabled:
+        if not true_dead:
             return
 
         dead_pid_str = ",".join(sorted(true_dead))
+
+        # Check 1: Quorum is not QUORUM
+        q_name = getattr(q_state, "name", "")
+        if q_name != "QUORUM":
+            self._log_throttled(
+                f"quorum_{dead_pid_str}",
+                f"quorum is not QUORUM (current: {q_name or 'NONE'}) for confirmed dead {dead_pid_str}",
+                now
+            )
+            return
+
+        # Check 2: Heals disabled or max_heals_per_session reached
+        if self._heals_disabled or self._heal_count >= self.max_heals_per_session:
+            if not self._heals_disabled and self._heal_count >= self.max_heals_per_session:
+                logger.warning(f"[coord] max_heals_per_session={self.max_heals_per_session} reached; healing disabled for this session.")
+                self._heals_disabled = True
+            self._log_throttled(
+                f"heals_disabled_{dead_pid_str}",
+                f"heals disabled or max_heals_per_session reached ({self._heal_count}/{self.max_heals_per_session}) for {dead_pid_str}",
+                now
+            )
+            return
+
         if dead_pid_str not in getattr(self, "_evaluating_logged", set()):
             if not hasattr(self, "_evaluating_logged"):
                 self._evaluating_logged = set()
@@ -273,25 +304,33 @@ class CoordinationManager:
         fp_safe = (fp.get('type'), fp.get('spacing'), safe_slots)
         memo_key = (tuple(sorted(true_dead)), fp_safe)
         reslot_cooldown = float(self.config_dict.get("reslot_cooldown_s", 5.0))
+
+        # Check 3: Plan memoized as rejected
         if memo_key in self._memoized_plans:
             if self._memoized_plans[memo_key] is not True:
                 return
             last_rej = getattr(self, "_last_reject_time", {}).get(memo_key, 0.0)
             if now - last_rej < reslot_cooldown:
+                remaining_rej = reslot_cooldown - (now - last_rej)
+                self._log_throttled(
+                    f"memo_rejected_{dead_pid_str}",
+                    f"plan memoized as rejected for {dead_pid_str} (cooldown {remaining_rej:.1f}s remaining)",
+                    now
+                )
                 return
 
+        # Check 4: Reslot cooldown not elapsed
         time_since_change = now - self._last_slot_change_time
         if time_since_change < reslot_cooldown:
-            return
-
-        if self._heal_count >= self.max_heals_per_session:
-            if not self._heals_disabled:
-                logger.warning(f"[coord] max_heals_per_session={self.max_heals_per_session} reached; healing disabled for this session.")
-            self._heals_disabled = True
+            remaining_cooldown = reslot_cooldown - time_since_change
+            self._log_throttled(
+                f"cooldown_{dead_pid_str}",
+                f"reslot cooldown not elapsed ({remaining_cooldown:.1f}s remaining) for {dead_pid_str}",
+                now
+            )
             return
 
         reshape_on_follower = str(self.config_dict.get("reshape_on_follower_loss", "false")).lower() == "true"
-        dead_pid_str = ",".join(sorted(true_dead))
         is_anchor_dead = (current_anchor in true_dead)
 
         if not is_anchor_dead and reshape_on_follower:
@@ -313,7 +352,13 @@ class CoordinationManager:
             _record_plan_rejection(memo_key)
             return
 
+        # Check 5: This drone is not the proposed anchor
         if self.my_id != prop_anchor:
+            self._log_throttled(
+                f"not_anchor_{dead_pid_str}",
+                f"this drone ({self.my_id}) is not the proposed anchor (proposed anchor is {prop_anchor}) for {dead_pid_str}",
+                now
+            )
             return
              
         from DroneOS1.core.coordination.healing import plan_healing, RejectKind
@@ -339,7 +384,11 @@ class CoordinationManager:
 
                 if self._transient_logged.get(dead_pid_str) != plan.reject_reason:
                     self._transient_logged[dead_pid_str] = plan.reject_reason
-                    logger.info(f"[coord] TRANSIENT NO_PLAN: {plan.reject_reason} for {dead_pid_str}")
+                    spacing_val = getattr(plan, "spacing", fp.get("spacing", 0.0))
+                    f_type_val = getattr(plan, "formation_type", fp.get("type", "unknown"))
+                    min_sep_val = getattr(plan, "min_req_sep", 0.0)
+                    method_val = getattr(plan, "method_name", "unknown")
+                    logger.info(f"[coord] TRANSIENT NO_PLAN: {plan.reject_reason} for {dead_pid_str} (spacing={spacing_val:.1f}m, formation={f_type_val}, min_req_sep={min_sep_val:.2f}m, method={method_val})")
                 # Do NOT memoize transient so it keeps retrying
             elif plan.reject_kind == RejectKind.CONFIG:
                 if dead_pid_str not in self._hold_logged:
@@ -352,7 +401,11 @@ class CoordinationManager:
                     if is_anchor_dead:
                         logger.warning(f"[coord] WARNING: anchor lost, no safe re-form plan; formation will hold until operator intervenes (reason: {plan.reject_reason})")
                     else:
-                        logger.info(f"[coord] NO_PLAN: {plan.reject_reason} for {dead_pid_str}")
+                        spacing_val = getattr(plan, "spacing", fp.get("spacing", 0.0))
+                        f_type_val = getattr(plan, "formation_type", fp.get("type", "unknown"))
+                        min_sep_val = getattr(plan, "min_req_sep", 0.0)
+                        method_val = getattr(plan, "method_name", "unknown")
+                        logger.info(f"[coord] NO_PLAN: {plan.reject_reason} for {dead_pid_str} (spacing={spacing_val:.1f}m, formation={f_type_val}, min_req_sep={min_sep_val:.2f}m, method={method_val})")
                 _record_plan_rejection(memo_key)
         else:
             await self._send_formation_update(memo_key, plan, fp, prop_anchor, healthy_members, true_dead)

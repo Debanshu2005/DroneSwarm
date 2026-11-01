@@ -29,7 +29,7 @@ coordination:
   quorum_required: true
   rejoin_stable_s: 5
   resend_count: 2
-  reshape_on_follower_loss: false
+  reshape_on_follower_loss: true
   reslot_cooldown_s: 5
   suspect_missed_beats: 2
 formation:

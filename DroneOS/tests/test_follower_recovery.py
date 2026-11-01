@@ -412,3 +412,146 @@ def test_real_plan_healing_all_follower_losses():
     assert plan4.accepted is True
     assert plan4.slot_assignments == {'drone1': 0, 'drone2': 1, 'drone3': 2}
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("spacing", [10.0, 12.0, 15.0, 20.0])
+@pytest.mark.parametrize("killed_drone", ["drone2", "drone3", "drone4"])
+async def test_real_plan_healing_follower_loss_sends_update(spacing, killed_drone):
+    """Regression test: Real plan_healing with DRONEOS_PROFILE=test config.
+    Asserts FORMATION_UPDATE is sent with exactly the 3 survivors and anchor at slot 0."""
+    import math
+    import os
+    from pathlib import Path
+    from DroneOS.core.coordination.healing import _get_slot_offset
+    from DroneOS.core.coordination.membership import PeerState, MemberNode
+    from DroneOS.core.coordination.quorum import QuorumState
+    from DroneOS.shared.config.models import FlightConfig
+    from DroneOS.shared.config.profile import resolve_flight_config
+
+    os.environ["DRONEOS_PROFILE"] = "test"
+    config_dir = Path(__file__).resolve().parents[1] / "configs"
+    flight_cfg = resolve_flight_config(config_dir, FlightConfig)
+
+    clock = FakeClock(100.0)
+    swarm = MockSwarm("drone1")
+    sender = MockSender()
+
+    fp = {
+        "type": "V",
+        "spacing": spacing,
+        "slot_assignments": {"drone1": 0, "drone2": 1, "drone3": 2, "drone4": 3}
+    }
+    all_drones = ["drone1", "drone2", "drone3", "drone4"]
+    survivors = {d for d in all_drones if d != killed_drone}
+
+    mgr = CoordinationManager(
+        swarm, flight_cfg, clock=clock,
+        formation_provider=lambda: copy.deepcopy(fp),
+        formation_update_sender=sender
+    )
+    mgr.my_id = "drone1"
+
+    ref_lat, ref_lon = 47.641468, -122.140165
+    for d, s in fp["slot_assignments"].items():
+        off = _get_slot_offset("V", s, spacing, 4)
+        lat = ref_lat + off[0] / 111319.5
+        lon = ref_lon + off[1] / (111319.5 * math.cos(math.radians(ref_lat)))
+        node = MemberNode(d, clock=clock)
+        node.lat, node.lon, node.alt = lat, lon, 10.0
+        node.last_position_time = 100.0
+        if d in survivors:
+            node.state = PeerState.ALIVE
+            node.last_seen = 100.0
+            node.last_heartbeat_time = 100.0
+            node.battery_level = 100.0
+        else:
+            node.state = PeerState.DEAD
+            node.dead_since = 80.0
+            node.last_seen = 80.0
+            node.last_heartbeat_time = 80.0
+            node.battery_level = 100.0
+        mgr.membership.nodes[d] = node
+
+    my_status = {
+        "lat": ref_lat, "lon": ref_lon, "alt": 10.0,
+        "position_age": 0.0, "gps_valid": True, "battery_level": 100.0
+    }
+
+    await mgr._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), survivors, "drone1", "drone1", my_status)
+
+    assert len(sender.calls) == 1
+    new_params, targets = sender.calls[0]
+    new_slots = new_params["slot_assignments"]
+    assert set(new_slots.keys()) == survivors
+    assert new_slots["drone1"] == 0
+    assert set(new_slots.values()) == {0, 1, 2}
+
+
+@pytest.mark.asyncio
+async def test_real_plan_healing_follower_loss_reshape_false_holds(caplog):
+    """Test follower loss when reshape_on_follower_loss=false: asserts HOLD and sends nothing."""
+    import logging
+    import math
+    import os
+    from pathlib import Path
+    from DroneOS.core.coordination.healing import _get_slot_offset
+    from DroneOS.core.coordination.membership import PeerState, MemberNode
+    from DroneOS.core.coordination.quorum import QuorumState
+    from DroneOS.shared.config.models import FlightConfig
+    from DroneOS.shared.config.profile import resolve_flight_config
+
+    os.environ["DRONEOS_PROFILE"] = "test"
+    config_dir = Path(__file__).resolve().parents[1] / "configs"
+    flight_cfg = resolve_flight_config(config_dir, FlightConfig)
+    flight_cfg.coordination["reshape_on_follower_loss"] = "false"
+
+    clock = FakeClock(100.0)
+    swarm = MockSwarm("drone1")
+    sender = MockSender()
+
+    fp = {
+        "type": "V",
+        "spacing": 15.0,
+        "slot_assignments": {"drone1": 0, "drone2": 1, "drone3": 2, "drone4": 3}
+    }
+    survivors = {"drone1", "drone2", "drone4"}
+
+    mgr = CoordinationManager(
+        swarm, flight_cfg, clock=clock,
+        formation_provider=lambda: copy.deepcopy(fp),
+        formation_update_sender=sender
+    )
+    mgr.my_id = "drone1"
+
+    ref_lat, ref_lon = 47.641468, -122.140165
+    for d, s in fp["slot_assignments"].items():
+        off = _get_slot_offset("V", s, 15.0, 4)
+        lat = ref_lat + off[0] / 111319.5
+        lon = ref_lon + off[1] / (111319.5 * math.cos(math.radians(ref_lat)))
+        node = MemberNode(d, clock=clock)
+        node.lat, node.lon, node.alt = lat, lon, 10.0
+        node.last_position_time = 100.0
+        if d in survivors:
+            node.state = PeerState.ALIVE
+            node.last_seen = 100.0
+            node.last_heartbeat_time = 100.0
+            node.battery_level = 100.0
+        else:
+            node.state = PeerState.DEAD
+            node.dead_since = 80.0
+            node.last_seen = 80.0
+            node.last_heartbeat_time = 80.0
+            node.battery_level = 100.0
+        mgr.membership.nodes[d] = node
+
+    my_status = {
+        "lat": ref_lat, "lon": ref_lon, "alt": 10.0,
+        "position_age": 0.0, "gps_valid": True, "battery_level": 100.0
+    }
+
+    with caplog.at_level(logging.INFO, logger="CoordinationManager"):
+        await mgr._handle_healing(100.0, QuorumState.QUORUM, copy.deepcopy(fp), survivors, "drone1", "drone1", my_status)
+
+    assert len(sender.calls) == 0
+    hold_logs = [r for r in caplog.records if "HOLD:" in r.message and "reshape_on_follower_loss=false" in r.message]
+    assert len(hold_logs) == 1
+

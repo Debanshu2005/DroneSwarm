@@ -22,7 +22,7 @@ pip install "msgpack-rpc-python" "airsim"
 ### 3. Launching the Swarm in Simulation
 We have provided launch scripts (`launch_sim.bat` for Windows and `launch_sim.sh` for Linux) that automatically set the required environment variables and launch all four drones concurrently.
 
-These scripts set `DRONEOS_PROFILE=sim`, which instructs the DroneOS codebase to load the simulator backend without requiring any changes to your committed `flight.yaml` files. They also pass distinct WebSocket ports to each relay to avoid TCP port conflicts on a single PC.
+These launch scripts (`launch_sim.bat`, `launch_sim.sh`, and `launch_sim_test.bat`) set `DRONEOS_PROFILE=test`, which activates the coordination engine in `active` mode with `armed: true` and follower loss reshaping enabled. Running under `DRONEOS_PROFILE=sim` alone uses `flight.sim.yaml`, which does not enable follower reshape unless configured. They also pass distinct WebSocket ports to each relay to avoid TCP port conflicts on a single PC.
 
 The simulation-only `network.sim.yaml` overlays provide deterministic loopback routing:
 

@@ -85,7 +85,9 @@ class FakeNode:
 
 def get_cfg(name):
     os.environ["DRONEOS_PROFILE"] = "sim" if name == "sim" else "hw"
-    return resolve_flight_config(os.path.join(os.getcwd(), "DroneOS/configs"), FlightConfig)
+    cfg = resolve_flight_config(os.path.join(os.getcwd(), "DroneOS/configs"), FlightConfig)
+    cfg.coordination["reshape_on_follower_loss"] = "false"
+    return cfg
 
 
 def _new_stats():

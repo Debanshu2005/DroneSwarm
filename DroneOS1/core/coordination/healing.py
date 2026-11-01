@@ -62,6 +62,10 @@ class HealPlan:
         self.is_hold = False
         self.hold_slot = -1
         self.unsettled = unsettled
+        self.spacing = 0.0
+        self.formation_type = ""
+        self.min_req_sep = 0.0
+        self.method_name = ""
 
 class EvaluatedPlan:
     def __init__(self, accepted: bool, min_separation: float, total_travel: float, reject_reason: str = "", reject_kind: Optional[RejectKind] = None):
@@ -253,6 +257,9 @@ def plan_healing(
 
     # Config thresholds
     min_req_sep = min_required_sep(flight_cfg, config_dict)
+    if reshape_on_follower and spacing > 0:
+        min_ca = float(getattr(getattr(flight_cfg, "collision_avoidance", None), "min_horizontal_distance", 2.0)) if flight_cfg else 2.0
+        min_req_sep = min(min_req_sep, max(min_ca + 1.0, spacing * 0.6))
     dead_obstacle_radius_m = min_req_sep
     
     is_advisory = config_dict.get("mode", "advisory").lower() == "advisory"
@@ -428,8 +435,12 @@ def plan_healing(
     if not accepted_plans:
         # NO_PLAN: all rejected
         best_rejected = plans[0] if plans else HealPlan({}, "NO_PLAN", {}, 0.0, 0.0, False, "no strategies generated")
+        best_rejected.method_name = plans[0].reason.split()[0] if plans else "none"
         best_rejected.reason = "NO_PLAN"
         best_rejected.is_hold = False
+        best_rejected.spacing = spacing
+        best_rejected.formation_type = f_type
+        best_rejected.min_req_sep = min_req_sep
         return best_rejected
         
     accepted_plans.sort(key=lambda p: p.total_travel)
