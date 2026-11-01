@@ -102,7 +102,6 @@ class FlightManager:
         return True
 
     async def hover(self, params: Dict[str, Any] = None) -> bool:
-        self.formation_params = None
         intent = FlightIntent(IntentSource.MANUAL, IntentAction.HOVER, ttl_seconds=2.0)
         self.state_store.submit_intent(intent)
         return True

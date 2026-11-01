@@ -1,4 +1,4 @@
-﻿from enum import Enum
+from enum import Enum
 from DroneOS1.core.coordination.membership import MembershipView, PeerState
 
 class QuorumState(Enum):

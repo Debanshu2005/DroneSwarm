@@ -14,7 +14,7 @@ coordination:
   mode: active
   armed: true
   dead_drone_obstacle: true
-  reshape_on_follower_loss: true
+  reshape_on_follower_loss: false
   suspect_missed_beats: 3
   dead_missed_beats: 6
   rejoin_stable_s: 10

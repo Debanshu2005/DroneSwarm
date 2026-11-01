@@ -253,10 +253,6 @@ def plan_healing(
 
     # Config thresholds
     min_req_sep = min_required_sep(flight_cfg, config_dict)
-    if reshape_on_follower and spacing > 0:
-        min_ca = float(getattr(getattr(flight_cfg, "collision_avoidance", None), "min_horizontal_distance", 2.0)) if flight_cfg else 2.0
-        min_req_sep = min(min_req_sep, max(min_ca + 1.0, spacing * 0.6))
-    
     dead_obstacle_radius_m = min_req_sep
     
     is_advisory = config_dict.get("mode", "advisory").lower() == "advisory"

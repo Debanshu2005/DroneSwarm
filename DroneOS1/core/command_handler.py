@@ -2,9 +2,9 @@ import os
 import time
 from typing import Dict, Any, Callable, Coroutine
 from pydantic import ValidationError
-from DroneOS.shared.protocol.messages import ControlMessage, CommandAction, CommandLifecycleMessage
-from DroneOS.shared.utils.logger import setup_logger
-from DroneOS.shared.utils.event_logger import event_logger
+from DroneOS1.shared.protocol.messages import ControlMessage, CommandAction, CommandLifecycleMessage
+from DroneOS1.shared.utils.logger import setup_logger
+from DroneOS1.shared.utils.event_logger import event_logger
 
 logger = setup_logger("CommandHandler")
 
