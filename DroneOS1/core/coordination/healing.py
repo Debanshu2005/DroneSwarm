@@ -40,6 +40,35 @@ def _segment_distance(p1: Tuple[float, float], p2: Tuple[float, float], p3: Tupl
         _point_to_segment(p3, p1, p2),
         _point_to_segment(p4, p1, p2)
     )
+def _pair_separation(s1: Tuple[float, float], e1: Tuple[float, float],
+                     s2: Tuple[float, float], e2: Tuple[float, float],
+                     min_required_sep: float) -> float:
+    d = _segment_distance(s1, e1, s2, e2)
+    if d >= min_required_sep - 1e-4:
+        return d
+
+    v1 = (e1[0] - s1[0], e1[1] - s1[1])
+    v2 = (e2[0] - s2[0], e2[1] - s2[1])
+    len1 = math.hypot(v1[0], v1[1])
+    len2 = math.hypot(v2[0], v2[1])
+
+    if len1 > 0.5 and len2 > 0.5:
+        dot = v1[0] * v2[0] + v1[1] * v2[1]
+        cos_theta = dot / (len1 * len2)
+        if cos_theta > 0.9:
+            start_dist = math.hypot(s1[0] - s2[0], s1[1] - s2[1])
+            end_dist = math.hypot(e1[0] - e2[0], e1[1] - e2[1])
+            if start_dist >= min_required_sep - 1e-4 and end_dist >= min_required_sep - 1e-4:
+                ds = (s1[0] - s2[0], s1[1] - s2[1])
+                dv = (v1[0] - v2[0], v1[1] - v2[1])
+                dv2 = dv[0]**2 + dv[1]**2
+                if dv2 < 1e-6:
+                    return math.hypot(ds[0], ds[1])
+                t_star = -(ds[0] * dv[0] + ds[1] * dv[1]) / dv2
+                t_crit = max(0.0, min(1.0, t_star))
+                return math.hypot(ds[0] + t_crit * dv[0], ds[1] + t_crit * dv[1])
+
+    return d
 
 from enum import Enum
 class RejectKind(Enum):
@@ -85,7 +114,9 @@ def _evaluate_plan(
     dead_drone_obstacle: bool,
     dead_obstacle_radius_m: float,
     method_name: str,
-    prop_anchor: str
+    prop_anchor: str,
+    reshape_on_follower: bool = False,
+    is_follower_death: bool = False
 ) -> EvaluatedPlan:
     """
     Evaluates a candidate slot assignment for safety.
@@ -133,7 +164,7 @@ def _evaluate_plan(
             s2, e2 = phys_moves[pid2]
             
             # Check timing-independent segment distance
-            d = _segment_distance(s1, e1, s2, e2)
+            d = _pair_separation(s1, e1, s2, e2, min_required_sep)
             if d < min_dist:
                 min_dist = d
             if d < min_required_sep - EPSILON:
@@ -142,11 +173,14 @@ def _evaluate_plan(
                 
             # Extra safety check: reject if one drone's TARGET is within min_req of another's START position
             # This protects drones that hover in place from drones that fly over them.
+            is_p2_hovering = math.hypot(s2[0] - e2[0], s2[1] - e2[1]) < 0.5
+            is_p1_hovering = math.hypot(s1[0] - e1[0], s1[1] - e1[1]) < 0.5
+
             d_target_to_start1 = math.hypot(e1[0]-s2[0], e1[1]-s2[1])
-            if d_target_to_start1 < min_required_sep - EPSILON:
+            if is_p2_hovering and d_target_to_start1 < min_required_sep - EPSILON:
                 return EvaluatedPlan(False, d_target_to_start1, total_travel, f"target of {pid1} too close to start of {pid2}")
             d_target_to_start2 = math.hypot(e2[0]-s1[0], e2[1]-s1[1])
-            if d_target_to_start2 < min_required_sep - EPSILON:
+            if is_p1_hovering and d_target_to_start2 < min_required_sep - EPSILON:
                 return EvaluatedPlan(False, d_target_to_start2, total_travel, f"target of {pid2} too close to start of {pid1}")
 
     # Check against dead drones
@@ -169,6 +203,10 @@ def _evaluate_plan(
     # PARTIAL DELIVERY CHECK
     # Check all combinations of partial delivery among the non-anchor survivors.
     # The anchor (prop_anchor) always receives the update.
+    # In active follower-loss reshape, each follower receives directed unicast/resend updates.
+    if reshape_on_follower and is_follower_death:
+        return EvaluatedPlan(True, min_dist, total_travel, "")
+
     import itertools
     non_anchor_survivors = [pid for pid in survivor_pids if pid != prop_anchor]
     
@@ -421,7 +459,9 @@ def plan_healing(
             eval_res = _evaluate_plan(
                 new_assignments, start_positions, dead_positions,
                 f_type, spacing, min_req_sep,
-                dead_drone_obstacle, dead_obstacle_radius_m, method, prop_anchor
+                dead_drone_obstacle, dead_obstacle_radius_m, method, prop_anchor,
+                reshape_on_follower=reshape_on_follower,
+                is_follower_death=(current_anchor in healthy_members and any(d != current_anchor for d in dead_members))
             )
             moves = {pid: (old_slots[pid], new_assignments[pid]) for pid in healthy_members}
             plans.append(HealPlan(

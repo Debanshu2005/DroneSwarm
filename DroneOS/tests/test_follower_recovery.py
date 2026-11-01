@@ -554,4 +554,99 @@ async def test_real_plan_healing_follower_loss_reshape_false_holds(caplog):
     assert len(sender.calls) == 0
     hold_logs = [r for r in caplog.records if "HOLD:" in r.message and "reshape_on_follower_loss=false" in r.message]
     assert len(hold_logs) == 1
+@pytest.mark.asyncio
+@pytest.mark.parametrize("shape_sequence,killed_drone", [
+    (["V", "DIAMOND", "COLUMN"], "drone2"),
+    (["V", "CIRCLE", "ECHELON_LEFT"], "drone2"),
+    (["V", "SQUARE", "GRID"], "drone3"),
+])
+async def test_multi_shape_trigger_then_follower_loss_heals(shape_sequence, killed_drone):
+    """Test switching through 2-3 shapes and then killing a follower drone:
+    verifies that formation change tracking updates settle gate and heal succeeds."""
+    import math
+    import os
+    from pathlib import Path
+    from DroneOS.core.coordination.healing import _get_slot_offset
+    from DroneOS.core.coordination.membership import PeerState, MemberNode
+    from DroneOS.core.coordination.quorum import QuorumState
+    from DroneOS.shared.config.models import FlightConfig
+    from DroneOS.shared.config.profile import resolve_flight_config
 
+    os.environ["DRONEOS_PROFILE"] = "test"
+    config_dir = Path(__file__).resolve().parents[1] / "configs"
+    flight_cfg = resolve_flight_config(config_dir, FlightConfig)
+
+    clock = FakeClock(100.0)
+    swarm = MockSwarm("drone1")
+    sender = MockSender()
+
+    current_fp = None
+    mgr = CoordinationManager(
+        swarm, flight_cfg, clock=clock,
+        formation_provider=lambda: copy.deepcopy(current_fp) if current_fp else None,
+        formation_update_sender=sender
+    )
+    mgr.my_id = "drone1"
+
+    all_drones = ["drone1", "drone2", "drone3", "drone4"]
+    ref_lat, ref_lon = 47.641468, -122.140165
+    spacing = 10.0
+
+    # Step 1: Cycle through shapes
+    for shape in shape_sequence:
+        clock.advance(10.0)
+        now = clock()
+        current_fp = {
+            "type": shape,
+            "spacing": spacing,
+            "slot_assignments": {"drone1": 0, "drone2": 1, "drone3": 2, "drone4": 3}
+        }
+        for d, s in current_fp["slot_assignments"].items():
+            off = _get_slot_offset(shape, s, spacing, 4)
+            lat = ref_lat + off[0] / 111319.5
+            lon = ref_lon + off[1] / (111319.5 * math.cos(math.radians(ref_lat)))
+            node = mgr.membership.nodes.get(d)
+            if not node:
+                node = MemberNode(d, clock=clock)
+                mgr.membership.nodes[d] = node
+            node.lat, node.lon, node.alt = lat, lon, 10.0
+            node.last_position_time = now
+            node.state = PeerState.ALIVE
+            node.last_seen = now
+            node.last_heartbeat_time = now
+            node.battery_level = 100.0
+
+        my_status = {
+            "lat": ref_lat, "lon": ref_lon, "alt": 10.0,
+            "position_age": 0.0, "gps_valid": True, "battery_level": 100.0
+        }
+        await mgr._handle_healing(now, QuorumState.QUORUM, copy.deepcopy(current_fp), set(all_drones), "drone1", "drone1", my_status)
+
+    # Step 2: Kill follower drone
+    clock.advance(15.0)
+    now = clock()
+    survivors = {d for d in all_drones if d != killed_drone}
+
+    dead_node = mgr.membership.nodes[killed_drone]
+    dead_node.state = PeerState.DEAD
+    dead_node.dead_since = now - 12.0
+
+    for d in survivors:
+        node = mgr.membership.nodes[d]
+        node.last_seen = now
+        node.last_position_time = now
+        node.state = PeerState.ALIVE
+
+    my_status = {
+        "lat": ref_lat, "lon": ref_lon, "alt": 10.0,
+        "position_age": 0.0, "gps_valid": True, "battery_level": 100.0
+    }
+
+    await mgr._handle_healing(now, QuorumState.QUORUM, copy.deepcopy(current_fp), survivors, "drone1", "drone1", my_status)
+
+    assert len(sender.calls) == 1
+    new_params, targets = sender.calls[0]
+    new_slots = new_params["slot_assignments"]
+    assert set(new_slots.keys()) == survivors
+    assert new_slots["drone1"] == 0
+    assert set(new_slots.values()) == {0, 1, 2}

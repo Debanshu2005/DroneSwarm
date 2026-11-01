@@ -45,6 +45,8 @@ class CoordinationManager:
         # the formation_provider, regardless of its source (operator, prior heal).
         self._last_slot_change_time: float = 0.0       # monotonic
         self._last_slot_assignments: Optional[dict] = None  # last observed value
+        self._last_fp_type: Optional[str] = None
+        self._last_fp_spacing: Optional[float] = None
 
         # Per-session heal cap
         self.max_heals_per_session: int = int(self.config_dict.get("max_heals_per_session", 3))
@@ -143,10 +145,19 @@ class CoordinationManager:
                     my_status = self.self_status_provider() if self.self_status_provider else {"battery_level": 0.0, "gps_valid": False, "last_position_time": None}
                     
                     slot_assignments = fp.get("slot_assignments", {}) if fp else {}
+                    fp_type = fp.get("type") if fp else None
+                    fp_spacing = fp.get("spacing") if fp else None
 
-                    # ── Settle gate: track when slot_assignments last changed ──
-                    if slot_assignments != self._last_slot_assignments:
+                    # ── Settle gate: track when formation or slots last changed ──
+                    formation_changed = (
+                        slot_assignments != self._last_slot_assignments or
+                        fp_type != getattr(self, "_last_fp_type", None) or
+                        fp_spacing != getattr(self, "_last_fp_spacing", None)
+                    )
+                    if formation_changed:
                         self._last_slot_assignments = dict(slot_assignments)
+                        self._last_fp_type = fp_type
+                        self._last_fp_spacing = fp_spacing
                         self._last_slot_change_time = now
                         # Reset HOLD memos when the formation itself changes
                         self._hold_logged.clear()
