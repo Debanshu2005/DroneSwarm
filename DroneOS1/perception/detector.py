@@ -67,6 +67,11 @@ class GarbageDetector:
             self._available = False
             return False
 
+    async def ensure_loaded(self) -> bool:
+        """Asynchronously ensure weights/model are loaded in the dedicated worker thread."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self._executor, self.load)
+
     def _sync_predict(self, image) -> List[Detection]:
         if not self.load() or self._model is None:
             return []

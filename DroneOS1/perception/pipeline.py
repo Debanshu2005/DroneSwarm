@@ -97,19 +97,27 @@ class PerceptionPipeline:
 
     async def _step(self) -> None:
         """Single frame iteration: gate, acquire, infer, geolocate, aggregate, broadcast."""
-        # 1. Detector load check: if load returns False, log error and terminate loop
-        if hasattr(self.detector, "load"):
-            load_fn = getattr(self.detector, "load")
-            if callable(load_fn):
-                load_res = load_fn()
-                if asyncio.iscoroutine(load_res):
-                    load_res = await load_res
-                if load_res is False:
-                    if not getattr(self, "_load_failed_logged", False):
-                        logger.error("Perception detector failed to load (missing weights or ultralytics); stopping perception loop.")
-                        self._load_failed_logged = True
-                    self._running = False
-                    return
+        # 1. Detector load check (asynchronous to avoid freezing main asyncio loop)
+        loaded = True
+        if hasattr(self.detector, "ensure_loaded") and callable(self.detector.ensure_loaded):
+            res = self.detector.ensure_loaded()
+            if asyncio.iscoroutine(res):
+                loaded = await res
+            else:
+                loaded = res
+        elif hasattr(self.detector, "load") and callable(self.detector.load):
+            res = self.detector.load()
+            if asyncio.iscoroutine(res):
+                loaded = await res
+            else:
+                loaded = res
+
+        if loaded is False:
+            if not getattr(self, "_load_failed_logged", False):
+                logger.error("Perception detector failed to load (missing weights or ultralytics); stopping perception loop.")
+                self._load_failed_logged = True
+            self._running = False
+            return
 
         # 2. Early telemetry gating BEFORE acquiring a frame
         pre_telem = await self.fc.get_telemetry()
