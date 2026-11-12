@@ -61,3 +61,4 @@ console.log('CONTRACT_OK');
     )
     assert proc.returncode == 0, f"Node process failed:\nSTDOUT: {proc.stdout}\nSTDERR: {proc.stderr}"
     assert "CONTRACT_OK" in proc.stdout
+

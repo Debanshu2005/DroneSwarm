@@ -95,3 +95,4 @@ def test_ml_pipeline_cpu_smoke(tmp_path):
     dets = asyncio.run(detector.detect(test_img))
     assert isinstance(dets, list)
     detector.close()
+

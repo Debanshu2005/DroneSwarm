@@ -116,3 +116,4 @@ When multiple drones in the swarm observe the same ground target:
 2. **AirSim Domain Gap**: AirSim's default Unreal Engine environments contain clean, pristine terrain textures with zero litter. To test and demonstrate the end-to-end perception, geolocation, and mapping flow in simulation, use `ImageFolderSource` replay mode (which flags all detections as `synthetic=True`).
 3. **Geolocation Drift**: Flat-ground projection assumes ground elevation equals the launch home elevation and relies on barometric/GPS relative altitude. Real-world GPS drift and sensor latency will introduce small positional offsets, which the 2.5 m merge radius accommodates.
 4. **Empirical Metrics**: Only report mAP and precision numbers obtained from actual test split evaluation runs after fine-tuning.
+
