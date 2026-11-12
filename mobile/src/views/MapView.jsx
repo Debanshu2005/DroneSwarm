@@ -3,10 +3,11 @@ import { useDroneContext } from '../context/DroneContext';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, Tooltip, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { AlertCircle, Crosshair, Layers, Navigation } from 'lucide-react';
+import { AlertCircle, Crosshair, Layers, Navigation, Trash2 } from 'lucide-react';
 import { useDeviceLocation } from '../hooks/useDeviceLocation';
 import { DEFAULT_MAP_CENTER, DIGITAL_SKY_AIRSPACE_URL, resolveAirspaceZone } from '../utils/airspace';
 import AirspaceZonePanel from '../components/AirspaceZonePanel';
+import GarbageLayer from '../components/GarbageLayer';
 import { calculateDistance } from '../utils/geoUtils';
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -72,10 +73,11 @@ function RecenterAutomatically({ center }) {
 }
 
 export default function MapView() {
-  const { drones, selectedDrones, swarmState } = useDroneContext();
+  const { drones, selectedDrones, swarmState, garbage, dismissGarbage, clearGarbage } = useDroneContext();
   const [mapStyle, setMapStyle] = useState('satellite');
   const [centerTarget, setCenterTarget] = useState(null);
   const [showFormation, setShowFormation] = useState(true);
+  const [showGarbage, setShowGarbage] = useState(true);
   const location = useDeviceLocation();
   const userLocation = location.coords;
 
@@ -163,6 +165,26 @@ export default function MapView() {
                 <button className={`secondary-btn compact ${showFormation ? 'active' : ''}`} onClick={() => setShowFormation(!showFormation)} title="Toggle Formation">
                    <Navigation size={18}/> {showFormation ? 'Hide Formation' : 'Show Formation'}
                 </button>
+            )}
+            <button
+               className={`secondary-btn compact ${showGarbage ? 'active' : ''}`}
+               onClick={() => setShowGarbage(!showGarbage)}
+               title="Toggle Garbage Markers"
+            >
+               <Trash2 size={16}/> Garbage ({Object.keys(garbage || {}).length})
+            </button>
+            {Object.keys(garbage || {}).length > 0 && (
+               <button
+                  className="secondary-btn compact"
+                  onClick={() => {
+                     if (window.confirm("Clear all detected garbage markers?")) {
+                        clearGarbage();
+                     }
+                  }}
+                  title="Clear Garbage Markers"
+               >
+                  Clear
+               </button>
             )}
             <button className="secondary-btn compact" onClick={location.requestLocation} title="Request GPS">
                <Navigation size={18}/> GPS
@@ -286,6 +308,8 @@ export default function MapView() {
                     </React.Fragment>
                 );
             })}
+
+            {showGarbage && <GarbageLayer garbage={garbage} onDismiss={dismissGarbage} />}
          </MapContainer>
       </div>
 

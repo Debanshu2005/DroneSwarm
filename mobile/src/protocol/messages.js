@@ -32,6 +32,7 @@ export const MessageType = {
     DIAGNOSTICS: "diagnostics",
     TEST_INJECT: "test_inject",
     TERMINAL_COMMAND: "terminal_command",
+    DETECTION: "detection",
 };
 
 export const CommandAction = {

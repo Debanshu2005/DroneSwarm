@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { MultiWebSocketManager } from '../networking/MultiWebSocketManager';
 import { MessageType, CommandAction, ControlMessage, EmergencyMessage, HeartbeatMessage, TestInjectMessage, ParamRequestMessage, TerminalCommandMessage } from '../protocol/messages';
 import { evaluateDroneHealth, evaluateTelemetryFreshness } from '../utils/DroneHealth';
+import { mergeDetections } from '../utils/garbage';
 
 const DroneContext = createContext();
 
@@ -42,6 +43,71 @@ export const DroneProvider = ({ children }) => {
   const [testMode, setTestMode] = useState(() => safeStorageGet("PhoneOS_TestMode", "false") === "true");
   const [indoorMode, setIndoorMode] = useState(() => safeStorageGet("PhoneOS_IndoorMode", "false") === "true");
   const [eventLog, setEventLog] = useState([]);
+
+  // Garbage Detection State
+  const [garbage, setGarbage] = useState(() => {
+    try {
+      const stored = safeStorageGet("PhoneOS_Garbage", null);
+      return stored ? JSON.parse(stored) : {};
+    } catch (e) {
+      console.warn("Failed to parse stored PhoneOS_Garbage:", e);
+      return {};
+    }
+  });
+
+  const [dismissedGarbageIds, setDismissedGarbageIds] = useState(() => {
+    try {
+      const stored = safeStorageGet("PhoneOS_DismissedGarbage", null);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch (e) {
+      return new Set();
+    }
+  });
+
+  useEffect(() => {
+    try {
+      safeStorageSet("PhoneOS_Garbage", JSON.stringify(garbage));
+    } catch (e) {
+      console.warn("Failed to persist PhoneOS_Garbage:", e);
+    }
+  }, [garbage]);
+
+  const dismissedGarbageIdsRef = useRef(dismissedGarbageIds);
+  useEffect(() => {
+    dismissedGarbageIdsRef.current = dismissedGarbageIds;
+  }, [dismissedGarbageIds]);
+
+  useEffect(() => {
+    try {
+      safeStorageSet("PhoneOS_DismissedGarbage", JSON.stringify([...dismissedGarbageIds]));
+    } catch (e) {
+      console.warn("Failed to persist PhoneOS_DismissedGarbage:", e);
+    }
+  }, [dismissedGarbageIds]);
+
+  const dismissGarbage = (id) => {
+    setDismissedGarbageIds(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setGarbage(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    addLog(`Dismissed garbage marker ${id}`, 'INFO', 'PHONEOS', null, 'GARBAGE_DISMISSED');
+  };
+
+  const clearGarbage = () => {
+    setGarbage({});
+    try {
+      safeStorageSet("PhoneOS_Garbage", JSON.stringify({}));
+    } catch (e) {
+      console.warn("Failed to clear PhoneOS_Garbage:", e);
+    }
+    addLog(`Cleared all garbage markers`, 'INFO', 'PHONEOS', null, 'GARBAGE_CLEARED');
+  };
   
   // Advanced Test Overrides
   const [testOverrides, setTestOverrides] = useState({});
@@ -432,6 +498,36 @@ export const DroneProvider = ({ children }) => {
       });
     });
 
+    manager.subscribe(MessageType.DETECTION, (msg) => {
+      if (!msg || !Array.isArray(msg.detections)) return;
+      const droneId = msg.sender_id || "unknown";
+      const isSynthetic = Boolean(msg.synthetic);
+      const now = Date.now();
+
+      setGarbage(prev => {
+        for (const item of msg.detections) {
+          if (!prev[item.id] || item.status === 'new') {
+            const confPct = Math.round((Number(item.confidence) || 0) * 100);
+            addLog(
+              `Garbage detected by ${droneId}: ${item.label || 'rubbish'} (${confPct}% conf)${isSynthetic ? ' [SYNTHETIC]' : ''}`,
+              'INFO',
+              'PERCEPTION',
+              droneId,
+              'GARBAGE_NEW'
+            );
+          }
+        }
+        return mergeDetections(
+          prev,
+          msg.detections,
+          droneId,
+          now,
+          dismissedGarbageIdsRef.current,
+          isSynthetic
+        );
+      });
+    });
+
     setWsManager(manager);
 
     const hbInterval = setInterval(() => {
@@ -559,7 +655,8 @@ export const DroneProvider = ({ children }) => {
     wsManager, isConnected, drones, selectedDrones, swarmState,
     wsUrl, setWsUrl, relayAuthToken, setRelayAuthToken, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs, connectionError,
     sendCommand, sendTerminalCommand, sendParamRequest, toggleSelect, selectAll, selectNone, selectOnly, addLog,
-    testOverrides, setTestOverride, clearTestOverrides, injectFailure, testSessionLog, clearTestSessionLog
+    testOverrides, setTestOverride, clearTestOverrides, injectFailure, testSessionLog, clearTestSessionLog,
+    garbage, dismissGarbage, clearGarbage
   };
 
   return <DroneContext.Provider value={value}>{children}</DroneContext.Provider>;
