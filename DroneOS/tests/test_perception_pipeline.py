@@ -28,6 +28,9 @@ class FakeDetector:
         self.detections = detections if detections is not None else []
         self.error_on_detect = error_on_detect
 
+    def load(self):
+        return True
+
     async def detect(self, image):
         if self.error_on_detect:
             raise RuntimeError("Simulated inference engine crash")
@@ -176,4 +179,104 @@ async def test_pipeline_detector_exception_resilience():
     # Calling _step directly handles detector exception cleanly
     await pipeline._step()
     network.broadcast_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_start_and_stop_lifecycle():
+    """Verify that start() launches run_loop() in background, runs _step, and stop() cleanly cancels."""
+    dummy_img = np.zeros((720, 1280, 3), dtype=np.uint8)
+    frame_src = FakeFrameSource(Frame(image=dummy_img, timestamp=100.0))
+    detector = FakeDetector([Detection(bbox_xyxy=(600, 350, 640, 370), confidence=0.9, label="rubbish")])
+    fc = AsyncMock()
+    fc.get_telemetry.return_value = make_valid_telemetry()
+    network = AsyncMock()
+
+    cfg = PerceptionConfig(enabled=True, max_fps=20.0, min_hits=1)
+    pipeline = PerceptionPipeline("drone1", frame_src, detector, fc, network, cfg)
+
+    await pipeline.start()
+    assert pipeline._running is True
+    assert pipeline._task is not None
+
+    await asyncio.sleep(0.3)
+
+    assert fc.get_telemetry.call_count >= 1
+    assert network.broadcast_message.call_count >= 1
+
+    await pipeline.stop()
+    assert pipeline._running is False
+    assert pipeline._task.done()
+    assert pipeline._task.cancelled() or pipeline._task.exception() is None
+
+
+@pytest.mark.asyncio
+async def test_pipeline_direct_run_loop_task():
+    """Verify that awaiting run_loop() directly in a task sets _running and processes frames."""
+    dummy_img = np.zeros((720, 1280, 3), dtype=np.uint8)
+    frame_src = FakeFrameSource(Frame(image=dummy_img, timestamp=100.0))
+    detector = FakeDetector([Detection(bbox_xyxy=(600, 350, 640, 370), confidence=0.9, label="rubbish")])
+    fc = AsyncMock()
+    fc.get_telemetry.return_value = make_valid_telemetry()
+    network = AsyncMock()
+
+    cfg = PerceptionConfig(enabled=True, max_fps=20.0, min_hits=1)
+    pipeline = PerceptionPipeline("drone1", frame_src, detector, fc, network, cfg)
+
+    task = asyncio.create_task(pipeline.run_loop())
+    await asyncio.sleep(0.3)
+
+    assert pipeline._running is True
+    assert fc.get_telemetry.call_count >= 1
+    assert network.broadcast_message.call_count >= 1
+
+    await pipeline.stop()
+    if not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    assert task.done()
+    assert task.cancelled() or task.exception() is None
+
+
+@pytest.mark.asyncio
+async def test_pipeline_detector_load_failure_stops_loop():
+    """If detector.load() returns False, pipeline logs error and stops loop without capturing frames."""
+    frame_src = AsyncMock()
+    detector = FakeDetector()
+    detector.load = MagicMock(return_value=False)
+    fc = AsyncMock()
+    fc.get_telemetry.return_value = make_valid_telemetry()
+    network = AsyncMock()
+
+    cfg = PerceptionConfig(enabled=True, max_fps=20.0)
+    pipeline = PerceptionPipeline("drone1", frame_src, detector, fc, network, cfg)
+
+    task = asyncio.create_task(pipeline.run_loop())
+    await asyncio.sleep(0.1)
+
+    assert pipeline._running is False
+    assert task.done()
+    assert task.exception() is None
+    frame_src.get_frame.assert_not_called()
+    network.broadcast_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_gating_before_frame_capture():
+    """Telemetry gating must prevent frame capture when drone is disarmed or invalid."""
+    frame_src = AsyncMock()
+    detector = FakeDetector()
+    fc = AsyncMock()
+    fc.get_telemetry.return_value = make_valid_telemetry(armed_state="DISARMED")
+    network = AsyncMock()
+
+    cfg = PerceptionConfig(enabled=True, min_hits=1)
+    pipeline = PerceptionPipeline("drone1", frame_src, detector, fc, network, cfg)
+
+    await pipeline._step()
+    frame_src.get_frame.assert_not_called()
+    network.broadcast_message.assert_not_called()
+
 
