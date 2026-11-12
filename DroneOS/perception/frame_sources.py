@@ -49,9 +49,21 @@ class AirSimFrameSource(FrameSource):
         self._connected = False
         self.is_synthetic = False
 
+    def _discard_client(self) -> None:
+        """Safely close and discard client reference before reconnecting or on shutdown."""
+        if self._client is not None:
+            try:
+                if hasattr(self._client, "close"):
+                    self._client.close()
+            except Exception:
+                pass
+            self._client = None
+
     def _ensure_connected(self) -> bool:
         if self._connected and self._client is not None:
             return True
+        # Close / discard old client before reconnecting
+        self._discard_client()
         try:
             import airsim
             self._client = airsim.MultirotorClient(ip=self.host, port=self.port, timeout_value=3.0)
@@ -61,7 +73,7 @@ class AirSimFrameSource(FrameSource):
             return True
         except Exception as e:
             logger.debug("AirSimFrameSource connection attempt failed: %s", e)
-            self._client = None
+            self._discard_client()
             self._connected = False
             return False
 
@@ -91,6 +103,7 @@ class AirSimFrameSource(FrameSource):
         except Exception as e:
             logger.debug("AirSim image acquisition error: %s", e)
             self._connected = False
+            self._discard_client()
             return None
 
     async def get_frame(self) -> Optional[Frame]:
@@ -98,7 +111,7 @@ class AirSimFrameSource(FrameSource):
 
     async def close(self) -> None:
         self._connected = False
-        self._client = None
+        self._discard_client()
 
 
 class OpenCVFrameSource(FrameSource):
