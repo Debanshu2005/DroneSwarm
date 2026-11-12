@@ -15,8 +15,13 @@ mobile/www/
 # Ignore large archives and logs
 *.tar.gz
 *.txt
+!requirements*.txt
 *.json
 !sim/airsim/settings.json
 .pytest_cache/
 graphify-out/
 logs/
+ml/data/
+ml/runs/
+yolo*.pt
+
