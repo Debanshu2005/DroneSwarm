@@ -50,11 +50,14 @@ ml/data/uavvaste_yolo/
 
 Fine-tune pretrained weights on the prepared dataset:
 ```bash
-# Standard training (fine-tuning from pretrained weights):
-python ml/uavvaste/train.py --data ml/data/uavvaste_yolo/dataset.yaml --imgsz 1280 --epochs 100 --batch -1
+# Standard training (fine-tuning from pretrained weights, default --workers 0 for Windows memory safety):
+python ml/uavvaste/train.py --data ml/data/uavvaste_yolo/dataset.yaml --imgsz 1280 --epochs 100 --batch -1 --workers 0
+
+# For systems with constrained VRAM / RAM (e.g. GTX 1650 4GB / 8GB RAM):
+python ml/uavvaste/train.py --batch 2 --workers 0 --imgsz 1280
 
 # Train and install weights directly to models/garbage.pt:
-python ml/uavvaste/train.py --install
+python ml/uavvaste/train.py --install --batch 2 --workers 0
 
 # Optional export to ONNX or NCNN:
 python ml/uavvaste/train.py --export onnx

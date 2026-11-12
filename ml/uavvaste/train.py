@@ -31,11 +31,13 @@ def train(
     epochs: int = 100,
     batch: int = -1,
     patience: int = 30,
+    workers: int = 0,
     device: Optional[str] = None,
     project: str = "ml/runs",
     name: str = "uavvaste",
     export_format: Optional[str] = None,
     install: bool = False,
+    cache: bool = False,
 ):
     """Fine-tune YOLO model on UAVVaste dataset and evaluate on test split."""
     data_path = Path(data).resolve()
@@ -52,6 +54,8 @@ def train(
         "imgsz": imgsz,
         "batch": batch,
         "patience": patience,
+        "workers": workers,
+        "cache": cache,
         "flipud": 0.5,
         "fliplr": 0.5,
         "degrees": 10.0,
@@ -71,7 +75,7 @@ def train(
     print("\n" + "=" * 60)
     print("Evaluating trained model on TEST split...")
     print("=" * 60)
-    val_results = model.val(data=str(data_path), split="test")
+    val_results = model.val(data=str(data_path), split="test", workers=workers)
 
     # Print metrics
     box_metrics = getattr(val_results, "box", None)
@@ -121,7 +125,7 @@ def train(
     return model, val_results
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Train YOLO detector on UAVVaste dataset.")
     parser.add_argument(
         "--data",
@@ -138,6 +142,12 @@ def main():
     parser.add_argument("--imgsz", type=int, default=1280, help="Training image size (default: 1280)")
     parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs (default: 100)")
     parser.add_argument("--batch", type=int, default=-1, help="Batch size (-1 for auto)")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help="Number of DataLoader worker processes (default: 0 for Windows memory safety)",
+    )
     parser.add_argument("--patience", type=int, default=30, help="Early stopping patience")
     parser.add_argument("--device", type=str, default=None, help="Device (cpu, cuda:0, etc.)")
     parser.add_argument("--project", type=str, default="ml/runs", help="Project save directory")
@@ -154,14 +164,19 @@ def main():
         action="store_true",
         help="Install best.pt weights to models/garbage.pt upon completion",
     )
+    return parser
 
-    args = parser.parse_args()
+
+def main(argv=None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
     train(
         data=args.data,
         model_name=args.model,
         imgsz=args.imgsz,
         epochs=args.epochs,
         batch=args.batch,
+        workers=args.workers,
         patience=args.patience,
         device=args.device,
         project=args.project,
@@ -172,5 +187,7 @@ def main():
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
     main()
 
