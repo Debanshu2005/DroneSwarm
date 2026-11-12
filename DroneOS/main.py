@@ -127,6 +127,23 @@ class DroneOSApp:
             storage_dir = "missions/"
             
         self.node_id = self.drone_cfg.drone_id
+
+        # Perception Config
+        from DroneOS.shared.config.models import PerceptionConfig
+        perception_file = config_dir / "perception.yaml"
+        if perception_file.exists():
+            try:
+                self.perception_cfg = load_yaml_config(perception_file, PerceptionConfig)
+            except Exception as e:
+                logger.warning(f"Failed to load perception config: {e}. Defaulting to disabled.")
+                self.perception_cfg = PerceptionConfig(enabled=False)
+        else:
+            self.perception_cfg = PerceptionConfig(enabled=False)
+
+        import os
+        env_perc = os.environ.get("DRONEOS_PERCEPTION")
+        if env_perc is not None:
+            self.perception_cfg.enabled = env_perc.strip().lower() in ("1", "true", "yes")
         
         # Configuration Validation
         from DroneOS.shared.config.models import AppConfig
@@ -134,7 +151,8 @@ class DroneOSApp:
             drone=self.drone_cfg,
             network=self.network_cfg,
             flight=self.flight_cfg,
-            mission=getattr(self, 'mission_cfg', None)
+            mission=getattr(self, 'mission_cfg', None),
+            perception=self.perception_cfg
         )
         config_errors = ConfigurationValidator.validate(app_config)
         if config_errors:
@@ -266,6 +284,63 @@ class DroneOSApp:
             state_store=self.state_store
         )
         
+        # Perception Pipeline Wiring
+        self.perception_pipeline = None
+        if getattr(self, 'perception_cfg', None) and self.perception_cfg.enabled:
+            try:
+                from DroneOS.perception.detector import GarbageDetector
+                from DroneOS.perception.frame_sources import AirSimFrameSource, OpenCVFrameSource, ImageFolderSource
+                from DroneOS.perception.pipeline import PerceptionPipeline
+
+                repo_root = Path(__file__).resolve().parent.parent
+                weights_path = Path(self.perception_cfg.weights)
+                if not weights_path.is_absolute():
+                    weights_path = repo_root / weights_path
+
+                src_type = self.perception_cfg.source.lower()
+                cam_cfg = self.perception_cfg.camera
+                if src_type == "airsim":
+                    frame_src = AirSimFrameSource(
+                        vehicle_name=self.drone_cfg.vehicle_name,
+                        host=self.flight_cfg.airsim_host,
+                        port=self.flight_cfg.airsim_port,
+                        camera_name=cam_cfg.airsim_camera,
+                    )
+                elif src_type == "opencv":
+                    frame_src = OpenCVFrameSource(device=cam_cfg.device)
+                elif src_type == "folder":
+                    img_dir = cam_cfg.image_dir or str(repo_root / "ml" / "data" / "demo_images")
+                    frame_src = ImageFolderSource(folder_path=img_dir)
+                else:
+                    logger.warning("Unknown perception source '%s'; defaulting to AirSimFrameSource", src_type)
+                    frame_src = AirSimFrameSource(
+                        vehicle_name=self.drone_cfg.vehicle_name,
+                        host=self.flight_cfg.airsim_host,
+                        port=self.flight_cfg.airsim_port,
+                        camera_name=cam_cfg.airsim_camera,
+                    )
+
+                detector = GarbageDetector(
+                    weights_path=str(weights_path),
+                    imgsz=self.perception_cfg.imgsz,
+                    confidence=self.perception_cfg.confidence,
+                    iou=self.perception_cfg.iou,
+                    device=self.perception_cfg.device,
+                    classes=self.perception_cfg.classes,
+                )
+                self.perception_pipeline = PerceptionPipeline(
+                    drone_id=self.node_id,
+                    frame_source=frame_src,
+                    detector=detector,
+                    flight_controller=self.flight_controller,
+                    network_adapter=self.network,
+                    config=self.perception_cfg,
+                )
+                logger.info("Perception pipeline initialized.")
+            except Exception as e:
+                logger.exception("Failed to initialize perception pipeline: %s", e)
+                self.perception_pipeline = None
+
         self.diagnostics = SystemHealthReporter(
             self.network,
             self.flight_controller,
@@ -616,6 +691,8 @@ class DroneOSApp:
             self._dispatch_task(self.coordination_manager.run())
         # Start publisher loops
         self.telemetry_publisher.start()
+        if getattr(self, 'perception_pipeline', None) and getattr(self, 'perception_cfg', None) and self.perception_cfg.enabled:
+            self._dispatch_task(self.perception_pipeline.run_loop())
         
         from DroneOS.shared.protocol.messages import DroneJoinMessage, DroneIdentityMessage
         import time
@@ -670,11 +747,17 @@ class DroneOSApp:
             task.cancel()
         self._active_tasks.clear()
         
-        if hasattr(self, 'remote_log_handler'):
+        if getattr(self, 'remote_log_handler', None):
             self.remote_log_handler.stop()
             import logging
             logging.getLogger().removeHandler(self.remote_log_handler)
         
+        if getattr(self, 'perception_pipeline', None):
+            try:
+                await self.perception_pipeline.stop()
+            except Exception as e:
+                logger.debug(f"Perception pipeline stop error: {e}")
+
         self.telemetry_publisher.stop()
         self.health_monitor.stop()
         self.battery_monitor.stop()

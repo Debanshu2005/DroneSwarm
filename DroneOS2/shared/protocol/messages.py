@@ -35,6 +35,7 @@ class MessageType(str, Enum):
     DIAGNOSTICS = "diagnostics"
     TEST_INJECT = "test_inject"
     TERMINAL_COMMAND = "terminal_command"
+    DETECTION = "detection"
 
 class BaseMessage(BaseModel):
     msg_type: MessageType
@@ -253,3 +254,20 @@ class ParamResponseMessage(BaseMessage):
 class DiagnosticsMessage(BaseMessage):
     msg_type: MessageType = MessageType.DIAGNOSTICS
     diagnostics: Dict[str, Any]
+
+class DetectionItem(BaseModel):
+    id: str
+    label: str
+    confidence: float
+    lat: float
+    lon: float
+    hits: int
+    status: str  # "new" | "update"
+    altitude_agl: Optional[float] = None
+
+class DetectionMessage(BaseMessage):
+    msg_type: MessageType = MessageType.DETECTION
+    detections: List[DetectionItem] = Field(default_factory=list)
+    synthetic: bool = False
+    frame_id: int = 0
+

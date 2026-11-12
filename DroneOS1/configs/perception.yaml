@@ -1,0 +1,23 @@
+enabled: false
+source: "airsim"
+weights: "models/garbage.pt"
+imgsz: 1280
+confidence: 0.35
+iou: 0.5
+device: null
+classes: null
+max_fps: 1.0
+min_altitude_m: 2.0
+max_tilt_deg: 20.0
+max_range_m: 120.0
+ground_elevation_m: 0.0
+merge_radius_m: 2.5
+min_hits: 2
+update_interval_s: 10.0
+max_tracks: 2000
+camera:
+  hfov_deg: 90.0
+  mount_pitch_deg: 90.0
+  airsim_camera: "bottom_center"
+  device: 0
+  image_dir: null

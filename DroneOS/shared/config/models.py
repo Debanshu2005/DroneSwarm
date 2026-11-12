@@ -101,6 +101,33 @@ class GSConfig(BaseModel):
     network: NetworkConfig
     logging: LoggingConfig
 
+class CameraConfig(BaseModel):
+    hfov_deg: float = 90.0
+    mount_pitch_deg: float = 90.0
+    airsim_camera: str = "bottom_center"
+    device: Any = 0
+    image_dir: Optional[str] = None
+
+class PerceptionConfig(BaseModel):
+    enabled: bool = False
+    source: str = "airsim"  # airsim | opencv | folder
+    weights: str = "models/garbage.pt"
+    imgsz: int = 1280
+    confidence: float = 0.35
+    iou: float = 0.5
+    device: Optional[str] = None
+    classes: Optional[List[str]] = None
+    max_fps: float = 1.0
+    min_altitude_m: float = 2.0
+    max_tilt_deg: float = 20.0
+    max_range_m: float = 120.0
+    ground_elevation_m: float = 0.0
+    merge_radius_m: float = 2.5
+    min_hits: int = 2
+    update_interval_s: float = 10.0
+    max_tracks: int = 2000
+    camera: CameraConfig = CameraConfig()
+
 class AppConfig(BaseModel):
     drone: Optional[DroneConfig] = None
     network: Optional[NetworkConfig] = None
@@ -110,3 +137,4 @@ class AppConfig(BaseModel):
     mission: Optional[MissionConfig] = None
     movement: Optional[MovementConfig] = None
     formation: Optional[FormationConfig] = None
+    perception: Optional[PerceptionConfig] = None
