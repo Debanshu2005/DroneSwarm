@@ -31,6 +31,9 @@ class FakeDetector:
     def load(self):
         return True
 
+    async def ensure_loaded(self):
+        return self.load()
+
     async def detect(self, image):
         if self.error_on_detect:
             raise RuntimeError("Simulated inference engine crash")
@@ -278,5 +281,68 @@ async def test_pipeline_gating_before_frame_capture():
     await pipeline._step()
     frame_src.get_frame.assert_not_called()
     network.broadcast_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_async_ensure_loaded_does_not_block_event_loop():
+    """Verify that detector loading in a background thread does not freeze the asyncio event loop."""
+    import time
+    from DroneOS.perception.detector import GarbageDetector
+
+    class SlowFakeDetector(GarbageDetector):
+        def __init__(self):
+            super().__init__(weights_path="models/garbage.pt")
+
+        def load(self):
+            time.sleep(0.5)
+            return True
+
+        async def detect(self, image):
+            return []
+
+    dummy_img = np.zeros((720, 1280, 3), dtype=np.uint8)
+    frame_src = FakeFrameSource(Frame(image=dummy_img, timestamp=100.0))
+    detector = SlowFakeDetector()
+    fc = AsyncMock()
+    fc.get_telemetry.return_value = make_valid_telemetry()
+    network = AsyncMock()
+
+    cfg = PerceptionConfig(enabled=True, max_fps=20.0, min_hits=1)
+    pipeline = PerceptionPipeline("drone1", frame_src, detector, fc, network, cfg)
+
+    # 20 ms ticker task to measure event loop freeze
+    tick_gaps = []
+    ticker_running = True
+
+    async def ticker():
+        last_time = time.monotonic()
+        while ticker_running:
+            await asyncio.sleep(0.02)
+            now = time.monotonic()
+            tick_gaps.append(now - last_time)
+            last_time = now
+
+    ticker_task = asyncio.create_task(ticker())
+
+    try:
+        await pipeline.start()
+        # Wait 0.7s so load() (0.5s) completes in the executor while the ticker runs
+        await asyncio.sleep(0.7)
+    finally:
+        ticker_running = False
+        await pipeline.stop()
+        if not ticker_task.done():
+            ticker_task.cancel()
+            try:
+                await ticker_task
+            except asyncio.CancelledError:
+                pass
+
+    assert len(tick_gaps) >= 10, f"Expected multiple ticks, got {len(tick_gaps)}"
+    max_gap = max(tick_gaps)
+    # If load() ran synchronously on the event loop, max_gap would be >= 0.5 s.
+    # Running via ensure_loaded in self._executor keeps tick gaps well under 0.5 s (< 0.20 s).
+    assert max_gap < 0.20, f"Event loop frozen: max tick gap was {max_gap:.3f} s (expected < 0.20 s)"
+
 
 

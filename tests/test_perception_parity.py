@@ -18,6 +18,7 @@ def test_perception_imports_parity(pkg_name):
 
     detector = __import__(f"{pkg_name}.perception.detector", fromlist=["GarbageDetector"])
     assert hasattr(detector, "GarbageDetector")
+    assert hasattr(detector.GarbageDetector, "ensure_loaded")
 
     sources = __import__(f"{pkg_name}.perception.frame_sources", fromlist=["AirSimFrameSource", "OpenCVFrameSource", "ImageFolderSource"])
     assert hasattr(sources, "AirSimFrameSource")
