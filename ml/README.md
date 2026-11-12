@@ -19,15 +19,20 @@ git clone https://github.com/UAVVaste/UAVVaste ml/data/UAVVaste
 ```
 The repository includes `annotations/annotations.json` containing 772 image metadata entries and 3,718 bounding-box annotations for class `rubbish`.
 
-### Step 2: Prepare Dataset and Download Images
-Run the preparation script to convert annotations to YOLO format, group frames by flight, partition into train/val/test splits without leakage, and download the full-resolution Flickr images:
+### Step 2: Prepare Dataset
+Run the preparation script to convert annotations to YOLO format, apply the official 540/116/116 train/val/test split, validate images and bounding boxes, and organize the dataset:
 
 ```bash
-# Full preparation with multithreaded download (8 workers):
-python ml/uavvaste/prepare_dataset.py --workers 8 --split 0.70 0.15 0.15 --seed 0
+# Using the extracted official dataset (default paths):
+python ml/uavvaste/prepare_dataset.py
 
-# Or generate labels and split files only (skip image downloading):
-python ml/uavvaste/prepare_dataset.py --skip-download
+# With custom paths if needed:
+python ml/uavvaste/prepare_dataset.py `
+  --images-dir ml/data/uavvaste_official_extracted/images `
+  --annotations ml/data/uavvaste_official_extracted/annotations/annotations.json `
+  --split-file ml/data/uavvaste_official_extracted/annotations/train_val_test_distribution_file.json `
+  --out ml/data/uavvaste_yolo `
+  --workers 8
 ```
 
 Output directory layout:
