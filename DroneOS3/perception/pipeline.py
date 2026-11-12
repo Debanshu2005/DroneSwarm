@@ -73,6 +73,7 @@ class PerceptionPipeline:
 
     async def run_loop(self) -> None:
         """Main periodic perception processing loop."""
+        self._running = True
         logger.info("Perception pipeline loop started (max_fps=%.1f).", self.config.max_fps)
         interval = 1.0 / max(0.1, self.config.max_fps)
 
@@ -95,41 +96,70 @@ class PerceptionPipeline:
                 break
 
     async def _step(self) -> None:
-        """Single frame iteration: acquire, gate, infer, geolocate, aggregate, broadcast."""
-        # 1. Acquire frame
-        frame = await self.frame_source.get_frame()
-        if frame is None or frame.image is None:
+        """Single frame iteration: gate, acquire, infer, geolocate, aggregate, broadcast."""
+        # 1. Detector load check: if load returns False, log error and terminate loop
+        if hasattr(self.detector, "load"):
+            load_fn = getattr(self.detector, "load")
+            if callable(load_fn):
+                load_res = load_fn()
+                if asyncio.iscoroutine(load_res):
+                    load_res = await load_res
+                if load_res is False:
+                    if not getattr(self, "_load_failed_logged", False):
+                        logger.error("Perception detector failed to load (missing weights or ultralytics); stopping perception loop.")
+                        self._load_failed_logged = True
+                    self._running = False
+                    return
+
+        # 2. Early telemetry gating BEFORE acquiring a frame
+        pre_telem = await self.fc.get_telemetry()
+        if pre_telem is None:
             return
 
-        # 2. IMMEDIATELY take telemetry snapshot after frame capture
-        telem = await self.fc.get_telemetry()
-        if telem is None:
-            return
-
-        # 3. Gating checks
         # Must be armed
-        is_armed = getattr(telem, "armed_state", None) == "ARMED"
+        is_armed = getattr(pre_telem, "armed_state", None) == "ARMED"
         if not is_armed:
             return
 
         # GPS fix valid
-        if not getattr(telem, "gps_valid", False):
+        if not getattr(pre_telem, "gps_valid", False):
             return
 
         # Altitude above minimum
-        alt = float(getattr(telem, "altitude", 0.0) or 0.0)
+        alt = float(getattr(pre_telem, "altitude", 0.0) or 0.0)
         if alt < self.config.min_altitude_m:
             return
 
         # Tilt angle limits (|roll|, |pitch| <= max_tilt_deg)
-        roll = float(getattr(telem, "roll", 0.0) or 0.0)
-        pitch = float(getattr(telem, "pitch", 0.0) or 0.0)
+        roll = float(getattr(pre_telem, "roll", 0.0) or 0.0)
+        pitch = float(getattr(pre_telem, "pitch", 0.0) or 0.0)
         if abs(roll) > self.config.max_tilt_deg or abs(pitch) > self.config.max_tilt_deg:
+            return
+
+        pre_lat = getattr(pre_telem, "latitude", None)
+        pre_lon = getattr(pre_telem, "longitude", None)
+        if pre_lat is None or pre_lon is None or (pre_lat == 0.0 and pre_lon == 0.0):
+            return
+
+        # 3. Acquire frame
+        frame = await self.frame_source.get_frame()
+        if frame is None or frame.image is None:
+            return
+
+        # 4. Fresh telemetry snapshot immediately after capture for geolocation
+        telem = await self.fc.get_telemetry()
+        if telem is None:
             return
 
         drone_lat = getattr(telem, "latitude", None)
         drone_lon = getattr(telem, "longitude", None)
         if drone_lat is None or drone_lon is None or (drone_lat == 0.0 and drone_lon == 0.0):
+            return
+
+        alt = float(getattr(telem, "altitude", 0.0) or 0.0)
+        roll = float(getattr(telem, "roll", 0.0) or 0.0)
+        pitch = float(getattr(telem, "pitch", 0.0) or 0.0)
+        if abs(roll) > self.config.max_tilt_deg or abs(pitch) > self.config.max_tilt_deg:
             return
 
         yaw = float(getattr(telem, "yaw", getattr(telem, "heading", 0.0)) or 0.0)

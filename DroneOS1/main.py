@@ -692,7 +692,7 @@ class DroneOSApp:
         # Start publisher loops
         self.telemetry_publisher.start()
         if getattr(self, 'perception_pipeline', None) and getattr(self, 'perception_cfg', None) and self.perception_cfg.enabled:
-            self._dispatch_task(self.perception_pipeline.run_loop())
+            self._dispatch_task(self.perception_pipeline.start())
         
         from DroneOS1.shared.protocol.messages import DroneJoinMessage, DroneIdentityMessage
         import time

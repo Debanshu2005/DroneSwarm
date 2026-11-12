@@ -12,7 +12,8 @@ max_tilt_deg: 20.0
 max_range_m: 120.0
 ground_elevation_m: 0.0
 merge_radius_m: 2.5
-min_hits: 2
+# min_hits: 1 for replay demos (use 2 for real flights)
+min_hits: 1
 update_interval_s: 10.0
 max_tracks: 2000
 camera:
