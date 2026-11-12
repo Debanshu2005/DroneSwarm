@@ -197,3 +197,4 @@ class ImageFolderSource(FrameSource):
 
     async def get_frame(self) -> Optional[Frame]:
         return await asyncio.to_thread(self._sync_read_next)
+

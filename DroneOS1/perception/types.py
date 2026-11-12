@@ -32,3 +32,4 @@ class PoseSnapshot:
     timestamp: float
     gps_valid: bool
     armed_state: str
+

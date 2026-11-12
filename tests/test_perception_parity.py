@@ -120,3 +120,4 @@ async def test_perception_pipeline_parity(pkg_name):
     broadcasted = network.broadcast_message.await_args[0][0]
     assert broadcasted.sender_id == pkg_name.lower()
     assert len(broadcasted.detections) == 1
+

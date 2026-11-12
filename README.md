@@ -107,6 +107,7 @@ DroneOS runs on the companion computer and acts as the brain of the drone.
 * **Mission Manager:** Handles the storage, progression, and execution of complex multi-waypoint missions.
 * **Swarm Management:** Manages peer discovery and heartbeats for multi-drone operations (supporting up to 4 drones natively).
 * **Decision Engine:** Periodically evaluates telemetry and swarm state to make autonomous movement decisions.
+* **Perception Subsystem:** Non-blocking aerial garbage detector (fine-tuned on the UAVVaste dataset) with flat-ground WGS84 geolocation, multi-frame track aggregation, and swarm marker fusion. See [Garbage Detection Guide](doc/guides/garbage-detection.md).
 
 ### Mobile App (Ground Control Station)
 The PhoneOS GCS is a responsive React-based ground control station.

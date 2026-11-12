@@ -218,3 +218,4 @@ class PerceptionPipeline:
                 frame_id=self._frame_id,
             )
             await self.network.broadcast_message(msg)
+

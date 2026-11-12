@@ -131,3 +131,27 @@ class TelemetryData(BaseModel):
 
 ### 4.5 Peer Heartbeats (`HeartbeatMessage` & `SwarmHeartbeatMessage`)
 Transmitted every `heartbeat_interval` (default: 1.0 s) between drones to maintain the `MembershipView`.
+
+### 4.6 Perception & Detection Message (`DetectionMessage`)
+Emitted by the perception subsystem when static aerial litter or targets are detected, geolocated, and temporally aggregated:
+```python
+class DetectionItem(BaseModel):
+    id: str                        # Persistent track id, e.g. "drone1-g0001"
+    label: str                     # Object classification label (e.g. "rubbish")
+    confidence: float              # Maximum confidence [0.0, 1.0]
+    lat: float                     # Georeferenced WGS84 latitude
+    lon: float                     # Georeferenced WGS84 longitude
+    hits: int                      # Observation count
+    status: str                    # "new" or "update"
+    altitude_agl: Optional[float]  # Drone height above ground at capture (m)
+
+class DetectionMessage(BaseMessage):
+    msg_type: MessageType = MessageType.DETECTION
+    detections: List[DetectionItem] # Batch of aggregated detections (chunked <= 10)
+    synthetic: bool = False         # True when produced by replay / image folder source
+    frame_id: int = 0               # Sequential perception frame identifier
+```
+- **Relay Behavior**: Relayed to the mobile GCS WebSocket without requiring any relay modifications.
+- **Peer Behavior**: Peers silently ignore incoming `DetectionMessage` packets unless subscribed.
+- **Mobile GCS Handling**: Mobile `DroneContext` merges detections into a local reactive store (`PhoneOS_Garbage`), associating multi-drone observations within 2.0 m and displaying confidence-tinted markers on `MapView`.
+

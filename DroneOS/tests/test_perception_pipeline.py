@@ -176,3 +176,4 @@ async def test_pipeline_detector_exception_resilience():
     # Calling _step directly handles detector exception cleanly
     await pipeline._step()
     network.broadcast_message.assert_not_called()
+

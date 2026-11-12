@@ -140,3 +140,4 @@ def test_converter_against_real_annotations():
     assert kept + dropped == 3718
     assert kept == 3718
     assert dropped == 0
+

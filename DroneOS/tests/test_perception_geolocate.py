@@ -160,3 +160,4 @@ def test_wgs84_round_trip():
 
         assert pytest.approx(dn_calc, abs=1e-5) == dn_true
         assert pytest.approx(de_calc, abs=1e-5) == de_true
+

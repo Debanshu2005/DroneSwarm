@@ -159,3 +159,4 @@ def pixel_to_lat_lon(
     dn, de = ned_offset
     lat, lon = meters_to_lat_lon(dn, de, drone_lat, drone_lon)
     return lat, lon, height_agl
+

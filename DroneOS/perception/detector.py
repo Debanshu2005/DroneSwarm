@@ -116,3 +116,4 @@ class GarbageDetector:
     def close(self):
         """Shutdown the inference worker thread."""
         self._executor.shutdown(wait=False)
+

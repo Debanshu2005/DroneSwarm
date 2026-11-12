@@ -201,3 +201,4 @@ class TrackAggregator:
                 del self.tracks[tid]
 
         return emitted_items
+

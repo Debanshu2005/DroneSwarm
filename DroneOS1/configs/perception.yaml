@@ -21,3 +21,4 @@ camera:
   airsim_camera: "bottom_center"
   device: 0
   image_dir: null
+

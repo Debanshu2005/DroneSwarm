@@ -110,3 +110,4 @@ async def test_detection_message_hmac_round_trip(monkeypatch):
     received_msg = callback.await_args[0][0]
     assert isinstance(received_msg, DetectionMessage)
     assert received_msg.detections[0].id == "drone1-g0001"
+

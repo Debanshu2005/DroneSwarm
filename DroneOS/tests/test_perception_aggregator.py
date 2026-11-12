@@ -84,3 +84,4 @@ def test_aggregator_max_tracks_eviction():
     assert "drone1-g0003" in agg.tracks
     assert "drone1-g0004" in agg.tracks
     assert "drone1-g0005" in agg.tracks
+
