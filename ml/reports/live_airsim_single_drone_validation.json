@@ -1,20 +1,133 @@
 {
-  "timestamp": 1794562685.832923,
-  "status": "BLOCKED",
-  "is_genuine_airsim": false,
+  "timestamp": 1794568451.7287552,
+  "status": "FAIL",
+  "is_genuine_airsim": true,
   "stages": {
-    "airsim_rpc_connectivity": "BLOCKED",
-    "vehicle_telemetry_validity": "NOT_TESTED",
-    "camera_frame_acquisition": "NOT_TESTED",
-    "genuine_scene_target_visibility": "NOT_TESTED",
-    "yolo_inference_execution": "NOT_TESTED",
-    "detection_generation": "NOT_TESTED",
-    "geolocation_validation": "NOT_TESTED",
+    "airsim_rpc_connectivity": "PASS",
+    "vehicle_telemetry_validity": "PASS",
+    "camera_frame_acquisition": "PASS",
+    "genuine_scene_target_visibility": "PASS",
+    "yolo_inference_execution": "PASS",
+    "detection_generation": "FAIL",
+    "geolocation_validation": "FAIL",
     "production_message_serialization": "NOT_TESTED",
     "actual_network_transmission": "NOT_TESTED",
     "gcs_receipt": "NOT_TESTED",
     "visible_gcs_marker": "NOT_TESTED"
   },
-  "diagnostics": {},
-  "error": "AirSim RPC connection failed: Request timed out"
+  "diagnostics": {
+    "telemetry": {
+      "altitude_agl_m": 10.363308906555176,
+      "latitude": 47.64146799999743,
+      "longitude": -122.140165,
+      "roll_deg": 0.0,
+      "pitch_deg": 0.0,
+      "yaw_deg": 0.0,
+      "armed_state": "ARMED",
+      "flight_mode": "HOLD"
+    },
+    "ground_truth_target": {
+      "target_name": "GarbageTarget_01",
+      "actual_actor_name": "GarbageTarget_01",
+      "spawn_succeeded": true,
+      "texture_applied": true,
+      "world_x_m": 0.0,
+      "world_y_m": 2.0,
+      "world_z_m": -0.0,
+      "true_lat": 47.641468,
+      "true_lon": -122.14013838334236
+    },
+    "target_raw_visibility": {
+      "visible": false,
+      "reason": "Target patch lacks contrast/edges; appears as flat floor primitive",
+      "expected_pixel": [
+        152.7025349054365,
+        72.00000000000001
+      ],
+      "expected_radius_px": 7.410760471630946,
+      "contrast_delta": 1.9083333333333314,
+      "roi_std": 1.0623401840590738,
+      "laplacian_var": 2.292211111111111
+    },
+    "raw_detections": [
+      {
+        "bbox_xyxy": [
+          176.0530242919922,
+          12.820566177368164,
+          187.25518798828125,
+          23.831510543823242
+        ],
+        "confidence": 0.721957266330719,
+        "label": "rubbish"
+      },
+      {
+        "bbox_xyxy": [
+          175.980712890625,
+          65.96949768066406,
+          187.172607421875,
+          77.28187561035156
+        ],
+        "confidence": 0.6155828833580017,
+        "label": "rubbish"
+      },
+      {
+        "bbox_xyxy": [
+          122.9452133178711,
+          11.335351943969727,
+          141.35630798339844,
+          23.355304718017578
+        ],
+        "confidence": 0.4678908884525299,
+        "label": "rubbish"
+      }
+    ],
+    "association": {
+      "target_detected": false,
+      "target_missed": true,
+      "target_ground_distance_m": null,
+      "peer_drone_false_positives": [
+        {
+          "peer": "Drone4",
+          "dist_m": 0.9694000516627305,
+          "conf": 0.7015489935874939,
+          "hits": 2
+        },
+        {
+          "peer": "Drone2",
+          "dist_m": 0.7146733025142394,
+          "conf": 0.5721985697746277,
+          "hits": 2
+        },
+        {
+          "peer": "Drone3",
+          "dist_m": 0.6207743518028238,
+          "conf": 0.6326445937156677,
+          "hits": 2
+        }
+      ],
+      "raw_peer_drone_detections": [
+        {
+          "peer": "Drone4",
+          "iou": 0.2623468811230107,
+          "pix_dist": 5.048320663376987,
+          "conf": 0.721957266330719
+        },
+        {
+          "peer": "Drone3",
+          "iou": 0.39583361989095783,
+          "pix_dist": 3.676167948746682,
+          "conf": 0.6155828833580017
+        },
+        {
+          "peer": "Drone2",
+          "iou": 0.3164097773789497,
+          "pix_dist": 4.886748802936427,
+          "conf": 0.4678908884525299
+        }
+      ],
+      "clutter_false_positives_count": 0,
+      "association_summary": "FAIL: Target missed; YOLO detected peer drone(s) (Drone4, Drone2, Drone3) instead of target"
+    }
+  },
+  "error": "FAIL: Target missed; YOLO detected peer drone(s) (Drone4, Drone2, Drone3) instead of target"
 }

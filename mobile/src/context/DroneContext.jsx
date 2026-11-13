@@ -38,7 +38,13 @@ export const DroneProvider = ({ children }) => {
   const [selectedDrones, setSelectedDrones] = useState(new Set());
   const [swarmState, setSwarmState] = useState({});
   
-  const [wsUrl, setWsUrl] = useState(() => safeStorageGet("PhoneOS_WsUrl", "ws://swarmos-pi.local:8080"));
+  const [wsUrl, setWsUrl] = useState(() => {
+    try {
+      const urlWs = new URLSearchParams(window.location.search).get('ws');
+      if (urlWs) return urlWs;
+    } catch (_) {}
+    return safeStorageGet("PhoneOS_WsUrl", "ws://swarmos-pi.local:8080");
+  });
   const [relayAuthToken, setRelayAuthToken] = useState(() => safeStorageGet("PhoneOS_RelayAuthToken", ""));
   const [testMode, setTestMode] = useState(() => safeStorageGet("PhoneOS_TestMode", "false") === "true");
   const [indoorMode, setIndoorMode] = useState(() => safeStorageGet("PhoneOS_IndoorMode", "false") === "true");

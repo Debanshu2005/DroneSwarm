@@ -27,7 +27,13 @@ import FindMyDroneView from './views/FindMyDroneView';
 
 function App() {
   const { isConnected, connectionError, testMode, indoorMode, nowMs, wsManager, drones } = useDroneContext();
-  const [currentView, setCurrentView] = useState('DASHBOARD');
+  const [currentView, setCurrentView] = useState(() => {
+    try {
+      const urlView = new URLSearchParams(window.location.search).get('view');
+      if (urlView) return urlView.toUpperCase();
+    } catch (_) {}
+    return 'DASHBOARD';
+  });
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   useEffect(() => {

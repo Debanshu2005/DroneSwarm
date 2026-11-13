@@ -129,6 +129,12 @@ export default function MapView() {
             break;
          }
       }
+      if (!hasLiveDroneCenter) {
+         const gList = Object.values(garbage || {});
+         if (gList.length > 0 && Number.isFinite(gList[0].lat) && Number.isFinite(gList[0].lon)) {
+            mapCenter = [gList[0].lat, gList[0].lon];
+         }
+      }
   }
 
   const currentZone = resolveAirspaceZone(userLocation?.[0] ?? mapCenter[0], userLocation?.[1] ?? mapCenter[1]);
