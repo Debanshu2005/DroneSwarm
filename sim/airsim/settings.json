@@ -1,6 +1,7 @@
 {
   "SettingsVersion": 1.2,
   "SimMode": "Multirotor",
+  "ApiServerPort": 41451,
   "CameraDefaults": {
     "CaptureSettings": [
       {
@@ -16,9 +17,26 @@
       "VehicleType": "SimpleFlight",
       "X": 0,
       "Y": 0,
-      "Z": 0,
+      "Z": -1,
+      "EnableApiControl": true,
       "Cameras": {
         "bottom_center": {
+          "CaptureSettings": [
+            {
+              "ImageType": 0,
+              "Width": 1280,
+              "Height": 720,
+              "FOV_Degrees": 90
+            }
+          ],
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.1,
+          "Pitch": -90.0,
+          "Roll": 0.0,
+          "Yaw": 0.0
+        },
+        "3": {
           "CaptureSettings": [
             {
               "ImageType": 0,
@@ -38,21 +56,24 @@
     },
     "Drone2": {
       "VehicleType": "SimpleFlight",
-      "X": 0,
-      "Y": 5,
-      "Z": 0
+      "X": 15,
+      "Y": 0,
+      "Z": -1,
+      "EnableApiControl": true
     },
     "Drone3": {
       "VehicleType": "SimpleFlight",
-      "X": 0,
-      "Y": 10,
-      "Z": 0
+      "X": 7.5,
+      "Y": 13,
+      "Z": -1,
+      "EnableApiControl": true
     },
     "Drone4": {
       "VehicleType": "SimpleFlight",
-      "X": 0,
-      "Y": 15,
-      "Z": 0
+      "X": 22.5,
+      "Y": 13,
+      "Z": -1,
+      "EnableApiControl": true
     }
   }
 }
