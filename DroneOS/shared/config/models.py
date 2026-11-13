@@ -112,7 +112,7 @@ class PerceptionConfig(BaseModel):
     enabled: bool = False
     source: str = "airsim"  # airsim | opencv | folder
     weights: str = "models/garbage.pt"
-    imgsz: int = 1280
+    imgsz: int = 640
     confidence: float = 0.35
     iou: float = 0.5
     device: Optional[str] = None

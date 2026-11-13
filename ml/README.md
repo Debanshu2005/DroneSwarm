@@ -86,3 +86,29 @@ If `yolo26n.pt` is not available in the installed Ultralytics version, the scrip
 - **Geolocation Precision**: Geolocation relies on a flat-ground assumption using the drone's relative altitude as height above ground. Real-world GPS drift, heading sensor noise, gimbal/camera mount tolerance, and network transmission latency introduce several meters of positional variance. The track aggregator uses a `merge_radius_m` of 2.5 m and confidence-weighted position averaging to fuse multi-frame observations into stable ground markers.
 - **Empirical Metrics**: Real mAP, precision, and recall metrics should only be reported from actual evaluation runs on the test split after GPU training completes. Pre-trained base models without fine-tuning on UAVVaste will not identify aerial litter.
 
+---
+
+## 4. Installed Model & Evaluation Utilities
+
+The production model weights are installed at:
+- `models/garbage.pt` (YOLO26n, 2.39M parameters, 5.4 GFLOPs)
+- Checkpoint source: `runs/detect/ml/runs/uavvaste-2/weights/best.pt`
+- Metadata: `ml/model_metadata.json`
+
+### Official Test Split Results (116 Images, 507 Instances):
+- **Precision**: 91.84%
+- **Recall**: 78.50%
+- **mAP@50**: 83.62%
+- **mAP@50-95**: 51.30%
+
+### Running Threshold Evaluation:
+```bash
+python ml/uavvaste/evaluate_thresholds.py --split val --device cuda:0
+```
+
+### Running Replay Smoke Test on UAV Images:
+```bash
+python scripts/test_replay_detector.py --num-images 5 --device cuda:0
+```
+
+

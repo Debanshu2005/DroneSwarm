@@ -1,0 +1,58 @@
+{
+  "model_version": "1.0.0",
+  "model_name": "DroneSwarm-YOLO26n-UAVVaste",
+  "architecture": "YOLO26n",
+  "parameters": 2389735,
+  "gflops": 5.4,
+  "layers": 121,
+  "task": "detect",
+  "weights_installed_path": "models/garbage.pt",
+  "training_run_checkpoint": "runs/detect/ml/runs/uavvaste-2/weights/best.pt",
+  "dataset": {
+    "name": "UAVVaste",
+    "description": "Aerial waste and rubbish detection dataset captured from UAV perspectives",
+    "total_images": 772,
+    "total_annotations": 3718,
+    "splits": {
+      "train": 540,
+      "val": 116,
+      "test": 116
+    },
+    "classes": {
+      "0": "rubbish"
+    }
+  },
+  "training_configuration": {
+    "epochs": 100,
+    "batch_size": 8,
+    "imgsz_train": 1280,
+    "optimizer": "auto",
+    "cache": false,
+    "workers": 0
+  },
+  "inference_configuration": {
+    "imgsz_default": 640,
+    "imgsz_high_res": 1280,
+    "confidence_default": 0.35,
+    "iou_default": 0.5,
+    "max_fps_default": 1.0,
+    "min_hits_default": 2
+  },
+  "official_test_split_metrics": {
+    "split": "test",
+    "num_images": 116,
+    "num_instances": 507,
+    "precision": 0.9184,
+    "recall": 0.7850,
+    "mAP50": 0.8362,
+    "mAP50_95": 0.5130,
+    "inference_speed_ms": {
+      "preprocess": 1.5,
+      "inference": 21.4,
+      "loss": 0.0,
+      "postprocess": 1.8
+    },
+    "benchmark_hardware": "NVIDIA GeForce GTX 1650 (4096MiB)"
+  }
+}
+

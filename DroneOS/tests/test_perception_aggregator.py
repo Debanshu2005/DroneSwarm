@@ -85,3 +85,28 @@ def test_aggregator_max_tracks_eviction():
     assert "drone1-g0004" in agg.tracks
     assert "drone1-g0005" in agg.tracks
 
+
+def test_aggregator_repeated_frame_timestamp_rejection():
+    """Identical frame timestamps must not increment hits or trigger false confirmation."""
+    agg = TrackAggregator(drone_id="drone1", min_hits=2)
+    t0 = 1000.0
+    det = GeoreferencedDetection(label="rubbish", confidence=0.8, lat=22.314, lon=87.310)
+
+    # Frame 1 at t0
+    res1 = agg.update([det], now=t0)
+    assert len(res1) == 0
+    track = list(agg.tracks.values())[0]
+    assert track.hits == 1
+
+    # Identical timestamp t0 (e.g. repeated frame or zero-delta call)
+    res2 = agg.update([det], now=t0)
+    assert len(res2) == 0
+    assert track.hits == 1  # Must not increment hits
+
+    # Genuine subsequent frame at t0 + 1.0
+    res3 = agg.update([det], now=t0 + 1.0)
+    assert len(res3) == 1
+    assert track.hits == 2
+    assert res3[0].status == "new"
+
+

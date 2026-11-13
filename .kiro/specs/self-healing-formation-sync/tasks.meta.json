@@ -1,0 +1,185 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Merge (or cherry-pick) the `stage-b` branch into `main`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482655817
+      },
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482668811
+      }
+    ],
+    "1.2 Verify all existing coordination tests pass": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482655926
+      }
+    ],
+    "2.1 Modify `DroneOS/shared/config/models.py`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482656104
+      }
+    ],
+    "2.2 Modify `DroneOS1/shared/config/models.py`, `DroneOS2/shared/config/models.py`, `DroneOS3/shared/config/models.py`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482656195
+      }
+    ],
+    "3. Checkpoint — ensure coordination modules import cleanly after merge": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482656286
+      }
+    ],
+    "4.1 Create `scripts/sync_coordination.ps1`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482656376
+      }
+    ],
+    "4.2 Create `scripts/sync_coordination.sh`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482656475
+      }
+    ],
+    "4.3 Execute `scripts/sync_coordination.ps1` to populate `DroneOS1/2/3/core/coordination/`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482656566
+      }
+    ],
+    "5. Write `configs/flight.test.yaml` for `DroneOS` (source instance)": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482656650
+      }
+    ],
+    "6.1 Confirm `create_formation_update_sender` exists in `DroneOS/main.py` after the merge": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482656743
+      }
+    ],
+    "6.2 Confirm `CoordinationManager` is instantiated and dispatched in `DroneOSApp.__init__` / `run()`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482656837
+      }
+    ],
+    "7.1 Modify `DroneOS1/main.py`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482656940
+      }
+    ],
+    "7.2 Modify `DroneOS2/main.py`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657050
+      }
+    ],
+    "7.3 Modify `DroneOS3/main.py`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657128
+      }
+    ],
+    "8. Checkpoint — end-to-end smoke import for all four instances": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657205
+      }
+    ],
+    "9.1 Write property test for Property 1: Quorum Invariant": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657286
+      }
+    ],
+    "9.2 Write property test for Property 2: Slot Bijection": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657364
+      }
+    ],
+    "9.3 Write property test for Property 3: Anchor Invariant": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657448
+      }
+    ],
+    "9.4 Write property test for Property 4: Separation Invariant": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657527
+      }
+    ],
+    "9.5 Write property test for Property 5: Session Cap": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657613
+      }
+    ],
+    "9.6 Write property test for Property 6: No Dead Drone in Healed Slots": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657696
+      }
+    ],
+    "10.1 Create `tests/airsim_settings_4drone.json`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657783
+      }
+    ],
+    "10.2 Implement test setup helpers in `tests/test_heal_airsim.py`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657860
+      }
+    ],
+    "10.3 Implement `test_heal_on_drone4_failure` in `tests/test_heal_airsim.py`": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482657942
+      }
+    ],
+    "11. Final checkpoint — run full unit test suite": [
+      {
+        "executionId": "64f1d6c6-55ab-4c0d-9b58-fc906aec3ab4",
+        "chatSessionId": "sess_646f2cc4-6985-4fdb-917c-e42f3fd2a300",
+        "timestamp": 1791482658027
+      }
+    ]
+  }
+}

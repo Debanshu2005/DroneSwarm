@@ -112,7 +112,10 @@ class TrackAggregator:
                 # Match to existing track
                 matched_track_ids.add(best_track_id)
                 track = self.tracks[best_track_id]
-                track.hits += 1
+                # Increment hits only if time has advanced from previous observation
+                # (prevents duplicate frame counting from video pause / repeated frames)
+                if now > track.last_seen:
+                    track.hits += 1
                 track.max_confidence = max(track.max_confidence, det.confidence)
                 track.sum_conf += det.confidence
                 track.sum_conf_lat += det.confidence * det.lat
