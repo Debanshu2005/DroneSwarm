@@ -697,6 +697,8 @@ async def test_partial_delivery_3_to_2_one_miss(mock_cfg, monkeypatch):
     
     plan = plan_healing(fp, {"d1", "d2"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
     if not plan.accepted: return
+    if not plan.accepted: return
+    if not plan.accepted: return
     
     new_fp = {"type": "LINE", "spacing": 15.0, "slot_assignments": plan.slot_assignments}
     swarm.identity.drone_id = "d1"
@@ -958,3 +960,28 @@ async def test_follower_loss_reshape_active(mock_cfg, monkeypatch):
     sent_params, targets = sender.calls[0]
     assert targets == ['drone3']
     assert sent_params['slot_assignments'] == {'drone1': 0, 'drone3': 1}
+
+
+@pytest.mark.asyncio
+async def test_real_flight_manager_formation_provider():
+    from DroneOS.core.flight_manager import FlightManager
+    from DroneOS.core.flight_state import FlightStateStore
+    class MockFlightController:
+        pass
+    fm = FlightManager(MockFlightController(), FlightStateStore())
+    fm.swarm_manager = type("MockSwarmManager", (), {"my_id": "drone1", "registry": {}})()
+    fm.swarm_manager = type("MockSwarmManager", (), {"my_id": "drone1", "registry": {}})()
+    
+    import copy
+    def formation_provider():
+        fp = getattr(fm, 'formation_params', None)
+        return copy.deepcopy(fp) if fp else None
+        
+    assert formation_provider() is None
+    
+    params = {"type": "V", "spacing": 15.0, "slot_assignments": {"drone1": 0}, "members": []}
+    await fm.formation_update(params)
+    
+    provided = formation_provider()
+    assert provided == params
+    assert provided is not params

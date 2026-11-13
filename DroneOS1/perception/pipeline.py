@@ -159,6 +159,33 @@ class PerceptionPipeline:
         if telem is None:
             return
 
+        # Freshness and synchronization validation
+        now = time.time()
+        max_telem_age = getattr(self.config, "max_telemetry_age_s", 2.0)
+        max_frame_age = getattr(self.config, "max_frame_age_s", 2.0)
+        max_sync_skew = getattr(self.config, "max_sync_skew_s", 1.0)
+
+        telem_ts = getattr(telem, "timestamp", None)
+        frame_ts = getattr(frame, "timestamp", None)
+
+        # Only validate against wall-clock time if timestamp is a real epoch (> year 2001)
+        if telem_ts is not None and float(telem_ts) > 1_000_000_000:
+            if (now - float(telem_ts)) > max_telem_age:
+                logger.debug("Dropping frame: telemetry is stale (age=%.2fs > %.2fs)", now - float(telem_ts), max_telem_age)
+                return
+
+        if frame_ts is not None and float(frame_ts) > 1_000_000_000:
+            if (now - float(frame_ts)) > max_frame_age:
+                logger.debug("Dropping frame: frame is stale (age=%.2fs > %.2fs)", now - float(frame_ts), max_frame_age)
+                return
+
+        # Frame-telemetry cross-synchronization skew check
+        if telem_ts is not None and frame_ts is not None and float(telem_ts) > 0 and float(frame_ts) > 0:
+            skew = abs(float(frame_ts) - float(telem_ts))
+            if skew > max_sync_skew:
+                logger.debug("Dropping frame: excessive frame-telemetry skew (skew=%.2fs > %.2fs)", skew, max_sync_skew)
+                return
+
         drone_lat = getattr(telem, "latitude", None)
         drone_lon = getattr(telem, "longitude", None)
         if drone_lat is None or drone_lon is None or (drone_lat == 0.0 and drone_lon == 0.0):
@@ -255,5 +282,8 @@ class PerceptionPipeline:
                 synthetic=is_synthetic,
                 frame_id=self._frame_id,
             )
-            await self.network.broadcast_message(msg)
+            try:
+                await self.network.broadcast_message(msg)
+            except Exception as e:
+                logger.warning("Failed to broadcast detection message: %s", e)
 

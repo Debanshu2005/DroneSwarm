@@ -2,6 +2,7 @@
 
 import asyncio
 import concurrent.futures
+import math
 from pathlib import Path
 from typing import List, Optional
 
@@ -116,6 +117,7 @@ class GarbageDetector:
             return detections
 
         names = getattr(result, "names", {})
+        img_h, img_w = getattr(image, "shape", (None, None))[:2]
 
         for box in boxes:
             conf = float(box.conf[0])
@@ -128,7 +130,32 @@ class GarbageDetector:
             xyxy = box.xyxy[0]
             if hasattr(xyxy, "tolist"):
                 xyxy = xyxy.tolist()
-            bbox = (float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3]))
+
+            try:
+                x1, y1, x2, y2 = float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3])
+            except (ValueError, IndexError, TypeError):
+                continue
+
+            # Validate finite numerical values
+            if not (math.isfinite(x1) and math.isfinite(y1) and math.isfinite(x2) and math.isfinite(y2)):
+                continue
+
+            # Ensure proper ordering x1 <= x2 and y1 <= y2
+            x1, x2 = min(x1, x2), max(x1, x2)
+            y1, y2 = min(y1, y2), max(y1, y2)
+
+            # Boundary clipping to reference image dimensions
+            if img_w is not None and img_h is not None:
+                x1 = max(0.0, min(float(img_w), x1))
+                x2 = max(0.0, min(float(img_w), x2))
+                y1 = max(0.0, min(float(img_h), y1))
+                y2 = max(0.0, min(float(img_h), y2))
+
+            # Reject degenerate zero-area boxes
+            if (x2 - x1) <= 0.0 or (y2 - y1) <= 0.0:
+                continue
+
+            bbox = (x1, y1, x2, y2)
             detections.append(Detection(bbox_xyxy=bbox, confidence=conf, label=label))
 
         return detections

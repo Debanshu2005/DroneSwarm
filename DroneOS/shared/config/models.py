@@ -126,6 +126,9 @@ class PerceptionConfig(BaseModel):
     min_hits: int = 2
     update_interval_s: float = 10.0
     max_tracks: int = 2000
+    max_telemetry_age_s: float = 2.0
+    max_frame_age_s: float = 2.0
+    max_sync_skew_s: float = 1.0
     camera: CameraConfig = CameraConfig()
 
 class AppConfig(BaseModel):

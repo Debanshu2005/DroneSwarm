@@ -1,6 +1,7 @@
 """Unit tests for the perception pipeline execution, gating, chunking, and fault-tolerance."""
 
 import asyncio
+import time
 from unittest.mock import AsyncMock, MagicMock
 import numpy as np
 import pytest
@@ -12,9 +13,9 @@ from DroneOS.shared.protocol.messages import TelemetryData
 
 
 class FakeFrameSource:
-    def __init__(self, frame=None):
+    def __init__(self, frame=None, is_synthetic=True):
         self.frame = frame
-        self.is_synthetic = True
+        self.is_synthetic = is_synthetic
 
     async def get_frame(self):
         return self.frame
@@ -343,6 +344,88 @@ async def test_pipeline_async_ensure_loaded_does_not_block_event_loop():
     # If load() ran synchronously on the event loop, max_gap would be >= 0.5 s.
     # Running via ensure_loaded in self._executor keeps tick gaps well under 0.5 s (< 0.20 s).
     assert max_gap < 0.20, f"Event loop frozen: max tick gap was {max_gap:.3f} s (expected < 0.20 s)"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_gating_stale_telemetry():
+    """Telemetry older than max_telemetry_age_s (2.0s) must gate frame processing."""
+    now = time.time()
+    dummy_img = np.zeros((720, 1280, 3), dtype=np.uint8)
+    frame_src = FakeFrameSource(Frame(image=dummy_img, timestamp=now))
+    detector = FakeDetector([Detection(bbox_xyxy=(600, 350, 640, 370), confidence=0.9, label="rubbish")])
+    fc = AsyncMock()
+    # Telemetry timestamp is 5.0 seconds old
+    fc.get_telemetry.return_value = make_valid_telemetry()
+    fc.get_telemetry.return_value.timestamp = now - 5.0
+    network = AsyncMock()
+
+    cfg = PerceptionConfig(enabled=True, min_hits=1, max_telemetry_age_s=2.0)
+    pipeline = PerceptionPipeline("drone1", frame_src, detector, fc, network, cfg)
+
+    await pipeline._step()
+    network.broadcast_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_gating_stale_frame():
+    """Camera frame older than max_frame_age_s (2.0s) must gate frame processing."""
+    now = time.time()
+    dummy_img = np.zeros((720, 1280, 3), dtype=np.uint8)
+    # Frame is 5.0 seconds old
+    frame_src = FakeFrameSource(Frame(image=dummy_img, timestamp=now - 5.0))
+    detector = FakeDetector([Detection(bbox_xyxy=(600, 350, 640, 370), confidence=0.9, label="rubbish")])
+    fc = AsyncMock()
+    fc.get_telemetry.return_value = make_valid_telemetry()
+    fc.get_telemetry.return_value.timestamp = now
+    network = AsyncMock()
+
+    cfg = PerceptionConfig(enabled=True, min_hits=1, max_frame_age_s=2.0)
+    pipeline = PerceptionPipeline("drone1", frame_src, detector, fc, network, cfg)
+
+    await pipeline._step()
+    network.broadcast_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_gating_excessive_skew():
+    """Excessive skew between frame timestamp and telemetry timestamp (> 1.0s) must gate frame."""
+    now = time.time()
+    dummy_img = np.zeros((720, 1280, 3), dtype=np.uint8)
+    # Frame is at now - 0.1, telemetry is at now - 1.5 -> skew is 1.4s (> 1.0s)
+    frame_src = FakeFrameSource(Frame(image=dummy_img, timestamp=now - 0.1))
+    detector = FakeDetector([Detection(bbox_xyxy=(600, 350, 640, 370), confidence=0.9, label="rubbish")])
+    fc = AsyncMock()
+    fc.get_telemetry.return_value = make_valid_telemetry()
+    fc.get_telemetry.return_value.timestamp = now - 1.5
+    network = AsyncMock()
+
+    cfg = PerceptionConfig(enabled=True, min_hits=1, max_telemetry_age_s=5.0, max_frame_age_s=5.0, max_sync_skew_s=1.0)
+    pipeline = PerceptionPipeline("drone1", frame_src, detector, fc, network, cfg)
+
+    await pipeline._step()
+    network.broadcast_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_synthetic_provenance_airsim():
+    """Verify that when frame_source.is_synthetic is False (AirSim), DetectionMessage.synthetic is False."""
+    now = time.time()
+    dummy_img = np.zeros((720, 1280, 3), dtype=np.uint8)
+    frame_src = FakeFrameSource(Frame(image=dummy_img, timestamp=now), is_synthetic=False)
+    detector = FakeDetector([Detection(bbox_xyxy=(600, 350, 640, 370), confidence=0.9, label="rubbish")])
+    fc = AsyncMock()
+    fc.get_telemetry.return_value = make_valid_telemetry()
+    fc.get_telemetry.return_value.timestamp = now
+    network = AsyncMock()
+
+    cfg = PerceptionConfig(enabled=True, min_hits=1)
+    pipeline = PerceptionPipeline("drone1", frame_src, detector, fc, network, cfg)
+
+    await pipeline._step()
+    assert network.broadcast_message.call_count == 1
+    sent_msg = network.broadcast_message.call_args[0][0]
+    assert sent_msg.synthetic is False
+
 
 
 

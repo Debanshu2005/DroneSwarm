@@ -16,7 +16,25 @@
       "VehicleType": "SimpleFlight",
       "X": 0,
       "Y": 0,
-      "Z": 0
+      "Z": 0,
+      "Cameras": {
+        "bottom_center": {
+          "CaptureSettings": [
+            {
+              "ImageType": 0,
+              "Width": 1280,
+              "Height": 720,
+              "FOV_Degrees": 90
+            }
+          ],
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.1,
+          "Pitch": -90.0,
+          "Roll": 0.0,
+          "Yaw": 0.0
+        }
+      }
     },
     "Drone2": {
       "VehicleType": "SimpleFlight",

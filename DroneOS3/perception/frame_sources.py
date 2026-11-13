@@ -86,8 +86,21 @@ class AirSimFrameSource(FrameSource):
             import cv2
             import numpy as np
 
+            img_req = getattr(airsim, "ImageRequest", None)
+            img_type = getattr(getattr(airsim, "ImageType", None), "Scene", 0)
+            if img_req is not None:
+                request = img_req(self.camera_name, img_type, False, True)
+            else:
+                class _GenericImageRequest:
+                    def __init__(self, camera_name, image_type, pixels_as_float, compress):
+                        self.camera_name = camera_name
+                        self.image_type = image_type
+                        self.pixels_as_float = pixels_as_float
+                        self.compress = compress
+                request = _GenericImageRequest(self.camera_name, img_type, False, True)
+
             responses = self._client.simGetImages(
-                [airsim.ImageRequest(self.camera_name, airsim.ImageType.Scene, False, True)],
+                [request],
                 vehicle_name=self.vehicle_name,
             )
             if not responses or not responses[0].image_data_uint8:

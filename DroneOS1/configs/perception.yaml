@@ -15,6 +15,9 @@ merge_radius_m: 2.5
 min_hits: 2
 update_interval_s: 10.0
 max_tracks: 2000
+max_telemetry_age_s: 2.0
+max_frame_age_s: 2.0
+max_sync_skew_s: 1.0
 camera:
   hfov_deg: 90.0
   mount_pitch_deg: 90.0

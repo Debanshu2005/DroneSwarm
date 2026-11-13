@@ -171,7 +171,9 @@ class FlightManager:
             return False
 
         drone_id = getattr(self.swarm_manager, "identity", None)
-        drone_id = getattr(drone_id, "drone_id", "unknown") if drone_id else "unknown"
+        drone_id = getattr(drone_id, "drone_id", None) if drone_id else None
+        if not drone_id:
+            drone_id = getattr(self.swarm_manager, "my_id", "unknown")
 
         slot_assignments = params.get("slot_assignments")
         if not isinstance(slot_assignments, dict) or not slot_assignments or drone_id not in slot_assignments:

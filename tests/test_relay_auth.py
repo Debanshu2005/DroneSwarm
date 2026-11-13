@@ -1,6 +1,7 @@
 import json
 from unittest.mock import AsyncMock, MagicMock
 import pytest
+pytest.importorskip("websockets")
 
 from relay.relay import UdpWebsocketRelay
 

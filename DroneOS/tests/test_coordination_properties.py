@@ -1,4 +1,4 @@
-﻿"""
+"""
 Property-based tests for the six self-healing formation correctness invariants.
 Validates: Requirements 6, 7, 8, 9, 10 (coordination correctness properties).
 
@@ -10,6 +10,7 @@ from typing import Dict, Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+hypothesis = pytest.importorskip("hypothesis")
 from hypothesis import given, assume, settings, HealthCheck
 from hypothesis import strategies as st
 
