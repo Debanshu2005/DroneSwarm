@@ -216,3 +216,62 @@ async def test_truthful_offline_reporting_contract():
     assert report["stages"]["airsim_rpc_connectivity"] == "BLOCKED"
     assert report["stages"]["vehicle_telemetry_validity"] == "NOT_TESTED"
     assert report["is_genuine_airsim"] is False
+
+
+def test_track_aggregator_interface_contract():
+    """
+    Regression test for TrackAggregator API contract:
+    1. Verifies that aggregator exposes .tracks (dict) and does NOT expose get_confirmed_tracks or active_tracks.
+    2. Verifies that AggregatedTrack contains max_confidence, confirmed, hits, lat, lon (NOT confidence).
+    3. Verifies multi-step temporal confirmation: with min_hits=2, step 1 yields unconfirmed track,
+       and step 2 yields confirmed track with emitted AggregatorItem.
+    """
+    from DroneOS.perception.aggregator import TrackAggregator, GeoreferencedDetection
+
+    aggregator = TrackAggregator(drone_id="drone1", min_hits=2, merge_radius_m=2.5)
+
+    # 1. Structural API checks
+    assert hasattr(aggregator, "tracks")
+    assert isinstance(aggregator.tracks, dict)
+    assert not hasattr(aggregator, "get_confirmed_tracks"), "TrackAggregator must not have get_confirmed_tracks"
+    assert not hasattr(aggregator, "active_tracks"), "TrackAggregator must not have active_tracks"
+
+    # 2. Step 1: Single detection with min_hits=2 -> unconfirmed candidate track
+    det1 = GeoreferencedDetection(label="rubbish", confidence=0.85, lat=47.641468, lon=-122.140138, altitude_agl=10.0)
+    emitted1 = aggregator.update([det1], now=100.0)
+
+    assert len(emitted1) == 0, "First hit must not emit when min_hits=2"
+    assert len(aggregator.tracks) == 1
+
+    unconfirmed = [t for t in aggregator.tracks.values() if not t.confirmed]
+    confirmed = [t for t in aggregator.tracks.values() if t.confirmed]
+    assert len(unconfirmed) == 1
+    assert len(confirmed) == 0
+
+    track = unconfirmed[0]
+    assert track.hits == 1
+    assert track.max_confidence == 0.85
+    assert track.confirmed is False
+    assert hasattr(track, "max_confidence")
+    # Verify that accessing .confidence on AggregatedTrack raises AttributeError
+    with pytest.raises(AttributeError):
+        _ = track.confidence
+
+    # 3. Step 2: Second matching detection -> confirmed track & emission
+    det2 = GeoreferencedDetection(label="rubbish", confidence=0.90, lat=47.641469, lon=-122.140139, altitude_agl=10.0)
+    emitted2 = aggregator.update([det2], now=101.0)
+
+    assert len(emitted2) == 1, "Second hit must emit newly confirmed track"
+    item = emitted2[0]
+    assert item.id == track.id
+    assert item.status == "new"
+    assert item.hits == 2
+    assert item.confidence == 0.90
+
+    unconfirmed_step2 = [t for t in aggregator.tracks.values() if not t.confirmed]
+    confirmed_step2 = [t for t in aggregator.tracks.values() if t.confirmed]
+    assert len(unconfirmed_step2) == 0
+    assert len(confirmed_step2) == 1
+    assert confirmed_step2[0].confirmed is True
+    assert confirmed_step2[0].hits == 2
+    assert confirmed_step2[0].max_confidence == 0.90
