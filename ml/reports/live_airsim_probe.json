@@ -1,10 +1,71 @@
 {
-  "timestamp": 1794555578.077666,
+  "timestamp": 1794560048.2771096,
   "host": "127.0.0.1",
   "port": 41451,
-  "rpc_reachable": false,
-  "status": "BLOCKED",
-  "error_message": "AirSim simulation binary is NOT running on 127.0.0.1:41451. WSAECONNREFUSED / connection timed out. Live hardware/simulator execution blocked.",
-  "connection_attempts": 3,
-  "vehicles": {}
+  "rpc_reachable": true,
+  "status": "CONNECTED",
+  "error_message": null,
+  "connection_attempts": 1,
+  "vehicles": {
+    "Drone1": {
+      "connected": true,
+      "telemetry": {
+        "lat": 47.64146799999743,
+        "lon": -122.140165,
+        "alt": 121.32611083984375,
+        "pos_z": 1.6739829778671265
+      },
+      "camera_ok": true,
+      "image_shape": [
+        144,
+        256,
+        3
+      ]
+    },
+    "Drone2": {
+      "connected": true,
+      "telemetry": {
+        "lat": 47.641512915759286,
+        "lon": -122.14016499999998,
+        "alt": 121.32611083984375,
+        "pos_z": 1.6739829778671265
+      },
+      "camera_ok": true,
+      "image_shape": [
+        144,
+        256,
+        3
+      ]
+    },
+    "Drone3": {
+      "connected": true,
+      "telemetry": {
+        "lat": 47.64146799997813,
+        "lon": -122.14009833643267,
+        "alt": 121.32611083984375,
+        "pos_z": 1.6739829778671265
+      },
+      "camera_ok": true,
+      "image_shape": [
+        144,
+        256,
+        3
+      ]
+    },
+    "Drone4": {
+      "connected": true,
+      "telemetry": {
+        "lat": 47.641512915739995,
+        "lon": -122.14009833637537,
+        "alt": 121.32611083984375,
+        "pos_z": 1.6739829778671265
+      },
+      "camera_ok": true,
+      "image_shape": [
+        144,
+        256,
+        3
+      ]
+    }
+  }
 }

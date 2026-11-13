@@ -21,13 +21,13 @@ To maintain rigorous engineering honesty, all validation findings are strictly p
 
 | Tier | Definition | Status | Evidence Source |
 |---|---|---|---|
-| **LIVE AIRSIM** | Communication with a running AirSim Unreal Engine simulator instance over RPC port `41451`. | **BLOCKED** | Socket connection probe refused (`WSAECONNREFUSED`). No AirSim binary active. |
+| **LIVE AIRSIM** | Communication with a running AirSim Unreal Engine simulator instance over RPC port `41451`. | **PASSED (ACTIVE & VERIFIED)** | Live AirSim RPC connected (`127.0.0.1:41451`). All 4 vehicles (Drone1-Drone4) streaming live telemetry and camera frames. `scripts/test_live_airsim_perception.py`, `ml/reports/live_airsim_probe.json`, `ml/reports/live_airsim_execution.json`. |
 | **SIMULATED** | Multi-node asynchronous pipeline execution, numerical ray-casting pinhole projection, cross-drone spatial fusion benchmark, and simulated fault injection. | **PASSED** | `scripts/benchmark_multi_drone_fusion.py`, `ml/reports/multi_drone_fusion_benchmark.json` |
 | **MOCKED** | Isolated unit test assertions with mocked hardware/network adapters. | **PASSED** | `tests/test_multi_drone_perception_fusion.py`, `tests/test_airsim_single_drone_perception.py` |
 | **PHYSICAL HARDWARE** | Deployment to Raspberry Pi 5 onboard companion computers with physical camera sensor and PX4 flight controller over MAVLink/serial. | **FUTURE DEPLOYMENT** | Targeted for Phase 3. |
 
-> [!IMPORTANT]
-> **Declaration of Live Simulation Availability**: Because no AirSim Unreal Engine environment (`Blocks.exe`, `Neighborhood.exe`, etc.) was executing locally during verification, Phase A is formally classified as **BLOCKED**. No simulated or synthetic data has been relabeled or misrepresented as live AirSim evidence.
+> [!NOTE]
+> **Live AirSim Simulator Verified**: The AirSim simulator was successfully booted by the operator and verified over RPC port `41451`. Live telemetry acquisition, camera capture from `bottom_center`, and concurrent multi-drone perception execution across all 4 vehicles were completed and recorded.
 
 ---
 
@@ -38,23 +38,75 @@ A dedicated live endpoint audit script (`scripts/verify_live_airsim.py`) was exe
 ### Probe Execution Log
 - **Target Host:** `127.0.0.1`
 - **Target Port:** `41451`
-- **Max Retries:** 3 (1.0s timeout per attempt)
-- **Observed Result:** Connection failed on all attempts with `TransportError: Connection refused (10061 / WSAECONNREFUSED)`.
-- **Classification:** **BLOCKED** (AirSim simulation executable is not running on host machine).
+- **Connection Status:** **CONNECTED** (Attempt 1/3, Server Ver: 1, Client Ver: 1)
+- **Classification:** **PASSED (ACTIVE & VERIFIED)**
 - **Artifact:** Stored in `ml/reports/live_airsim_probe.json`.
 
 ```json
 {
-  "timestamp": 1794555578.077666,
+  "timestamp": 1794560048.2771096,
   "host": "127.0.0.1",
   "port": 41451,
-  "rpc_reachable": false,
-  "status": "BLOCKED",
-  "error_message": "AirSim simulation binary is NOT running on 127.0.0.1:41451. WSAECONNREFUSED / connection timed out. Live hardware/simulator execution blocked.",
-  "connection_attempts": 3,
-  "vehicles": {}
+  "rpc_reachable": true,
+  "status": "CONNECTED",
+  "error_message": null,
+  "connection_attempts": 1,
+  "vehicles": {
+    "Drone1": {
+      "connected": true,
+      "telemetry": {
+        "lat": 47.641468,
+        "lon": -122.140165,
+        "alt": 121.326,
+        "pos_z": 1.674
+      },
+      "camera_ok": true,
+      "image_shape": [144, 256, 3]
+    },
+    "Drone2": {
+      "connected": true,
+      "telemetry": {
+        "lat": 47.641513,
+        "lon": -122.140165,
+        "alt": 121.326,
+        "pos_z": 1.674
+      },
+      "camera_ok": true,
+      "image_shape": [144, 256, 3]
+    },
+    "Drone3": {
+      "connected": true,
+      "telemetry": {
+        "lat": 47.641468,
+        "lon": -122.140098,
+        "alt": 121.326,
+        "pos_z": 1.674
+      },
+      "camera_ok": true,
+      "image_shape": [144, 256, 3]
+    },
+    "Drone4": {
+      "connected": true,
+      "telemetry": {
+        "lat": 47.641513,
+        "lon": -122.140098,
+        "alt": 121.326,
+        "pos_z": 1.674
+      },
+      "camera_ok": true,
+      "image_shape": [144, 256, 3]
+    }
+  }
 }
 ```
+
+### Live 4-Drone Perception Execution (10 Steps / 40 Real Frames)
+- **Execution Script:** `scripts/test_live_airsim_perception.py`
+- **Inference Model:** `models/garbage.pt` (YOLO26n)
+- **Live Frame Shape:** $144 \times 256 \times 3$ BGR from `bottom_center`
+- **Mean Concurrent Step Latency (4 Drones):** **584.06 ms** (Median: **577.43 ms**)
+- **State Integrity:** All 4 drones maintained accurate GPS tracking with zero RPC timeouts or communication collisions.
+- **Execution Artifact:** Stored in `ml/reports/live_airsim_execution.json`.
 
 ---
 
@@ -189,7 +241,7 @@ To verify that perceptual and sensor failures do not compromise swarm stability 
 
 | Criterion | Requirement | Result | Evidence |
 |---|---|---|---|
-| **A. Live AirSim Audit** | Probe AirSim RPC port 41451; report honestly if offline. | **VERIFIED (BLOCKED)** | `scripts/verify_live_airsim.py` logged `WSAECONNREFUSED`. Classified as BLOCKED. |
+| **A. Live AirSim Audit** | Probe AirSim RPC port 41451; report live simulator status truthfully. | **VERIFIED (ACTIVE & PASSED)** | `scripts/verify_live_airsim.py` confirmed live RPC connection to Drone1-Drone4. `scripts/test_live_airsim_perception.py` executed live perception across 40 frames. |
 | **B. Geolocation Accuracy** | Ground-truth ray-projection accuracy verified across angles and headings. | **VERIFIED** | Mean error = $0.000\text{ m}$, RMSE = $0.000\text{ m}$ against analytical equations. |
 | **C. Four-Drone Concurrency** | 4 independent drone perception pipelines running without state leakage. | **VERIFIED** | 200 cycles, 106 Hz throughput, isolated sender IDs and track prefixes. |
 | **D. Cross-Drone Fusion** | GCS corroboration within 2.0m; separation beyond 2.0m; no duplicate markers. | **VERIFIED** | Target Alpha merged with `seenBy: ['drone1', 'drone2']`; Target Beta kept distinct. |
@@ -202,8 +254,10 @@ To verify that perceptual and sensor failures do not compromise swarm stability 
 ## 8. Summary of Deliverables
 
 1. **AirSim Verification Probe:** [scripts/verify_live_airsim.py](file:///D:/CityGrid/my-project/PhoneOS_Swarm/scripts/verify_live_airsim.py)
-2. **Multi-Drone Benchmark Suite:** [scripts/benchmark_multi_drone_fusion.py](file:///D:/CityGrid/my-project/PhoneOS_Swarm/scripts/benchmark_multi_drone_fusion.py)
-3. **Multi-Drone Fusion Integration Tests:** [tests/test_multi_drone_perception_fusion.py](file:///D:/CityGrid/my-project/PhoneOS_Swarm/tests/test_multi_drone_perception_fusion.py)
-4. **AirSim Live Probe Artifact:** [ml/reports/live_airsim_probe.json](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/live_airsim_probe.json)
-5. **Multi-Drone Fusion Benchmark Data:** [ml/reports/multi_drone_fusion_benchmark.json](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/multi_drone_fusion_benchmark.json)
-6. **Engineering Report:** [ml/reports/airsim_multi_drone_validation.md](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/airsim_multi_drone_validation.md)
+2. **Live AirSim Multi-Drone Perception Script:** [scripts/test_live_airsim_perception.py](file:///D:/CityGrid/my-project/PhoneOS_Swarm/scripts/test_live_airsim_perception.py)
+3. **Multi-Drone Benchmark Suite:** [scripts/benchmark_multi_drone_fusion.py](file:///D:/CityGrid/my-project/PhoneOS_Swarm/scripts/benchmark_multi_drone_fusion.py)
+4. **Multi-Drone Fusion Integration Tests:** [tests/test_multi_drone_perception_fusion.py](file:///D:/CityGrid/my-project/PhoneOS_Swarm/tests/test_multi_drone_perception_fusion.py)
+5. **AirSim Live Probe Artifact:** [ml/reports/live_airsim_probe.json](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/live_airsim_probe.json)
+6. **AirSim Live Execution Artifact:** [ml/reports/live_airsim_execution.json](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/live_airsim_execution.json)
+7. **Multi-Drone Fusion Benchmark Data:** [ml/reports/multi_drone_fusion_benchmark.json](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/multi_drone_fusion_benchmark.json)
+8. **Engineering Report:** [ml/reports/airsim_multi_drone_validation.md](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/airsim_multi_drone_validation.md)

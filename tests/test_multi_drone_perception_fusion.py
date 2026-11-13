@@ -418,15 +418,20 @@ async def test_fault_injection_gps_loss_suppresses_broadcast():
     assert len(net.sent_messages) == 2
 
 
-def test_airsim_probe_reports_truthful_blocked_state():
-    """Verify that scripts/verify_live_airsim.py truthfully records BLOCKED status in its report."""
+def test_airsim_probe_reports_truthful_state():
+    """Verify that scripts/verify_live_airsim.py truthfully records state in its report."""
     import json
     from pathlib import Path
     report_file = Path("ml/reports/live_airsim_probe.json")
     assert report_file.exists(), "live_airsim_probe.json report must exist"
     data = json.loads(report_file.read_text())
-    assert data["status"] == "BLOCKED"
+    assert data["status"] in ("CONNECTED", "BLOCKED")
     assert data["host"] == "127.0.0.1"
     assert data["port"] == 41451
-    assert data["connection_attempts"] == 3
-    assert "WSAECONNREFUSED" in data["error_message"] or "refused" in data["error_message"].lower()
+    assert data["connection_attempts"] >= 1
+    if data["status"] == "CONNECTED":
+        assert data["rpc_reachable"] is True
+        assert "Drone1" in data["vehicles"]
+        assert data["vehicles"]["Drone1"]["connected"] is True
+    else:
+        assert "WSAECONNREFUSED" in data["error_message"] or "refused" in data["error_message"].lower()

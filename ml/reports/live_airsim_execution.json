@@ -1,0 +1,438 @@
+{
+  "timestamp": 1794560150.4085386,
+  "airsim_host": "127.0.0.1",
+  "airsim_port": 41451,
+  "status": "LIVE_VERIFIED",
+  "vehicles": [
+    "Drone1",
+    "Drone2",
+    "Drone3",
+    "Drone4"
+  ],
+  "total_steps": 10,
+  "mean_latency_ms": 584.0570500000011,
+  "median_latency_ms": 577.4284499999851,
+  "total_detections_broadcast": 0,
+  "steps_data": [
+    {
+      "step": 1,
+      "latency_ms": 705.3283000000192,
+      "vehicles": {
+        "Drone1": {
+          "lat": 47.64146799999743,
+          "lon": -122.140165,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone2": {
+          "lat": 47.641512915759286,
+          "lon": -122.14016499999998,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone3": {
+          "lat": 47.64146799997813,
+          "lon": -122.14009833643267,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone4": {
+          "lat": 47.641512915739995,
+          "lon": -122.14009833637537,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        }
+      }
+    },
+    {
+      "step": 2,
+      "latency_ms": 673.5494000000131,
+      "vehicles": {
+        "Drone1": {
+          "lat": 47.64146799999743,
+          "lon": -122.140165,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone2": {
+          "lat": 47.641512915759286,
+          "lon": -122.14016499999998,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone3": {
+          "lat": 47.64146799997813,
+          "lon": -122.14009833643267,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone4": {
+          "lat": 47.641512915739995,
+          "lon": -122.14009833637537,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        }
+      }
+    },
+    {
+      "step": 3,
+      "latency_ms": 522.6150999999959,
+      "vehicles": {
+        "Drone1": {
+          "lat": 47.64146799999743,
+          "lon": -122.140165,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone2": {
+          "lat": 47.641512915759286,
+          "lon": -122.14016499999998,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone3": {
+          "lat": 47.64146799997813,
+          "lon": -122.14009833643267,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone4": {
+          "lat": 47.641512915739995,
+          "lon": -122.14009833637537,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        }
+      }
+    },
+    {
+      "step": 4,
+      "latency_ms": 541.7004999999904,
+      "vehicles": {
+        "Drone1": {
+          "lat": 47.64146799999743,
+          "lon": -122.140165,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone2": {
+          "lat": 47.641512915759286,
+          "lon": -122.14016499999998,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone3": {
+          "lat": 47.64146799997813,
+          "lon": -122.14009833643267,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone4": {
+          "lat": 47.641512915739995,
+          "lon": -122.14009833637537,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        }
+      }
+    },
+    {
+      "step": 5,
+      "latency_ms": 570.0441999999839,
+      "vehicles": {
+        "Drone1": {
+          "lat": 47.64146799999743,
+          "lon": -122.140165,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone2": {
+          "lat": 47.641512915759286,
+          "lon": -122.14016499999998,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone3": {
+          "lat": 47.64146799997813,
+          "lon": -122.14009833643267,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone4": {
+          "lat": 47.641512915739995,
+          "lon": -122.14009833637537,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        }
+      }
+    },
+    {
+      "step": 6,
+      "latency_ms": 562.4497000000019,
+      "vehicles": {
+        "Drone1": {
+          "lat": 47.64146799999743,
+          "lon": -122.140165,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone2": {
+          "lat": 47.641512915759286,
+          "lon": -122.14016499999998,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone3": {
+          "lat": 47.64146799997813,
+          "lon": -122.14009833643267,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone4": {
+          "lat": 47.641512915739995,
+          "lon": -122.14009833637537,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        }
+      }
+    },
+    {
+      "step": 7,
+      "latency_ms": 584.8126999999863,
+      "vehicles": {
+        "Drone1": {
+          "lat": 47.64146799999743,
+          "lon": -122.140165,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone2": {
+          "lat": 47.641512915759286,
+          "lon": -122.14016499999998,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone3": {
+          "lat": 47.64146799997813,
+          "lon": -122.14009833643267,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone4": {
+          "lat": 47.641512915739995,
+          "lon": -122.14009833637537,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        }
+      }
+    },
+    {
+      "step": 8,
+      "latency_ms": 615.2973000000088,
+      "vehicles": {
+        "Drone1": {
+          "lat": 47.64146799999743,
+          "lon": -122.140165,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone2": {
+          "lat": 47.641512915759286,
+          "lon": -122.14016499999998,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone3": {
+          "lat": 47.64146799997813,
+          "lon": -122.14009833643267,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone4": {
+          "lat": 47.641512915739995,
+          "lon": -122.14009833637537,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        }
+      }
+    },
+    {
+      "step": 9,
+      "latency_ms": 476.0930000000485,
+      "vehicles": {
+        "Drone1": {
+          "lat": 47.64146799999743,
+          "lon": -122.140165,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone2": {
+          "lat": 47.641512915759286,
+          "lon": -122.14016499999998,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone3": {
+          "lat": 47.64146799997813,
+          "lon": -122.14009833643267,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone4": {
+          "lat": 47.641512915739995,
+          "lon": -122.14009833637537,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        }
+      }
+    },
+    {
+      "step": 10,
+      "latency_ms": 588.6802999999645,
+      "vehicles": {
+        "Drone1": {
+          "lat": 47.64146799999743,
+          "lon": -122.140165,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone2": {
+          "lat": 47.641512915759286,
+          "lon": -122.14016499999998,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone3": {
+          "lat": 47.64146799997813,
+          "lon": -122.14009833643267,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        },
+        "Drone4": {
+          "lat": 47.641512915739995,
+          "lon": -122.14009833637537,
+          "altitude_m": 1.6739829778671265,
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "broadcast_messages": 0
+        }
+      }
+    }
+  ]
+}
