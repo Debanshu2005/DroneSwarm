@@ -1,0 +1,52 @@
+{
+  "timestamp": 1794555902.785044,
+  "total_cycles": 200,
+  "elapsed_seconds": 1.8858306407928467,
+  "throughput_hz": 106.05406215900457,
+  "latencies_ms": {
+    "mean": 9.428174000240688,
+    "median": 4.9136999987240415,
+    "p95": 8.405230006246702
+  },
+  "yolo_single_frame_latency_ms": 87.54967999993823,
+  "total_gcs_messages": 3,
+  "distinct_markers": 2,
+  "markers": [
+    {
+      "id": "drone1-g0001",
+      "label": "rubbish",
+      "confidence": 0.88,
+      "lat": 22.3149,
+      "lon": 87.3105,
+      "hits": 2,
+      "altitude_agl": 15.0,
+      "firstSeen": 1794555901608,
+      "lastSeen": 1794555901635,
+      "reportingDrone": "drone1",
+      "seenBy": [
+        "drone1",
+        "drone2"
+      ],
+      "synthetic": false
+    },
+    {
+      "id": "drone4-g0001",
+      "label": "rubbish",
+      "confidence": 0.91,
+      "lat": 22.3149252,
+      "lon": 87.3105,
+      "hits": 1,
+      "altitude_agl": 15.0,
+      "firstSeen": 1794555901671,
+      "lastSeen": 1794555901671,
+      "reportingDrone": "drone4",
+      "seenBy": [
+        "drone4"
+      ],
+      "synthetic": false
+    }
+  ],
+  "drone2_disconnected_cycles": 90,
+  "drone3_gps_loss_cycles": 60,
+  "ram_footprint_mb": 432.83984375
+}

@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 from DroneOS3.core.flight_manager import FlightManager
 from DroneOS3.core.formation_engine import FormationEngine
 from DroneOS3.core.terminal_controller import TerminalController
@@ -79,14 +79,13 @@ async def test_terminal_formation_slot_assignments():
         
     sm.registry.get_peer.side_effect = get_peer
     sm.heartbeat_mgr.timeout_sec = 100.0  # Make sure they are fresh
-    import time
-    time.time = MagicMock(return_value=1e9)
     
     tc.swarm_manager = sm
     tc.network = AsyncMock()
     
     task = ParsedTask(action=TaskAction.FORMATION, params={"type": "CIRCLE", "spacing": 15.0}, raw_text="")
-    await tc._execute_task(task, "drone2")
+    with patch("time.time", return_value=1e9):
+        await tc._execute_task(task, "drone2")
     
     # Check what was sent to command_handler
     ch.handle_command.assert_called_once()

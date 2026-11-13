@@ -1,0 +1,10 @@
+{
+  "timestamp": 1794555578.077666,
+  "host": "127.0.0.1",
+  "port": 41451,
+  "rpc_reachable": false,
+  "status": "BLOCKED",
+  "error_message": "AirSim simulation binary is NOT running on 127.0.0.1:41451. WSAECONNREFUSED / connection timed out. Live hardware/simulator execution blocked.",
+  "connection_attempts": 3,
+  "vehicles": {}
+}
