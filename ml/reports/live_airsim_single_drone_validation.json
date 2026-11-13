@@ -1,64 +1,20 @@
 {
-  "timestamp": 1794561501.7060814,
-  "status": "SIMULATED_VALIDATED",
-  "is_live_airsim": false,
-  "vehicle": "Drone1",
-  "camera": {
-    "name": "bottom_center",
-    "width": 1280,
-    "height": 720,
-    "channels": 3,
-    "hfov_deg": 90.0,
-    "mount_pitch_deg": 90.0
+  "timestamp": 1794562685.832923,
+  "status": "BLOCKED",
+  "is_genuine_airsim": false,
+  "stages": {
+    "airsim_rpc_connectivity": "BLOCKED",
+    "vehicle_telemetry_validity": "NOT_TESTED",
+    "camera_frame_acquisition": "NOT_TESTED",
+    "genuine_scene_target_visibility": "NOT_TESTED",
+    "yolo_inference_execution": "NOT_TESTED",
+    "detection_generation": "NOT_TESTED",
+    "geolocation_validation": "NOT_TESTED",
+    "production_message_serialization": "NOT_TESTED",
+    "actual_network_transmission": "NOT_TESTED",
+    "gcs_receipt": "NOT_TESTED",
+    "visible_gcs_marker": "NOT_TESTED"
   },
-  "flight_telemetry": {
-    "latitude": 47.641468,
-    "longitude": -122.140165,
-    "altitude_agl_m": 10.0,
-    "armed": true,
-    "gps_valid": true
-  },
-  "yolo_detection": {
-    "model": "models/garbage.pt",
-    "label": "rubbish",
-    "confidence": 0.842184841632843,
-    "bbox_xyxy": [
-      695.3035888671875,
-      285.8695983886719,
-      835.1649169921875,
-      430.2638244628906
-    ],
-    "center_uv": [
-      765.2342529296875,
-      358.06671142578125
-    ],
-    "inference_latency_ms": 265.29419999997117
-  },
-  "geolocation": {
-    "true_target_coords": {
-      "lat": 47.641468,
-      "lon": -122.14013838334236,
-      "north_m": 0.0,
-      "east_m": 2.0
-    },
-    "projected_coords": {
-      "lat": 47.64146827169217,
-      "lon": -122.1401389584591,
-      "altitude_agl_m": 10.0
-    },
-    "error_metrics": {
-      "radial_error_m": 0.05272589443873003,
-      "north_error_m": 0.030207634226328946,
-      "east_error_m": -0.043214798146149216
-    }
-  },
-  "gcs_broadcast": {
-    "message_sent": true,
-    "message_received": true,
-    "marker_id": "drone1-g0001",
-    "marker_seen_by": [
-      "drone1"
-    ]
-  },
-  "annotated_image_path": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\ml\\reports\\live_airsim_single_drone_detection.jpg"
+  "diagnostics": {},
+  "error": "AirSim RPC connection failed: Request timed out"
 }

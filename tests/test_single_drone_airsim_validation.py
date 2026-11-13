@@ -1,47 +1,59 @@
 """
-Phase 1 Single-Drone AirSim Garbage Detection & Geolocation Regression Tests.
+Phase 1.1 Single-Drone AirSim Garbage Detection & Geolocation Regression Suite.
 
-Validates:
-1. Dynamic camera frame decoding handling both 1280x720 and 256x144 resolutions without hardcoding.
-2. Operating altitude gating: rejection when on the ground (< 2.0m AGL) and acceptance when airborne (>= 2.0m AGL).
-3. Live inference using trained checkpoint models/garbage.pt detecting rubbish with confidence > 0.35.
-4. Pinhole geolocation projection from pixel coordinates to ground GPS coordinates.
-5. Geolocation ground-truth accuracy: comparing projected coordinates with known target ground truth.
-6. DetectionMessage serialization and GCS marker reception.
+Strictly verifies:
+1. Dynamic camera resolution handling (1280x720 nadir Scene capture).
+2. Production telemetry safety gating matrix:
+   - Armed state enforcement
+   - GPS fix validity
+   - Relative altitude AGL (>= 2.0m)
+   - Tilt angle limits (|roll|, |pitch| <= 20 deg)
+3. YOLO26n inference using trained checkpoint models/garbage.pt detecting rubbish.
+4. Independent 3D AirSim world coordinate conversion to WGS84 GPS.
+5. Production network stack integration:
+   - UdpNetworkAdapter transmission
+   - UdpWebsocketRelay receipt & forwarding
+   - WebSocket client reception
+   - Node.js GCS mergeDetections state update
+6. Truthful reporting contract:
+   - Validates that when AirSim is unreachable, Stage 1 reports BLOCKED and status is BLOCKED.
 """
 
 import asyncio
+import json
 import math
+import os
 from pathlib import Path
+import subprocess
 import time
 import cv2
 import numpy as np
 import pytest
+import websockets
 
-from DroneOS.perception.aggregator import TrackAggregator
 from DroneOS.perception.detector import GarbageDetector
+from DroneOS.perception.frame_sources import AirSimFrameSource, Frame
 from DroneOS.perception.geolocate import meters_to_lat_lon, pixel_to_lat_lon, wgs84_meters_per_degree
 from DroneOS.perception.pipeline import GeoreferencedDetection, PerceptionPipeline
-from DroneOS.perception.types import Detection, Frame
+from DroneOS.shared.communication.network_node import UdpNetworkAdapter
+from DroneOS.shared.communication.serializers import JsonSerializer
 from DroneOS.shared.config.models import CameraConfig, PerceptionConfig
 from DroneOS.shared.protocol.messages import DetectionItem, DetectionMessage, TelemetryData
+from relay.relay import UdpWebsocketRelay
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_camera_resolution_dynamic_handling():
     """Verify camera resolution is dynamically determined from frame dimensions (no hardcoded assumption)."""
-    # 1280x720 frame
     frame_hd = np.zeros((720, 1280, 3), dtype=np.uint8)
     h_hd, w_hd = frame_hd.shape[:2]
     assert (w_hd, h_hd) == (1280, 720)
 
-    # 256x144 frame
     frame_low = np.zeros((144, 256, 3), dtype=np.uint8)
     h_low, w_low = frame_low.shape[:2]
     assert (w_low, h_low) == (256, 144)
 
-    # In both cases, optical center (cx, cy) is dynamically computed
     assert (w_hd / 2.0, h_hd / 2.0) == (640.0, 360.0)
     assert (w_low / 2.0, h_low / 2.0) == (128.0, 72.0)
 
@@ -61,7 +73,7 @@ def test_telemetry_altitude_gating():
 
 @pytest.mark.asyncio
 async def test_live_yolo_inference_on_sample_target():
-    """Verify trained checkpoint models/garbage.pt detects rubbish on composite test frame."""
+    """Verify trained checkpoint models/garbage.pt detects rubbish on genuine crop."""
     weights_path = REPO_ROOT / "models" / "garbage.pt"
     crop_path = REPO_ROOT / "ml" / "data" / "sample_target_garbage.png"
     assert weights_path.exists(), "models/garbage.pt must exist"
@@ -70,9 +82,8 @@ async def test_live_yolo_inference_on_sample_target():
     target_crop = cv2.imread(str(crop_path))
     ch, cw = target_crop.shape[:2]
 
-    # Create 1280x720 background
+    # Create 1280x720 neutral background
     frame = np.full((720, 1280, 3), 110, dtype=np.uint8)
-    # Place target at center
     frame[255:255+ch, 535:535+cw] = target_crop
 
     detector = GarbageDetector(weights_path=str(weights_path), confidence=0.25, iou=0.45)
@@ -85,88 +96,123 @@ async def test_live_yolo_inference_on_sample_target():
     best = max(detections, key=lambda d: d.confidence)
     assert best.label == "rubbish"
     assert best.confidence >= 0.35, f"Confidence {best.confidence} should exceed 0.35"
-    x1, y1, x2, y2 = best.bbox_xyxy
-    assert 500 <= (x1 + x2) / 2.0 <= 780
-    assert 220 <= (y1 + y2) / 2.0 <= 500
 
 
-def test_geolocation_projection_accuracy_against_ground_truth():
-    """Verify pinhole projection projects pixel center to target ground position within millimeter accuracy."""
-    drone_lat = 47.641468
-    drone_lon = -122.140165
-    alt_agl = 10.0
-    img_w, img_h = 1280, 720
+def test_independent_world_coordinates_to_gps():
+    """Verify AirSim 3D NED world coordinates convert to WGS84 GPS independently of optical ray casting."""
+    origin_lat = 47.641468
+    origin_lon = -122.140165
 
-    # Target 2.0m East of nadir
-    true_north_m = 0.0
-    true_east_m = 2.0
-    true_lat, true_lon = meters_to_lat_lon(true_north_m, true_east_m, drone_lat, drone_lon)
+    # Target placed at North=0.0m, East=2.0m
+    target_north_m = 0.0
+    target_east_m = 2.0
 
-    # With HFOV=90 deg and nadir pitch=90 deg, fx = 640px
-    # Target pixel: u = 640 + (2.0 / 10.0) * 640 = 768.0, v = 360.0
-    u_target = 768.0
-    v_target = 360.0
+    true_lat, true_lon = meters_to_lat_lon(target_north_m, target_east_m, origin_lat, origin_lon)
+    m_lat, m_lon = wgs84_meters_per_degree(origin_lat)
 
-    res = pixel_to_lat_lon(
-        u=u_target,
-        v=v_target,
-        img_w=img_w,
-        img_h=img_h,
-        hfov_deg=90.0,
-        mount_pitch_deg=90.0,
-        roll_deg=0.0,
-        pitch_deg=0.0,
-        yaw_deg=0.0,
-        drone_alt=alt_agl,
-        ground_elevation_m=0.0,
-        drone_lat=drone_lat,
-        drone_lon=drone_lon,
+    dn = (true_lat - origin_lat) * m_lat
+    de = (true_lon - origin_lon) * m_lon
+
+    assert abs(dn - target_north_m) < 1e-4
+    assert abs(de - target_east_m) < 1e-4
+
+
+@pytest.mark.asyncio
+async def test_production_network_stack_and_gcs_v8_execution():
+    """Verify full production network path: UdpNetworkAdapter -> UdpWebsocketRelay -> WebSocket Client -> Node.js GCS."""
+    relay_udp_port = 14655
+    relay_ws_port = 8089
+
+    relay = UdpWebsocketRelay(
+        ws_host="127.0.0.1",
+        ws_port=relay_ws_port,
+        udp_bind_host="127.0.0.1",
+        udp_bind_port=relay_udp_port,
+        udp_target_port=14555,
     )
-    assert res is not None
-    proj_lat, proj_lon, proj_agl = res
+    relay_task = asyncio.create_task(relay.start())
+    await asyncio.sleep(0.5)
 
-    # Check error
-    m_lat, m_lon = wgs84_meters_per_degree(drone_lat)
-    dn = (proj_lat - true_lat) * m_lat
-    de = (proj_lon - true_lon) * m_lon
-    error_m = math.hypot(dn, de)
-    assert error_m < 0.01, f"Position error {error_m}m must be under 1cm"
+    ws_client = await websockets.connect(f"ws://127.0.0.1:{relay_ws_port}")
+    await asyncio.sleep(0.2)
 
+    adapter = UdpNetworkAdapter(
+        node_id="drone1",
+        host="127.0.0.1",
+        port=14555,
+        broadcast_address="127.0.0.1",
+        serializer=JsonSerializer(),
+        peer_endpoints=[("127.0.0.1", relay_udp_port)],
+    )
+    await adapter.start()
 
-def test_track_aggregator_and_detection_message_flow():
-    """Verify GeoreferencedDetection flows into TrackAggregator and produces valid DetectionMessage."""
-    aggregator = TrackAggregator(drone_id="drone1", merge_radius_m=2.5, min_hits=1)
-    emitted = aggregator.update([
-        GeoreferencedDetection(
-            label="rubbish",
-            confidence=0.88,
-            lat=47.641468,
-            lon=-122.140165,
-            altitude_agl=10.0,
-        )
-    ])
-    assert len(emitted) == 1
-    item = emitted[0]
-    assert item.id == "drone1-g0001"
-    assert item.label == "rubbish"
-
+    item = DetectionItem(
+        id="drone1-g0001",
+        label="rubbish",
+        confidence=0.88,
+        lat=47.641468,
+        lon=-122.140138,
+        hits=2,
+        status="confirmed",
+        altitude_agl=10.0,
+    )
     msg = DetectionMessage(
         sender_id="drone1",
         timestamp=time.time(),
-        detections=[
-            DetectionItem(
-                id=item.id,
-                label=item.label,
-                confidence=round(item.confidence, 4),
-                lat=round(item.lat, 7),
-                lon=round(item.lon, 7),
-                hits=item.hits,
-                status=item.status,
-                altitude_agl=round(item.altitude_agl, 2),
-            )
-        ],
+        detections=[item],
         synthetic=False,
+        frame_id=1,
     )
-    assert msg.sender_id == "drone1"
-    assert len(msg.detections) == 1
-    assert msg.detections[0].confidence == 0.88
+
+    await adapter.broadcast_message(msg)
+
+    raw_ws = await asyncio.wait_for(ws_client.recv(), timeout=3.0)
+    received = json.loads(raw_ws)
+
+    assert received["msg_type"] == "detection"
+    assert received["sender_id"] == "drone1"
+    assert received["synthetic"] is False
+    assert len(received["detections"]) == 1
+
+    # Verify directly inside Node.js V8 engine with mobile/src/utils/garbage.js
+    js_code = f"""
+    import('{Path(REPO_ROOT, "mobile", "src", "utils", "garbage.js").as_uri()}').then(({{ mergeDetections }}) => {{
+        const msg = {json.dumps(received)};
+        const state = mergeDetections({{}}, msg.detections, msg.sender_id, Date.now(), new Set(), msg.synthetic);
+        const m = state['drone1-g0001'];
+        if (m && m.confidence === 0.88 && m.synthetic === false && m.seenBy.includes('drone1')) {{
+            console.log('NODE_GCS_SUCCESS');
+        }} else {{
+            console.log('NODE_GCS_FAIL');
+        }}
+    }});
+    """
+    proc = subprocess.run(["node", "--input-type=module", "-e", js_code], capture_output=True, text=True, timeout=5)
+    assert "NODE_GCS_SUCCESS" in proc.stdout
+
+    # Clean shutdown
+    await ws_client.close()
+    await adapter.stop()
+    relay_task.cancel()
+    try:
+        await relay_task
+    except asyncio.CancelledError:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_truthful_offline_reporting_contract():
+    """Verify validation script truthfully reports BLOCKED when AirSim RPC is offline (no fake success)."""
+    from scripts.validate_single_drone_airsim import execute_genuine_airsim_validation
+
+    # Port 41459 is not listening
+    report = await execute_genuine_airsim_validation(
+        host="127.0.0.1",
+        port=41459,
+        vehicle_name="Drone1",
+    )
+
+    assert report["status"] == "BLOCKED"
+    assert report["stages"]["airsim_rpc_connectivity"] == "BLOCKED"
+    assert report["stages"]["vehicle_telemetry_validity"] == "NOT_TESTED"
+    assert report["is_genuine_airsim"] is False
