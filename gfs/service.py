@@ -454,3 +454,174 @@ class GFSService:
                 "deferred": len(ambiguous_def) + len(low_conf_def) + len(historical_deferred)
             }
 
+    def run_daemon(self) -> None:
+        """
+        Runs the continuous OCC fusion daemon loop.
+        Acquires exclusive process lock, ingests UDP packets, executes OCC fusion batches,
+        and leases outbox events.
+        """
+        import sys
+        import socket
+        logger.info(f"Starting GFS Daemon with db={self.config.db_path}, lock={self.config.lock_path}")
+        if not self.lock.acquire(blocking=False):
+            logger.error(f"Failed to acquire exclusive GFS process lock on {self.config.lock_path}. Another GFS instance is running.")
+            sys.exit(1)
+
+        inbox_sock = None
+        ack_sock = None
+
+        try:
+            # Set up UDP inbox socket
+            inbox_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            inbox_sock.setblocking(False)
+            try:
+                inbox_sock.bind(("0.0.0.0", self.config.inbox_udp_port))
+                logger.info(f"GFS Inbox listening on UDP port {self.config.inbox_udp_port}")
+            except OSError as e:
+                logger.warning(f"Could not bind GFS inbox UDP port {self.config.inbox_udp_port}: {e}")
+                inbox_sock = None
+
+            # Set up UDP ACK socket
+            ack_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            ack_sock.setblocking(False)
+            try:
+                ack_sock.bind(("0.0.0.0", self.config.ack_udp_port))
+                logger.info(f"GFS ACK receiver listening on UDP port {self.config.ack_udp_port}")
+            except OSError as e:
+                logger.warning(f"Could not bind GFS ACK UDP port {self.config.ack_udp_port}: {e}")
+                ack_sock = None
+
+            print("=" * 60)
+            print(" PhoneOS Swarm — Global Fusion Service (GFS) Daemon")
+            print("=" * 60)
+            print(f"  Database:        {self.config.db_path}")
+            print(f"  Lockfile:        {self.config.lock_path}")
+            print(f"  Inbox UDP Port:  {self.config.inbox_udp_port}")
+            print(f"  Outbox UDP Port: {self.config.outbox_udp_port}")
+            print(f"  ACK UDP Port:    {self.config.ack_udp_port}")
+            print(f"  Batch Interval:  {self.config.batch_interval_ms} ms")
+            print(f"  Origin Ref:      ({self.config.ref_origin_lat:.6f}, {self.config.ref_origin_lon:.6f})")
+            print("=" * 60)
+            print("  GFS status: ACTIVE (running OCC fusion pipeline)")
+            print("  Press Ctrl+C to terminate.")
+            print("=" * 60)
+
+            from gfs.inbox import ingest_raw_packet
+            from gfs.outbox import lease_outbox_events, record_successful_transmission, process_gcs_ack
+
+            interval_s = self.config.batch_interval_ms / 1000.0
+
+            while True:
+                now_ms = int(time.time() * 1000)
+
+                # 1. Drain inbox UDP socket
+                if inbox_sock:
+                    while True:
+                        try:
+                            data, addr = inbox_sock.recvfrom(65535)
+                            pkt_dict = json.loads(data.decode("utf-8"))
+                            with get_db(self.config.db_path) as con:
+                                ingest_raw_packet(con, pkt_dict, self.config, now_ms=now_ms)
+                        except (BlockingIOError, OSError):
+                            break
+                        except Exception as e:
+                            logger.warning(f"Error ingesting raw UDP packet: {e}")
+
+                # 2. Drain ACK UDP socket
+                if ack_sock:
+                    while True:
+                        try:
+                            data, addr = ack_sock.recvfrom(65535)
+                            ack_dict = json.loads(data.decode("utf-8"))
+                            with get_db(self.config.db_path) as con:
+                                conf_msg = process_gcs_ack(con, ack_dict, self.config, now_ms=now_ms)
+                                if conf_msg and ack_sock:
+                                    ack_sock.sendto(json.dumps(conf_msg).encode("utf-8"), addr)
+                        except (BlockingIOError, OSError):
+                            break
+                        except Exception as e:
+                            logger.warning(f"Error processing GFS ACK packet: {e}")
+
+                # 3. Execute OCC fusion batch
+                try:
+                    res = self.process_fusion_batch(now_ms=now_ms)
+                    if res.get("fused", 0) > 0 or res.get("new_globals", 0) > 0 or res.get("updated_globals", 0) > 0:
+                        logger.info(f"GFS Batch: fused={res['fused']}, new={res['new_globals']}, updated={res['updated_globals']}")
+                except Exception as b_err:
+                    logger.error(f"Error in GFS OCC batch: {b_err}")
+
+                # 4. Lease outbox events and broadcast
+                try:
+                    with get_db(self.config.db_path) as con:
+                        lease_token, events = lease_outbox_events(con, "gfs-daemon", 10000, self.config, now_ms=now_ms)
+                        for evt in events:
+                            record_successful_transmission(con, evt.id, lease_token, self.config.outbox_ack_timeout_ms, now_ms=now_ms)
+                            if self.config.outbox_udp_port:
+                                try:
+                                    out_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                                    out_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                                    payload = json.loads(evt.payload)
+                                    msg = {
+                                        "msg_type": "detection",
+                                        "sender_id": "gfs",
+                                        "timestamp": time.time(),
+                                        "event_id": payload.get("event_id"),
+                                        "detections": [{
+                                            "id": payload.get("global_id"),
+                                            "label": payload.get("label", "rubbish"),
+                                            "confidence": payload.get("confidence", 0.8),
+                                            "lat": payload.get("lat"),
+                                            "lon": payload.get("lon"),
+                                            "alt": payload.get("alt"),
+                                            "status": "update",
+                                            "hits": payload.get("observation_count", 1),
+                                            "synthetic": False,
+                                            "reportingDrone": "GFS",
+                                            "version": payload.get("version", 1),
+                                        }]
+                                    }
+                                    out_sock.sendto(json.dumps(msg).encode("utf-8"), ("127.0.0.1", self.config.outbox_udp_port))
+                                    out_sock.close()
+                                except Exception:
+                                    pass
+                except Exception as out_err:
+                    logger.debug(f"Outbox broadcast cycle: {out_err}")
+
+                time.sleep(interval_s)
+
+        except KeyboardInterrupt:
+            print("\n[GFS] Stopping daemon cleanly...")
+        finally:
+            self.lock.release()
+            if inbox_sock:
+                try:
+                    inbox_sock.close()
+                except Exception:
+                    pass
+            if ack_sock:
+                try:
+                    ack_sock.close()
+                except Exception:
+                    pass
+            print("[GFS] Daemon stopped.")
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="PhoneOS Swarm Global Fusion Service (GFS)")
+    parser.add_argument("--config", "-c", default=None, help="Path to gfs_config.yaml")
+    parser.add_argument("--db", default=None, help="Override database path")
+    args = parser.parse_args()
+
+    cfg = GFSConfig.load(args.config)
+    if args.db:
+        cfg.db_path = args.db
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    service = GFSService(cfg)
+    service.run_daemon()
+
+
+if __name__ == "__main__":
+    main()
+

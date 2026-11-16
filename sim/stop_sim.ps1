@@ -1,7 +1,7 @@
 # Stop only Python processes occupying simulation-reserved relay or DroneOS UDP
 # ports. This prevents stale relay children from a terminated previous launcher
 # from sharing a UDP endpoint through SO_REUSEADDR.
-$simulationPorts = 8081, 8082, 8083, 8084, 14550, 14551, 14552, 14553, 14650, 14651, 14652, 14653, 14649, 41459
+$simulationPorts = 8081, 8082, 8083, 8084, 14550, 14551, 14552, 14553, 14650, 14651, 14652, 14653, 14649, 41455, 41458, 41459
 $pidSet = [System.Collections.Generic.HashSet[int]]::new()
 
 foreach ($line in (netstat -ano)) {
