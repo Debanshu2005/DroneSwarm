@@ -1,0 +1,33 @@
+=== PYTEST TESTS/ (201 PASSED) ===
+........................................................................ [ 35%]
+........................................................................ [ 71%]
+.........................................................                [100%]
+============================== warnings summary ===============================
+tests/test_single_drone_airsim_validation.py::test_truthful_offline_reporting_contract
+tests/test_single_drone_airsim_validation.py::test_truthful_offline_reporting_contract
+  D:\CityGrid\my-project\PhoneOS_Swarm\.venv-gpu\Lib\site-packages\msgpack\fallback.py:717: PendingDeprecationWarning: encoding is deprecated, Use raw=False instead.
+    warnings.warn(
+
+tests/test_single_drone_airsim_validation.py::test_truthful_offline_reporting_contract
+tests/test_single_drone_airsim_validation.py::test_truthful_offline_reporting_contract
+  D:\CityGrid\my-project\PhoneOS_Swarm\.venv-gpu\Lib\site-packages\msgpack\fallback.py:220: PendingDeprecationWarning: encoding is deprecated, Use raw=False instead.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+201 passed, 4 warnings in 43.64s
+
+
+=== PYTEST TESTS/TEST_PACKAGE_PARITY.PY (35 PASSED) ===
+...................................                                      [100%]
+35 passed in 1.36s
+
+
+=== NODE MOBILE/SRC/UTILS/GARBAGE.TEST.JS (100% PASSED) ===
+Running Garbage Marker Utility Tests...
+Running Issue 1: 14-Step Exact Sequence Test...
+Issue 1: 14-Step Exact Sequence Test Passed 100%!
+Running Storage Resilience Tests...
+Running Contract B Snapshot Reconciliation Tests...
+Running Section 1: Exact Snapshot Recovery Ordering & Race Suite...
+Section 1: Exact Snapshot Recovery Ordering & Race Suite Passed 100%!
+All garbage utility and recovery tests passed successfully!

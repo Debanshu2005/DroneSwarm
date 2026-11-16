@@ -60,6 +60,33 @@ desktop.ini
 *.swp
 *.swo
 
+# Runtime SQLite Databases & Local State
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Scratch development and audit scripts
+scratch/
+
+# Temporary diagnostic experiment crops in ml/reports/
+ml/reports/*crop*
+ml/reports/controlled_*.jpg
+ml/reports/live_actual_cube_crop.jpg
+ml/reports/live_airsim_flat_target_10m.jpg
+ml/reports/live_airsim_no_peers_10m.jpg
+ml/reports/live_airsim_test_capture_10m.jpg
+ml/reports/live_other_candidate.jpg
+ml/reports/live_patch_at_*.jpg
+ml/reports/live_target_candidate.jpg
+ml/reports/live_test_*.jpg
+ml/reports/mystery_object.jpg
+ml/reports/p2_crop_debug.png
+ml/reports/scale_025_crop.jpg
+ml/reports/test_*.jpg
+ml/reports/test_*.png
+!ml/reports/official_test_confusion_matrix.png
+
 # Temporary root scratch outputs
 /*.txt
 !/requirements*.txt

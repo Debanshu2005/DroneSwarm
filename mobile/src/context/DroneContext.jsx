@@ -2,7 +2,14 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { MultiWebSocketManager } from '../networking/MultiWebSocketManager';
 import { MessageType, CommandAction, ControlMessage, EmergencyMessage, HeartbeatMessage, TestInjectMessage, ParamRequestMessage, TerminalCommandMessage } from '../protocol/messages';
 import { evaluateDroneHealth, evaluateTelemetryFreshness } from '../utils/DroneHealth';
-import { mergeDetections } from '../utils/garbage';
+import {
+  mergeDetections,
+  loadPersistedGarbage,
+  savePersistedGarbage,
+  loadPersistedTombstones,
+  savePersistedTombstones,
+  reconcileSnapshot
+} from '../utils/garbage';
 
 const DroneContext = createContext();
 
@@ -52,13 +59,7 @@ export const DroneProvider = ({ children }) => {
 
   // Garbage Detection State
   const [garbage, setGarbage] = useState(() => {
-    try {
-      const stored = safeStorageGet("PhoneOS_Garbage", null);
-      return stored ? JSON.parse(stored) : {};
-    } catch (e) {
-      console.warn("Failed to parse stored PhoneOS_Garbage:", e);
-      return {};
-    }
+    return loadPersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null);
   });
 
   const [dismissedGarbageIds, setDismissedGarbageIds] = useState(() => {
@@ -71,14 +72,17 @@ export const DroneProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    try {
-      safeStorageSet("PhoneOS_Garbage", JSON.stringify(garbage));
-    } catch (e) {
-      console.warn("Failed to persist PhoneOS_Garbage:", e);
-    }
+    savePersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null, garbage);
   }, [garbage]);
 
   const dismissedGarbageIdsRef = useRef(dismissedGarbageIds);
+  const tombstonesRef = useRef((() => {
+    return loadPersistedTombstones(typeof window !== 'undefined' ? window.localStorage : null);
+  })());
+  const isSnapshotPendingRef = useRef(false);
+  const eventBufferRef = useRef([]);
+  const snapshotWatermarkRef = useRef(0);
+  const snapshotRevisionRef = useRef(0);
   useEffect(() => {
     dismissedGarbageIdsRef.current = dismissedGarbageIds;
   }, [dismissedGarbageIds]);
@@ -107,11 +111,9 @@ export const DroneProvider = ({ children }) => {
 
   const clearGarbage = () => {
     setGarbage({});
-    try {
-      safeStorageSet("PhoneOS_Garbage", JSON.stringify({}));
-    } catch (e) {
-      console.warn("Failed to clear PhoneOS_Garbage:", e);
-    }
+    tombstonesRef.current = {};
+    savePersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null, {});
+    savePersistedTombstones(typeof window !== 'undefined' ? window.localStorage : null, {});
     addLog(`Cleared all garbage markers`, 'INFO', 'PHONEOS', null, 'GARBAGE_CLEARED');
   };
   
@@ -244,6 +246,12 @@ export const DroneProvider = ({ children }) => {
         const [ip, portStr] = wsUrl.replace('ws://', '').split(':');
         manager.addConnection(ip, portStr ? parseInt(portStr) : 8080);
       }
+    } else if (wsUrl) {
+      const urlWs = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ws') : null;
+      if (urlWs) {
+        const [ip, portStr] = urlWs.replace('ws://', '').split(':');
+        manager.addConnection(ip, portStr ? parseInt(portStr) : 8080);
+      }
     }
 
     manager.onConnectionChange = (url, status, detail = {}) => {
@@ -254,6 +262,13 @@ export const DroneProvider = ({ children }) => {
       const nextStatus = anyConnected ? "CONNECTED" : hasAuthFailure ? "AUTH_FAILED" : hasConnecting ? "CONNECTING" : "DISCONNECTED";
       setIsConnected(nextStatus);
       setConnectionError(hasAuthFailure ? (detail.reason || detail.error || "Relay authentication failed") : "");
+      if (status === "CONNECTED") {
+        isSnapshotPendingRef.current = true;
+        eventBufferRef.current = [];
+        try {
+          manager.send({ type: "gfs_snapshot_request", timestamp: Date.now() });
+        } catch (_) {}
+      }
       addLog(
         `Connection ${url}: ${status}${detail.reason ? ` (${detail.reason})` : ""}`,
         status === "AUTH_FAILED" ? "ERROR" : "INFO",
@@ -510,6 +525,12 @@ export const DroneProvider = ({ children }) => {
       const isSynthetic = Boolean(msg.synthetic);
       const now = Date.now();
 
+      // Buffer incoming detection events while snapshot request is in flight
+      if (isSnapshotPendingRef.current) {
+        eventBufferRef.current.push({ msg, droneId, isSynthetic, now });
+        return;
+      }
+
       setGarbage(prev => {
         for (const item of msg.detections) {
           if (!prev[item.id] || item.status === 'new') {
@@ -523,15 +544,74 @@ export const DroneProvider = ({ children }) => {
             );
           }
         }
-        return mergeDetections(
+        const nextGarbage = mergeDetections(
           prev,
           msg.detections,
           droneId,
           now,
           dismissedGarbageIdsRef.current,
-          isSynthetic
+          isSynthetic,
+          tombstonesRef.current
         );
+        savePersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null, nextGarbage);
+        savePersistedTombstones(typeof window !== 'undefined' ? window.localStorage : null, tombstonesRef.current);
+        return nextGarbage;
       });
+    });
+
+    manager.subscribe("gfs_snapshot_response", (msg) => {
+      if (!msg) return;
+      const incomingRev = Number(msg.snapshot_revision || 0);
+      if (incomingRev > 0 && incomingRev < snapshotRevisionRef.current) {
+        console.warn("Ignoring stale snapshot response with revision", incomingRev, "expected >=", snapshotRevisionRef.current);
+        return;
+      }
+      snapshotRevisionRef.current = Math.max(snapshotRevisionRef.current, incomingRev);
+      const watermarkId = Number(msg.watermark_event_id || 0);
+      snapshotWatermarkRef.current = Math.max(snapshotWatermarkRef.current, watermarkId);
+
+      setGarbage(prev => {
+        let current = reconcileSnapshot(
+          prev,
+          msg.objects || [],
+          tombstonesRef.current,
+          msg.tombstones || {},
+          watermarkId
+        );
+
+        // Process buffered events arriving while snapshot was in flight
+        const buffered = [...eventBufferRef.current];
+        eventBufferRef.current = [];
+        isSnapshotPendingRef.current = false;
+
+        for (const item of buffered) {
+          // Check if event is covered by snapshot watermark
+          if (item.msg.event_id && Number(item.msg.event_id) <= snapshotWatermarkRef.current) {
+            continue;
+          }
+          current = mergeDetections(
+            current,
+            item.msg.detections,
+            item.droneId,
+            item.now,
+            dismissedGarbageIdsRef.current,
+            item.isSynthetic,
+            tombstonesRef.current
+          );
+        }
+
+        savePersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null, current);
+        savePersistedTombstones(typeof window !== 'undefined' ? window.localStorage : null, tombstonesRef.current);
+        return current;
+      });
+
+      addLog(
+        `Reconciled GFS snapshot (${(msg.objects || []).length} active, ${Object.keys(msg.tombstones || {}).length} tombstones, rev=${incomingRev})`,
+        'INFO',
+        'GFS',
+        null,
+        'GFS_SNAPSHOT_RECONCILED'
+      );
     });
 
     setWsManager(manager);

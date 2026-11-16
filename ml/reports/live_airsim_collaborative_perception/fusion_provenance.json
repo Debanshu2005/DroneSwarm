@@ -1,0 +1,160 @@
+{
+  "global_objects": [
+    {
+      "global_id": "G-0ab2d222",
+      "label": "rubbish",
+      "status": "ACTIVE",
+      "lat": 47.6414997000614,
+      "lon": -122.14008769986052,
+      "alt": 10.139999998733401,
+      "confidence": 0.6846,
+      "observation_count": 75,
+      "source_count": 2,
+      "source_estimates": {
+        "drone1": {
+          "drone_id": "drone1",
+          "drone_session_id": "sess-drone1-c59dba1e54df424aad2a338839aaf518",
+          "session_generation": 3,
+          "local_track_id": "drone1-g0002",
+          "east_m": 5.808400603557887,
+          "north_m": 3.5245205305941614,
+          "cov_xx": 0.35,
+          "cov_yy": 0.35,
+          "cov_xy": 0.01,
+          "confidence": 0.5088,
+          "last_seen_ms": 1794806907545,
+          "observation_count": 1
+        },
+        "drone3": {
+          "drone_id": "drone3",
+          "drone_session_id": "sess-drone3-4372f5dbc2464fa9aca96ab56e7d741e",
+          "session_generation": 3,
+          "local_track_id": "drone3-g0003",
+          "east_m": 7.5666989109335905,
+          "north_m": 4.6697128242873225,
+          "cov_xx": 0.35,
+          "cov_yy": 0.35,
+          "cov_xy": 0.01,
+          "confidence": 0.3578,
+          "last_seen_ms": 1794806907397,
+          "observation_count": 1
+        }
+      },
+      "version": 36,
+      "first_seen_ms": 1794806842337,
+      "last_seen_ms": 1794806907545
+    },
+    {
+      "global_id": "G-467e474f",
+      "label": "rubbish",
+      "status": "ACTIVE",
+      "lat": 47.64163450006141,
+      "lon": -122.1400875998611,
+      "alt": 10.139994735829532,
+      "confidence": 0.8238,
+      "observation_count": 74,
+      "source_count": 2,
+      "source_estimates": {
+        "drone2": {
+          "drone_id": "drone2",
+          "drone_session_id": "sess-drone2-1084228ae7804147b8375324e3449a0d",
+          "session_generation": 3,
+          "local_track_id": "drone2-g0002",
+          "east_m": 5.815899744207442,
+          "north_m": 18.512059468194813,
+          "cov_xx": 0.35,
+          "cov_yy": 0.35,
+          "cov_xy": 0.01,
+          "confidence": 0.6269,
+          "last_seen_ms": 1794806907496,
+          "observation_count": 1
+        },
+        "drone4": {
+          "drone_id": "drone4",
+          "drone_session_id": "sess-drone4-e06bf6495c844cfc88de8871a3e8adf2",
+          "session_generation": 3,
+          "local_track_id": "drone4-g0002",
+          "east_m": 7.566679446574833,
+          "north_m": 19.6572517823233,
+          "cov_xx": 0.35,
+          "cov_yy": 0.35,
+          "cov_xy": 0.01,
+          "confidence": 0.5278,
+          "last_seen_ms": 1794806907589,
+          "observation_count": 1
+        }
+      },
+      "version": 33,
+      "first_seen_ms": 1794806842500,
+      "last_seen_ms": 1794806907589
+    }
+  ],
+  "identity_history": [
+    {
+      "drone_id": "drone3",
+      "drone_session_id": "sess-drone3-4372f5dbc2464fa9aca96ab56e7d741e",
+      "session_generation": 3,
+      "local_track_id": "drone3-g0002",
+      "global_id": "G-0ab2d222",
+      "first_frame_id": 2,
+      "last_frame_id": 34,
+      "first_seen_ms": 1794806842337,
+      "last_seen_ms": 1794806907397
+    },
+    {
+      "drone_id": "drone1",
+      "drone_session_id": "sess-drone1-c59dba1e54df424aad2a338839aaf518",
+      "session_generation": 3,
+      "local_track_id": "drone1-g0002",
+      "global_id": "G-0ab2d222",
+      "first_frame_id": 2,
+      "last_frame_id": 34,
+      "first_seen_ms": 1794806842391,
+      "last_seen_ms": 1794806907545
+    },
+    {
+      "drone_id": "drone3",
+      "drone_session_id": "sess-drone3-4372f5dbc2464fa9aca96ab56e7d741e",
+      "session_generation": 3,
+      "local_track_id": "drone3-g0003",
+      "global_id": "G-0ab2d222",
+      "first_frame_id": 2,
+      "last_frame_id": 34,
+      "first_seen_ms": 1794806842337,
+      "last_seen_ms": 1794806907397
+    },
+    {
+      "drone_id": "drone4",
+      "drone_session_id": "sess-drone4-e06bf6495c844cfc88de8871a3e8adf2",
+      "session_generation": 3,
+      "local_track_id": "drone4-g0001",
+      "global_id": "G-467e474f",
+      "first_frame_id": 2,
+      "last_frame_id": 34,
+      "first_seen_ms": 1794806842526,
+      "last_seen_ms": 1794806907589
+    },
+    {
+      "drone_id": "drone2",
+      "drone_session_id": "sess-drone2-1084228ae7804147b8375324e3449a0d",
+      "session_generation": 3,
+      "local_track_id": "drone2-g0002",
+      "global_id": "G-467e474f",
+      "first_frame_id": 2,
+      "last_frame_id": 34,
+      "first_seen_ms": 1794806842500,
+      "last_seen_ms": 1794806907496
+    },
+    {
+      "drone_id": "drone4",
+      "drone_session_id": "sess-drone4-e06bf6495c844cfc88de8871a3e8adf2",
+      "session_generation": 3,
+      "local_track_id": "drone4-g0002",
+      "global_id": "G-467e474f",
+      "first_frame_id": 2,
+      "last_frame_id": 34,
+      "first_seen_ms": 1794806842526,
+      "last_seen_ms": 1794806907589
+    }
+  ]
+}

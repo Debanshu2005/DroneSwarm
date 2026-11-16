@@ -1,0 +1,79 @@
+{
+  "timestamp": 1794806924.336235,
+  "mission_name": "LIVE_FOUR_DRONE_COLLABORATIVE_PERCEPTION",
+  "duration_seconds": 65.36901998519897,
+  "environment": {
+    "airsim_host": "127.0.0.1",
+    "airsim_port": 41451,
+    "gpu_device": "cuda",
+    "vram_allocated_peak_mb": 41.201171875,
+    "ram_rss_peak_mb": 310.42578125
+  },
+  "ground_truth_targets": {
+    "GarbageTarget1": {
+      "name": "GarbageTarget1",
+      "ned_x_m": 3.75,
+      "ned_y_m": 6.5,
+      "ned_z_m": -0.0,
+      "lat": 47.64150172808389,
+      "lon": -122.14007849586268
+    },
+    "GarbageTarget2": {
+      "name": "GarbageTarget2",
+      "ned_x_m": 18.75,
+      "ned_y_m": 6.5,
+      "ned_z_m": -0.0,
+      "lat": 47.641636640419435,
+      "lon": -122.14007849586268
+    }
+  },
+  "drone_packages": {
+    "drone1": {
+      "package": "DroneOS",
+      "vehicle": "Drone1",
+      "session_uuid": "sess-drone1-c59dba1e54df424aad2a338839aaf518",
+      "session_generation": 3,
+      "frames_captured": 34,
+      "detections_made": 68,
+      "messages_emitted": 27
+    },
+    "drone2": {
+      "package": "DroneOS1",
+      "vehicle": "Drone2",
+      "session_uuid": "sess-drone2-1084228ae7804147b8375324e3449a0d",
+      "session_generation": 3,
+      "frames_captured": 34,
+      "detections_made": 68,
+      "messages_emitted": 26
+    },
+    "drone3": {
+      "package": "DroneOS2",
+      "vehicle": "Drone3",
+      "session_uuid": "sess-drone3-4372f5dbc2464fa9aca96ab56e7d741e",
+      "session_generation": 3,
+      "frames_captured": 34,
+      "detections_made": 102,
+      "messages_emitted": 24
+    },
+    "drone4": {
+      "package": "DroneOS3",
+      "vehicle": "Drone4",
+      "session_uuid": "sess-drone4-e06bf6495c844cfc88de8871a3e8adf2",
+      "session_generation": 3,
+      "frames_captured": 34,
+      "detections_made": 68,
+      "messages_emitted": 24
+    }
+  },
+  "gfs_fusion": {
+    "packets_ingested": 101,
+    "batches_executed": 597,
+    "global_objects_created": 2,
+    "outbox_events_forwarded": 189
+  },
+  "gcs_browser": {
+    "connected": true,
+    "rendered_markers_count": 2,
+    "screenshot_path": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\ml\\reports\\live_airsim_collaborative_perception\\gcs_map_verification.png"
+  }
+}

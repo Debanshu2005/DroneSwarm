@@ -270,4 +270,6 @@ class DetectionMessage(BaseMessage):
     detections: List[DetectionItem] = Field(default_factory=list)
     synthetic: bool = False
     frame_id: int = 0
+    drone_session_id: Optional[str] = None
+    session_generation: Optional[int] = None
 

@@ -1,0 +1,44 @@
+{
+  "dataset": "UAVVaste Official Test Split",
+  "split": "test",
+  "total_test_images": 116,
+  "total_test_instances": 507,
+  "model": {
+    "checkpoint": "models/garbage.pt",
+    "sha256": "5e6fe97ead40c8d24edcdb5517b210bf8415ec23719beb8a575fdab3a4028d20",
+    "architecture": "YOLO26n",
+    "parameters": 2389735
+  },
+  "standard_benchmark_evaluation": {
+    "confidence_threshold": 0.25,
+    "iou_threshold": 0.5,
+    "imgsz": 1280,
+    "precision": 0.8769,
+    "recall": 0.7594,
+    "f1_score": 0.8139,
+    "mAP50": 0.8513,
+    "mAP50_95": 0.5298
+  },
+  "frozen_production_evaluation": {
+    "confidence_threshold": 0.55,
+    "iou_threshold": 0.5,
+    "imgsz": 1280,
+    "precision": 0.9357,
+    "recall": 0.6884,
+    "f1_score": 0.7932,
+    "mAP50": 0.8258,
+    "mAP50_95": 0.535,
+    "per_box_matching": {
+      "true_positives": 343,
+      "false_positives": 20,
+      "false_negatives": 164,
+      "box_precision": 0.9449,
+      "box_recall": 0.6765,
+      "box_f1": 0.7885
+    }
+  },
+  "artifacts_generated": {
+    "confusion_matrix": "ml/reports/yolovaste_confusion_matrix.png",
+    "error_analysis_directory": "ml/reports/official_test_errors/"
+  }
+}

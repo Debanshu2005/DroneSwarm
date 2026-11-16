@@ -40,18 +40,20 @@ class AirSimFrameSource(FrameSource):
         host: str = "127.0.0.1",
         port: int = 41451,
         camera_name: str = "bottom_center",
+        client: Optional[Any] = None,
     ):
         self.vehicle_name = vehicle_name
         self.host = host
         self.port = port
         self.camera_name = camera_name
-        self._client = None
-        self._connected = False
+        self._client = client
+        self._external_client = (client is not None)
+        self._connected = (client is not None)
         self.is_synthetic = False
 
     def _discard_client(self) -> None:
         """Safely close and discard client reference before reconnecting or on shutdown."""
-        if self._client is not None:
+        if not getattr(self, "_external_client", False) and self._client is not None:
             try:
                 if hasattr(self._client, "close"):
                     self._client.close()
@@ -66,7 +68,7 @@ class AirSimFrameSource(FrameSource):
         self._discard_client()
         try:
             import airsim
-            self._client = airsim.MultirotorClient(ip=self.host, port=self.port, timeout_value=3.0)
+            self._client = airsim.MultirotorClient(ip=self.host, port=self.port, timeout_value=15.0)
             self._client.confirmConnection()
             self._connected = True
             logger.info("AirSimFrameSource connected to %s:%d for vehicle '%s'", self.host, self.port, self.vehicle_name)
@@ -89,7 +91,7 @@ class AirSimFrameSource(FrameSource):
             img_req = getattr(airsim, "ImageRequest", None)
             img_type = getattr(getattr(airsim, "ImageType", None), "Scene", 0)
             if img_req is not None:
-                request = img_req(self.camera_name, img_type, False, True)
+                request = img_req(self.camera_name, img_type, False, False)
             else:
                 class _GenericImageRequest:
                     def __init__(self, camera_name, image_type, pixels_as_float, compress):
@@ -97,7 +99,7 @@ class AirSimFrameSource(FrameSource):
                         self.image_type = image_type
                         self.pixels_as_float = pixels_as_float
                         self.compress = compress
-                request = _GenericImageRequest(self.camera_name, img_type, False, True)
+                request = _GenericImageRequest(self.camera_name, img_type, False, False)
 
             responses = self._client.simGetImages(
                 [request],
@@ -108,13 +110,21 @@ class AirSimFrameSource(FrameSource):
 
             raw_bytes = responses[0].image_data_uint8
             arr = np.frombuffer(raw_bytes, dtype=np.uint8)
-            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            img = None
+            resp_h = getattr(responses[0], "height", 0)
+            resp_w = getattr(responses[0], "width", 0)
+            if isinstance(resp_h, int) and isinstance(resp_w, int) and resp_h > 0 and resp_w > 0:
+                expected_sz = resp_h * resp_w * 3
+                if len(arr) == expected_sz:
+                    img = arr.reshape((resp_h, resp_w, 3))
+            if img is None:
+                img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             if img is None:
                 return None
 
             return Frame(image=img, timestamp=time.time())
         except Exception as e:
-            logger.debug("AirSim image acquisition error: %s", e)
+            logger.error("AirSim image acquisition error: %s", e)
             self._connected = False
             self._discard_client()
             return None

@@ -12,8 +12,35 @@ import time
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("PhoneOS_Relay")
 
+import sqlite3
+from pathlib import Path
+
+def init_relay_ack_db(db_path: str):
+    """Initializes the durable SQLite ledger for relay ACK persistence."""
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(db_path, timeout=5.0)
+    try:
+        con.execute("PRAGMA journal_mode = WAL;")
+        con.execute("PRAGMA synchronous = NORMAL;")
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS relay_ack_outbox (
+                ack_id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL,
+                delivery_attempt_id TEXT NOT NULL,
+                gcs_client_id TEXT NOT NULL,
+                ack_payload TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('RECEIVED', 'FORWARDED', 'CONFIRMED')),
+                received_at_ms INTEGER NOT NULL,
+                forward_attempt_count INTEGER NOT NULL DEFAULT 0,
+                last_forwarded_at_ms INTEGER
+            );
+        """)
+        con.commit()
+    finally:
+        con.close()
+
 class UdpWebsocketRelay:
-    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14551, udp_target_port=14550, udp_broadcast_addr="255.255.255.255", udp_target_host=None, gs_heartbeat_interval=1.0, udp_target_endpoints=None):
+    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14551, udp_target_port=14550, udp_broadcast_addr="255.255.255.255", udp_target_host=None, gs_heartbeat_interval=1.0, udp_target_endpoints=None, gfs_ack_host="127.0.0.1", gfs_ack_port=41459, relay_ack_db="data/relay_acks.db", gfs_db_path="data/gfs.db", allow_duplicate_ips=False):
         self.ws_host = ws_host
         self.ws_port = ws_port
         self.udp_bind_host = udp_bind_host
@@ -33,15 +60,25 @@ class UdpWebsocketRelay:
         self.auth_token = os.getenv("RELAY_AUTH_TOKEN")
         self.net_secret = os.getenv("DRONE_NET_SECRET")
         self.trace_network = os.getenv("DRONEOS_DIAGNOSTIC_TRACE", "").lower() in {"1", "true", "yes", "on"}
-        
+        self.allow_duplicate_ips = allow_duplicate_ips
+
         self.clients = set()
         self.known_endpoints = {} # Target ID to address tuple
-        
+
         # We need a reference to the loop
         self.loop = None
         self.transport = None
         self.protocol = None
         self._heartbeat_task = None
+        self._ack_recovery_task = None
+        self.gfs_ack_host = gfs_ack_host
+        self.gfs_ack_port = gfs_ack_port
+        self.relay_ack_db = relay_ack_db
+        self.gfs_db_path = gfs_db_path
+        try:
+            init_relay_ack_db(self.relay_ack_db)
+        except Exception as e:
+            logger.warning(f"Could not init relay ack db: {e}")
 
     def _signature_payload(self, msg_dict: dict) -> bytes:
         payload = dict(msg_dict)
@@ -113,32 +150,37 @@ class UdpWebsocketRelay:
 
     async def forward_udp_to_ws(self, data: bytes, addr: tuple):
         if not data: return
-        
+
         # MAVLink 1 is 0xFE, MAVLink 2 is 0xFD
         if data[0] in (0xFE, 0xFD):
             return
-            
+
         if data[0] not in (ord('{'), ord('[')):
             logger.warning(f"UDP packet dropped: Expected JSON but got invalid byte {data[0]} from {addr}")
             return
-            
+
         try:
             msg_str = data.decode('utf-8')
             msg_dict = json.loads(msg_str)
             if not self._verify_message_dict(msg_dict, addr):
                 return
             sender_id = msg_dict.get('sender_id')
-            
+
             # Prevent WS loopback of our own ground station commands
             if sender_id and sender_id.startswith('gs'):
                 return
-                
+
             # Auto-learn peer IP for targeted unicast replies from WS
             if sender_id:
                 if sender_id not in self.known_endpoints or self.known_endpoints[sender_id] != addr:
                     logger.debug(f"Learned UDP endpoint for {sender_id}: {addr}")
                 self.known_endpoints[sender_id] = addr
-                
+
+            # Check for GFS ACK confirmation datagram
+            if isinstance(msg_dict, dict) and msg_dict.get('type') == 'gfs_ack_confirmed':
+                self._handle_gfs_ack_confirmed(msg_dict)
+                return
+
             # Broadcast to all connected WebSockets
             if self.clients:
                 # A slow or abandoned app connection must not hold up the
@@ -158,7 +200,7 @@ class UdpWebsocketRelay:
                             await ws.close()
                         except Exception:
                             pass
-                
+
         except json.JSONDecodeError as e:
             logger.warning(f"Invalid JSON received from UDP: {e}")
         except Exception as e:
@@ -169,23 +211,24 @@ class UdpWebsocketRelay:
 
         if not await self._authenticate_websocket(websocket):
             return
-        
-        # Prevent duplicate WS connections from the same IP
-        ip = websocket.remote_address[0]
-        to_remove = [ws for ws in self.clients if ws.remote_address[0] == ip]
-        for ws in to_remove:
-            logger.info(f"Closing duplicate WebSocket from {ip}")
-            try:
-                await ws.close()
-            except:
-                pass
-            self.clients.discard(ws)
-            
+
+        # Prevent duplicate WS connections from the same IP (unless explicitly allowed)
+        if not self.allow_duplicate_ips:
+            ip = websocket.remote_address[0]
+            to_remove = [ws for ws in self.clients if ws.remote_address[0] == ip]
+            for ws in to_remove:
+                logger.info(f"Closing duplicate WebSocket from {ip}")
+                try:
+                    await ws.close()
+                except:
+                    pass
+                self.clients.discard(ws)
+
         self.clients.add(websocket)
         try:
             async for message in websocket:
                 if isinstance(message, str):
-                    await self.forward_ws_to_udp(message)
+                    await self.forward_ws_to_udp(message, websocket=websocket)
         except websockets.exceptions.ConnectionClosed:
             logger.info(f"WebSocket client disconnected: {websocket.remote_address}")
         except Exception as e:
@@ -193,18 +236,24 @@ class UdpWebsocketRelay:
         finally:
             self.clients.discard(websocket)
 
-    async def forward_ws_to_udp(self, message: str):
+    async def forward_ws_to_udp(self, message: str, websocket=None):
         if not self.transport:
             return
-            
+
         try:
             msg_dict = json.loads(message)
+            if isinstance(msg_dict, dict) and msg_dict.get('type') == 'gfs_outbox_ack':
+                await self._handle_gfs_outbox_ack(msg_dict)
+                return
+            if isinstance(msg_dict, dict) and msg_dict.get('type') == 'gfs_snapshot_request':
+                await self._handle_gfs_snapshot_request(websocket, msg_dict)
+                return
             target_id = msg_dict.get('target_id')
             route_target_id = target_id.strip().lower() if isinstance(target_id, str) else target_id
             data = json.dumps(self._sign_message_dict(msg_dict)).encode('utf-8')
             if self.trace_network:
                 logger.info(f"TRACE WS_RX ws={self.ws_port} target={target_id} type={msg_dict.get('msg_type')} action={msg_dict.get('action')} cmd_id={msg_dict.get('cmd_id')}")
-            
+
             if route_target_id == "all" and self.udp_target_endpoints:
                 # Send one copy to every configured simulation DroneOS node.
                 # DroneOS de-duplicates by cmd_id when the GCS has multiple
@@ -231,7 +280,7 @@ class UdpWebsocketRelay:
                 if self.trace_network:
                     logger.info(f"TRACE UDP_TX udp={self.udp_bind_port} to={addr} route=configured-target")
                 logger.debug(f"Forwarded WS msg ({msg_dict.get('msg_type')}) via Broadcast to {addr}")
-                
+
         except json.JSONDecodeError:
             logger.warning("Received invalid JSON from WS, dropping.")
         except Exception as e:
@@ -263,9 +312,175 @@ class UdpWebsocketRelay:
                 logger.warning(f"Error publishing relay ground-station heartbeat: {e}")
             await asyncio.sleep(self.gs_heartbeat_interval)
 
+
+    async def _handle_gfs_outbox_ack(self, msg_dict: dict):
+        """Persists GCS ACK into durable SQLite ledger and forwards UDP datagram to GFS."""
+        ack_id = msg_dict.get("ack_id")
+        event_id = msg_dict.get("event_id")
+        delivery_attempt_id = msg_dict.get("delivery_attempt_id")
+        gcs_client_id = msg_dict.get("gcs_client_id")
+        now_ms = int(time.time() * 1000)
+
+        if not ack_id or not event_id:
+            logger.warning("Dropping invalid GFS ACK: missing ack_id or event_id")
+            return
+
+        payload_str = json.dumps(msg_dict)
+        # 1. Durable write before forward
+        try:
+            con = sqlite3.connect(self.relay_ack_db, timeout=5.0)
+            with con:
+                con.execute(
+                    """INSERT OR IGNORE INTO relay_ack_outbox
+                       (ack_id, event_id, delivery_attempt_id, gcs_client_id, ack_payload, status, received_at_ms)
+                       VALUES (?, ?, ?, ?, ?, 'RECEIVED', ?)""",
+                    (ack_id, event_id, delivery_attempt_id, gcs_client_id, payload_str, now_ms)
+                )
+            con.close()
+        except Exception as e:
+            logger.error(f"Error persisting ACK to relay ledger: {e}")
+
+        # 2. Forward UDP datagram to GFS
+        if self.transport:
+            dest = (self.gfs_ack_host, self.gfs_ack_port)
+            self.transport.sendto(payload_str.encode('utf-8'), dest)
+            try:
+                con = sqlite3.connect(self.relay_ack_db, timeout=5.0)
+                with con:
+                    con.execute(
+                        """UPDATE relay_ack_outbox
+                           SET status = 'FORWARDED', forward_attempt_count = forward_attempt_count + 1, last_forwarded_at_ms = ?
+                           WHERE ack_id = ?""",
+                        (now_ms, ack_id)
+                    )
+                con.close()
+            except Exception as e:
+                logger.error(f"Error updating forwarded ACK in relay ledger: {e}")
+
+    def _handle_gfs_ack_confirmed(self, msg_dict: dict):
+        """Processes GFS ACK confirmation datagram, transitioning status to CONFIRMED."""
+        ack_id = msg_dict.get("ack_id")
+        if not ack_id:
+            return
+        try:
+            con = sqlite3.connect(self.relay_ack_db, timeout=5.0)
+            with con:
+                con.execute("UPDATE relay_ack_outbox SET status = 'CONFIRMED' WHERE ack_id = ?", (ack_id,))
+            con.close()
+            logger.info(f"Relay ACK confirmed by GFS: {ack_id}")
+        except Exception as e:
+            logger.error(f"Error marking ACK confirmed: {e}")
+
+    async def _handle_gfs_snapshot_request(self, websocket, msg_dict: dict):
+        """Authoritative GFS snapshot recovery for GCS clients (Contract B)."""
+        now_ms = int(time.time() * 1000)
+        objects = []
+        tombstones = {}
+        watermark_event_id = 0
+        snapshot_revision = 0
+        if self.gfs_db_path and Path(self.gfs_db_path).exists():
+            try:
+                con = sqlite3.connect(self.gfs_db_path, timeout=5.0)
+                con.row_factory = sqlite3.Row
+                cur = con.cursor()
+                cur.execute("""
+                    SELECT global_id, label, status, lat, lon, alt, confidence,
+                           observation_count, source_count, version, first_seen_ms, last_seen_ms
+                    FROM global_objects
+                """)
+                for row in cur.fetchall():
+                    ver = int(row["version"] or 0)
+                    if ver > snapshot_revision:
+                        snapshot_revision = ver
+
+                    if row["status"] == "ACTIVE":
+                        objects.append({
+                            "id": row["global_id"],
+                            "global_id": row["global_id"],
+                            "label": row["label"],
+                            "status": row["status"],
+                            "lat": row["lat"],
+                            "lon": row["lon"],
+                            "alt": row["alt"],
+                            "confidence": row["confidence"],
+                            "observation_count": row["observation_count"],
+                            "source_count": row["source_count"],
+                            "version": ver,
+                            "first_seen_ms": row["first_seen_ms"],
+                            "last_seen_ms": row["last_seen_ms"],
+                        })
+                    elif row["status"] == "RETIRED":
+                        tombstones[row["global_id"]] = {
+                            "retiredAt": row["last_seen_ms"] or now_ms,
+                            "version": ver
+                        }
+
+                try:
+                    cur.execute("SELECT COALESCE(MAX(id), 0) FROM gfs_outbox_events")
+                    row_w = cur.fetchone()
+                    if row_w:
+                        watermark_event_id = int(row_w[0] or 0)
+                except Exception:
+                    pass
+
+                con.close()
+            except Exception as e:
+                logger.error(f"Error querying GFS snapshot: {e}")
+
+        response = {
+            "type": "gfs_snapshot_response",
+            "msg_type": "gfs_snapshot_response",
+            "snapshot_revision": snapshot_revision,
+            "watermark_event_id": watermark_event_id,
+            "timestamp_ms": now_ms,
+            "objects": objects,
+            "tombstones": tombstones
+        }
+        if websocket:
+            try:
+                await websocket.send(json.dumps(response))
+                logger.info(f"Served GFS snapshot response ({len(objects)} active, {len(tombstones)} tombstones, watermark={watermark_event_id}) to {getattr(websocket, 'remote_address', 'client')}")
+            except Exception as e:
+                logger.warning(f"Failed to send snapshot response to client: {e}")
+
+    async def _relay_ack_recovery_loop(self):
+        """Periodically recovers and re-forwards unconfirmed ACKs to GFS."""
+        while True:
+            try:
+                await asyncio.sleep(3.0)
+                if not self.transport:
+                    continue
+                now_ms = int(time.time() * 1000)
+                con = sqlite3.connect(self.relay_ack_db, timeout=5.0)
+                cur = con.cursor()
+                cur.execute(
+                    """SELECT ack_id, ack_payload FROM relay_ack_outbox
+                       WHERE status IN ('RECEIVED', 'FORWARDED')
+                         AND (last_forwarded_at_ms IS NULL OR last_forwarded_at_ms < ?)
+                       LIMIT 20""",
+                    (now_ms - 2500,)
+                )
+                rows = cur.fetchall()
+                for r in rows:
+                    ack_id, payload_str = r[0], r[1]
+                    dest = (self.gfs_ack_host, self.gfs_ack_port)
+                    self.transport.sendto(payload_str.encode('utf-8'), dest)
+                    con.execute(
+                        """UPDATE relay_ack_outbox
+                           SET forward_attempt_count = forward_attempt_count + 1, last_forwarded_at_ms = ?
+                           WHERE ack_id = ?""",
+                        (now_ms, ack_id)
+                    )
+                con.commit()
+                con.close()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Error in relay ACK recovery loop: {e}")
+
     async def start(self):
         self.loop = asyncio.get_running_loop()
-        
+
         # Setup UDP
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -304,6 +519,7 @@ class UdpWebsocketRelay:
         )
         logger.info(f"Relay listening for UDP on {self.udp_bind_host}:{self.udp_bind_port}")
         self._heartbeat_task = asyncio.create_task(self._relay_groundstation_heartbeat_loop())
+        self._ack_recovery_task = asyncio.create_task(self._relay_ack_recovery_loop())
 
         # Setup WebSocket Server
         try:
@@ -313,6 +529,8 @@ class UdpWebsocketRelay:
         finally:
             if self._heartbeat_task:
                 self._heartbeat_task.cancel()
+            if self._ack_recovery_task:
+                self._ack_recovery_task.cancel()
 
 
 def parse_udp_target_endpoint(value: str):

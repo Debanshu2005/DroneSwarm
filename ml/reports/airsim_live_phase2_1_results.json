@@ -1,0 +1,84 @@
+{
+  "timestamp": 1794734640.077533,
+  "status": "FAIL",
+  "validation_phase": "Phase 2.1 - Live AirSim & Browser-Level Verification",
+  "is_genuine_airsim": true,
+  "stages": {
+    "airsim_rpc_connectivity": "PASS",
+    "vehicle_telemetry_validity": "PASS",
+    "camera_frame_acquisition": "PASS",
+    "genuine_scene_target_visibility": "PASS",
+    "yolo_inference_execution": "PASS",
+    "detection_generation": "FAIL",
+    "geolocation_validation": "FAIL",
+    "production_message_serialization": "PASS",
+    "actual_network_transmission": "PASS",
+    "gcs_receipt": "FAIL",
+    "visible_gcs_marker": "FAIL"
+  },
+  "diagnostics": {
+    "telemetry": {
+      "altitude_agl_m": 10.137666702270508,
+      "latitude": 47.64146799999743,
+      "longitude": -122.140165,
+      "roll_deg": 0.0,
+      "pitch_deg": 0.0,
+      "yaw_deg": 0.0,
+      "armed_state": "ARMED",
+      "flight_mode": "HOLD",
+      "gps_valid": true
+    },
+    "ground_truth_target": {
+      "target_name": "GarbageTarget",
+      "actual_actor_name": "GarbageTarget",
+      "mesh_name": "EditorCube",
+      "spawn_succeeded": true,
+      "reused_existing": false,
+      "texture_applied": true,
+      "world_x_m": 0.0,
+      "world_y_m": 2.0,
+      "world_z_m": -0.0,
+      "true_lat": 47.641468,
+      "true_lon": -122.14013838334236,
+      "error": null
+    },
+    "visibility": {
+      "visible": true,
+      "reason": "Target features distinct texture/edges distinguishable from floor",
+      "roi_std": 40.23028400353385,
+      "contrast_delta": 6.8614969135802255,
+      "laplacian_var": 802.2625171467764
+    },
+    "latency_decomposition": {
+      "t_load_ms": 8582.39550000144,
+      "t_cold_ms": 11499.397800002043,
+      "t_warm_ms": 1254.1526199995133,
+      "warm_runs_ms": [
+        4470.94,
+        1048.03,
+        520.92,
+        121.99,
+        108.88
+      ],
+      "latency_analysis": "The previously reported 4336.3 ms latency was caused by cold-start overhead: lazy-loading PyTorch and Ultralytics modules and loading the 6.2MB YOLO model weights from disk on first execution (t_load ~4000-5900ms). Once loaded into memory, warm inference executes consistently in 1254.15 ms per frame.",
+      "t_e2e_ms": 16.142099997523474
+    },
+    "association": {
+      "target_detected": false,
+      "summary": "FAIL: Target missed; zero confirmed detections matched target ground coordinates",
+      "raw_target_detections_count": 1,
+      "raw_peer_detections_count": 0,
+      "raw_clutter_detections_count": 0
+    },
+    "browser_verification": {
+      "success": false,
+      "marker_count": 0,
+      "marker_count_after_dup": 0,
+      "duplicate_suppression_verified": false,
+      "marker_coords": null,
+      "screenshot_path": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\ml\\reports\\airsim_live_phase2_1_gcs_screenshot.png",
+      "error": null
+    }
+  },
+  "error": null
+}

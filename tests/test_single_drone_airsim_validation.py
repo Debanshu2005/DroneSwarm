@@ -1009,3 +1009,157 @@ def test_verify_target_visibility_distinguishes_texture_from_floor():
     assert vis_textured["roi_std"] > 10.0
     assert vis_textured["contrast_delta"] > 10.0
 
+
+@pytest.mark.asyncio
+async def test_setup_scene_target_unique_naming():
+    """Verify that setup_scene_target generates distinct unique actor names per run when unique_name=True."""
+    from scripts.validate_single_drone_airsim import setup_scene_target
+
+    class MockAirSimClient:
+        def __init__(self):
+            self.spawned = []
+            self.objects = []
+        def simListSceneObjects(self, regex):
+            if regex.startswith("^"):
+                target = regex.strip("^$")
+                return [o for o in self.objects if o == target]
+            return list(self.objects)
+        def simDestroyObject(self, name):
+            return True
+        def simSpawnObject(self, name, mesh, pose, scale, physics_enabled=False, is_blueprint=False):
+            self.spawned.append(name)
+            self.objects.append(name)
+            return name
+        def simSetObjectMaterialFromTexture(self, name, path, slot=0):
+            return True
+        def simGetObjectPose(self, name):
+            class _P:
+                position = type("V", (), {"x_val": 0.0, "y_val": 2.0, "z_val": 0.0})()
+            return _P()
+        def getHomeGeoPoint(self):
+            return type("G", (), {"latitude": 47.641468, "longitude": -122.140165})()
+
+    client = MockAirSimClient()
+    ok1, meta1 = await setup_scene_target(client, target_name="GarbageTarget", unique_name=True)
+    ok2, meta2 = await setup_scene_target(client, target_name="GarbageTarget", unique_name=True)
+
+    assert ok1 is True
+    assert ok2 is True
+    assert meta1["actual_actor_name"] != meta2["actual_actor_name"], "Each run with unique_name=True must have distinct actor name"
+    assert meta1["actual_actor_name"].startswith("GarbageTarget_")
+    assert meta2["actual_actor_name"].startswith("GarbageTarget_")
+
+
+@pytest.mark.asyncio
+async def test_setup_scene_target_idempotent_reuse():
+    """Verify that repeated setup with identical actor name reuses existing actor without re-spawning."""
+    from scripts.validate_single_drone_airsim import setup_scene_target
+
+    class MockAirSimClient:
+        def __init__(self):
+            self.objects = ["StaticTarget"]
+            self.spawn_count = 0
+            self.destroy_count = 0
+            self.pose_set_count = 0
+        def simListSceneObjects(self, regex):
+            return ["StaticTarget"]
+        def simDestroyObject(self, name):
+            self.destroy_count += 1
+            return True
+        def simSpawnObject(self, name, mesh, pose, scale, physics_enabled=False, is_blueprint=False):
+            self.spawn_count += 1
+            return name
+        def simSetObjectPose(self, name, pose, teleport=True):
+            self.pose_set_count += 1
+            return True
+        def simSetObjectScale(self, name, scale):
+            return True
+        def simSetObjectMaterialFromTexture(self, name, path, slot=0):
+            return True
+        def simGetObjectPose(self, name):
+            class _P:
+                position = type("V", (), {"x_val": 0.0, "y_val": 2.0, "z_val": 0.0})()
+            return _P()
+        def getHomeGeoPoint(self):
+            return type("G", (), {"latitude": 47.641468, "longitude": -122.140165})()
+
+    client = MockAirSimClient()
+    ok, meta = await setup_scene_target(client, target_name="StaticTarget", unique_name=False)
+
+    assert ok is True
+    assert meta["reused_existing"] is True
+    assert client.spawn_count == 0, "Existing actor must be reused without calling simSpawnObject"
+    assert client.destroy_count == 0, "Existing actor must not be destroyed when re-used"
+    assert client.pose_set_count == 1, "Actor pose must be updated upon reuse"
+
+
+@pytest.mark.asyncio
+async def test_setup_scene_target_stale_cleanup_and_safe_spawning():
+    """Verify stale objects from prior runs are cleaned up while new unique object is cleanly spawned."""
+    from scripts.validate_single_drone_airsim import setup_scene_target
+
+    class MockAirSimClient:
+        def __init__(self):
+            self.objects = ["GarbageTarget_old12345", "GarbageTarget_stale999"]
+            self.destroyed = []
+        def simListSceneObjects(self, regex):
+            if regex.startswith("^"):
+                target = regex.strip("^$")
+                return [o for o in self.objects if o == target]
+            return list(self.objects)
+        def simDestroyObject(self, name):
+            self.destroyed.append(name)
+            if name in self.objects:
+                self.objects.remove(name)
+            return True
+        def simSpawnObject(self, name, mesh, pose, scale, physics_enabled=False, is_blueprint=False):
+            self.objects.append(name)
+            return name
+        def simSetObjectMaterialFromTexture(self, name, path, slot=0):
+            return True
+        def simGetObjectPose(self, name):
+            class _P:
+                position = type("V", (), {"x_val": 0.0, "y_val": 2.0, "z_val": 0.0})()
+            return _P()
+        def getHomeGeoPoint(self):
+            return type("G", (), {"latitude": 47.641468, "longitude": -122.140165})()
+
+    client = MockAirSimClient()
+    ok, meta = await setup_scene_target(client, target_name="GarbageTarget", unique_name=True)
+
+    assert ok is True
+    assert "GarbageTarget_old12345" in client.destroyed
+    assert "GarbageTarget_stale999" in client.destroyed
+    assert meta["actual_actor_name"] not in client.destroyed
+    assert meta["spawn_succeeded"] is True
+
+
+@pytest.mark.asyncio
+async def test_setup_scene_target_spawn_failure_handling():
+    """Verify failed simSpawnObject is handled gracefully without crashing and populates diagnostic errors."""
+    from scripts.validate_single_drone_airsim import setup_scene_target
+
+    class FailingClient:
+        def simListSceneObjects(self, regex):
+            return []
+        def simDestroyObject(self, name):
+            return False
+        def simSpawnObject(self, name, mesh, pose, scale, physics_enabled=False, is_blueprint=False):
+            raise RuntimeError("Fatal error: An actor of name already exists in level")
+        def simSetObjectPose(self, name, pose, teleport=True):
+            raise RuntimeError("Actor does not exist")
+        def simSetObjectMaterialFromTexture(self, name, path, slot=0):
+            return False
+        def simGetObjectPose(self, name):
+            raise RuntimeError("Actor does not exist")
+        def getHomeGeoPoint(self):
+            return type("G", (), {"latitude": 47.641468, "longitude": -122.140165})()
+
+    client = FailingClient()
+    ok, meta = await setup_scene_target(client, target_name="GarbageTarget", unique_name=True)
+
+    assert ok is False
+    assert meta["spawn_succeeded"] is False
+    assert meta["error"] is not None
+    assert "simSpawnObject failed" in meta["error"]
+

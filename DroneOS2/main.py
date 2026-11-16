@@ -128,6 +128,14 @@ class DroneOSApp:
             
         self.node_id = self.drone_cfg.drone_id
 
+        # Persistent Session Allocator
+        from DroneOS2.shared.session_allocator import PersistentSessionAllocator
+        session_db_dir = Path("data/drone_sessions")
+        session_db_dir.mkdir(parents=True, exist_ok=True)
+        self.session_allocator = PersistentSessionAllocator(state_db_path=str(session_db_dir / f"{self.node_id}.db"))
+        self.session_id, self.session_generation = self.session_allocator.allocate_session(self.node_id)
+        logger.info("Allocated session for %s: session_id=%s, generation=%d", self.node_id, self.session_id, self.session_generation)
+
         # Perception Config
         from DroneOS2.shared.config.models import PerceptionConfig
         perception_file = config_dir / "perception.yaml"
@@ -327,6 +335,9 @@ class DroneOSApp:
                     iou=self.perception_cfg.iou,
                     device=self.perception_cfg.device,
                     classes=self.perception_cfg.classes,
+                    min_area_ratio=getattr(self.perception_cfg, "min_area_ratio", 0.0),
+                    max_area_ratio=getattr(self.perception_cfg, "max_area_ratio", 1.0),
+                    max_aspect_ratio=getattr(self.perception_cfg, "max_aspect_ratio", 0.0),
                 )
                 self.perception_pipeline = PerceptionPipeline(
                     drone_id=self.node_id,
@@ -335,6 +346,8 @@ class DroneOSApp:
                     flight_controller=self.flight_controller,
                     network_adapter=self.network,
                     config=self.perception_cfg,
+                    session_id=self.session_id,
+                    session_generation=self.session_generation,
                 )
                 logger.info("Perception pipeline initialized.")
             except Exception as e:

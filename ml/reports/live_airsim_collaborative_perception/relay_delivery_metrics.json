@@ -1,0 +1,7 @@
+{
+  "relay_ws_port": 8088,
+  "relay_udp_port": 14650,
+  "total_outbox_events_forwarded": 189,
+  "active_clients": 1,
+  "ack_ledger_path": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\data\\relay_acks.db"
+}

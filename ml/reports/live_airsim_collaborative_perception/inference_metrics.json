@@ -1,0 +1,12 @@
+{
+  "model": "YOLO26n (models/garbage.pt)",
+  "weights_frozen": true,
+  "device": "cuda",
+  "total_inferences": 136,
+  "mean_latency_ms": 606.9855132353255,
+  "median_latency_ms": 125.38304999907268,
+  "p95_latency_ms": 351.9668749977427,
+  "min_latency_ms": 33.16410000115866,
+  "max_latency_ms": 16168.12260000006,
+  "effective_fps": 2.0804962355377743
+}

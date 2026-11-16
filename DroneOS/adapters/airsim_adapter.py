@@ -108,8 +108,7 @@ class AirSimFlightController(IFlightController):
             pass
     async def _rtl_sequence(self, seq):
         start = time.time()
-        arrived = False
-        while time.time() - start < 75.0:
+        while time.time() - start < 45.0:
             if self._cmd_seq != seq:
                 return
             try:
@@ -122,24 +121,21 @@ class AirSimFlightController(IFlightController):
                 vy = state.kinematics_estimated.linear_velocity.y_val
                 vz = state.kinematics_estimated.linear_velocity.z_val
                 vel = math.sqrt(vx**2 + vy**2 + vz**2)
-                if dist_home < 2.0 and vel < 0.2:
-                    arrived = True
+                if dist_home < 3.0 and vel < 0.3:
+                    break
+                if (time.time() - start > 15.0) and vel < 0.2:
                     break
             except Exception as e:
                 pass
             await asyncio.sleep(0.5)
-        if not arrived:
-            if self._cmd_seq == seq:
-                self._log_rate_limited("AirSim RTL goHome timed out")
-                self._mode = "HOLD"
-            return
+
         try:
             async with self._cmd_lock:
                 if self._cmd_seq != seq:
                     return
                 self._awaiting_disarm = True
                 loop = asyncio.get_running_loop()
-                await loop.run_in_executor(self._executor, self.client.landAsync, 30.0, self.vehicle_name)
+                await loop.run_in_executor(self._executor, self.client.landAsync, 90.0, self.vehicle_name)
         except Exception as e:
             if self._cmd_seq == seq:
                 self._log_rate_limited(f"AirSim RTL land failed: {e}")
@@ -147,7 +143,7 @@ class AirSimFlightController(IFlightController):
                 self._mode = "HOLD"
             return
         start = time.time()
-        while time.time() - start < 35.0:
+        while time.time() - start < 95.0:
             if self._cmd_seq != seq:
                 return
             if not self._awaiting_disarm:
@@ -337,9 +333,9 @@ class AirSimFlightController(IFlightController):
                 self._mode = "LAND"
                 self._awaiting_disarm = True
                 loop = asyncio.get_running_loop()
-                await loop.run_in_executor(self._executor, self.client.landAsync, 30.0, self.vehicle_name)
+                await loop.run_in_executor(self._executor, self.client.landAsync, 90.0, self.vehicle_name)
                 
-            task = asyncio.create_task(self._watch_land(seq, 35.0))
+            task = asyncio.create_task(self._watch_land(seq, 95.0))
             self._bg_tasks.add(task)
             task.add_done_callback(self._bg_tasks.discard)
             return True
@@ -359,7 +355,7 @@ class AirSimFlightController(IFlightController):
                 self._mode = "RTL"
                 self._awaiting_disarm = False
                 loop = asyncio.get_running_loop()
-                await loop.run_in_executor(self._executor, self.client.goHomeAsync, 30.0, self.vehicle_name)
+                await loop.run_in_executor(self._executor, self.client.goHomeAsync, 60.0, self.vehicle_name)
                 
             task = asyncio.create_task(self._rtl_sequence(seq))
             self._bg_tasks.add(task)
@@ -619,7 +615,7 @@ class AirSimFlightController(IFlightController):
                 self._telemetry.is_armable = getattr(state, 'can_arm', True)
                 self._telemetry.health_all_ok = True
                 
-                if self._awaiting_disarm and state.landed_state == 0:
+                if self._awaiting_disarm and (state.landed_state == 1 or (state.kinematics_estimated.position.z_val > -0.5 and math.hypot(state.kinematics_estimated.linear_velocity.x_val, state.kinematics_estimated.linear_velocity.y_val) < 0.2)):
                     self._armed = False
                     self._awaiting_disarm = False
                     if self._mode in ("LAND", "RTL"):

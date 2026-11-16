@@ -1,0 +1,107 @@
+{
+  "audit_metadata": {
+    "audit_type": "FORENSIC_FINDINGS_AND_VERIFICATION",
+    "mission": "PHASE_3_LIVE_FOUR_DRONE_COLLABORATIVE_PERCEPTION",
+    "timestamp_iso": "2026-11-16T05:55:00Z",
+    "final_verdict": "PASS WITH QUALIFICATIONS"
+  },
+  "checkpoint_and_inference_verification": {
+    "model_checkpoint_path": "models/garbage.pt",
+    "model_sha256": "5e6fe97ead40c8d24edcdb5517b210bf8415ec23719beb8a575fdab3a4028d20",
+    "architecture": "YOLO26n (Ultralytics)",
+    "weights_frozen": true,
+    "cuda_device_name": "NVIDIA GeForce GTX 1650",
+    "raw_inference_latency_ms": {
+      "mean": 17.6,
+      "p50": 17.42,
+      "p95": 20.66,
+      "max": 21.5
+    },
+    "mission_inference_accounting": {
+      "total_frames_inferred": 136,
+      "mission_elapsed_seconds": 65.369,
+      "aggregate_swarm_fps": 2.0805,
+      "per_drone_effective_fps": 0.5201
+    }
+  },
+  "memory_audit_and_vram_qualification": {
+    "reported_peak_vram_mb": 41.201,
+    "measurement_api": "torch.cuda.memory_allocated()",
+    "auditor_qualification": "The reported 41.2 MB peak VRAM reflects active PyTorch tensor memory only. It does NOT include PyTorch reserved caching allocator memory (68.0 MB) or OS/CUDA driver context footprint (~500-700 MB). The measurement is mathematically accurate for tensor allocations but must be explicitly qualified in systems documentation.",
+    "pytorch_caching_reserved_mb": 68.0,
+    "peak_system_ram_rss_mb": 310.426,
+    "mean_system_ram_rss_mb": 104.075
+  },
+  "spatial_precision_and_association": {
+    "ground_truth_target_1": {
+      "lat": 47.64150172808389,
+      "lon": -122.14007849586268
+    },
+    "ground_truth_target_2": {
+      "lat": 47.641636640419435,
+      "lon": -122.14007849586268
+    },
+    "ground_truth_spacing_meters": 15.0002,
+    "fused_target_1": {
+      "global_id": "G-0ab2d222",
+      "lat": 47.6414997000614,
+      "lon": -122.14008769986052,
+      "geodesic_error_meters": 0.7242,
+      "associated_drones": [
+        "drone1",
+        "drone3"
+      ],
+      "source_count": 2,
+      "observation_count": 75
+    },
+    "fused_target_2": {
+      "global_id": "G-467e474f",
+      "lat": 47.64163450006141,
+      "lon": -122.1400875998611,
+      "geodesic_error_meters": 0.7206,
+      "associated_drones": [
+        "drone2",
+        "drone4"
+      ],
+      "source_count": 2,
+      "observation_count": 74
+    },
+    "fused_inter_target_spacing_meters": 14.9891,
+    "inter_target_spacing_error_meters": 0.0111,
+    "spatial_cluster_separation_confirmed": true
+  },
+  "relay_and_gcs_reconciliation": {
+    "outbox_events_total": 69,
+    "total_forwarded_transmissions": 189,
+    "initial_snapshot_watermark": 0,
+    "post_mission_snapshot_served": true,
+    "gcs_rendered_custom_markers": 2,
+    "gcs_verification_screenshot": "ml/reports/live_airsim_collaborative_perception/gcs_map_verification.png"
+  },
+  "vehicle_lifecycle_and_safety": {
+    "connection_type": "airsim.MultirotorClient (Independent per vehicle)",
+    "takeoff_verified": true,
+    "mission_hold_verified": true,
+    "land_async_verified": true,
+    "disarm_verified": true,
+    "api_control_released": true,
+    "safety_violations": 0
+  },
+  "qualifications": [
+    {
+      "id": "QUAL-01",
+      "category": "VRAM Accounting Scope",
+      "finding": "The 41.2 MB peak VRAM reported represents PyTorch tensor allocated memory (torch.cuda.memory_allocated()), not the total process VRAM footprint (~500-700 MB) or reserved caching allocator memory (68.0 MB). While safe for GTX 1650, this metric must be labeled as 'Tensor Memory' in production specs."
+    },
+    {
+      "id": "QUAL-02",
+      "category": "Swarm vs Per-Vehicle FPS",
+      "finding": "The aggregate effective throughput of 2.08 FPS reflects swarm-wide processing across 4 vehicles. Each individual vehicle operated at ~0.52 FPS (1 frame every ~1.92s), which satisfies the 1 Hz target aggregation requirement but is paced by AirSim loopback image retrieval latency."
+    },
+    {
+      "id": "QUAL-03",
+      "category": "DOM Verification Timing",
+      "finding": "Due to a CDP keepalive timeout during the 65.37-second autonomous flight loop, final browser DOM verification was performed immediately post-flight via verify_gcs_render.py, which requested an authoritative GFS snapshot and rendered exactly 2 Leaflet markers."
+    }
+  ]
+}

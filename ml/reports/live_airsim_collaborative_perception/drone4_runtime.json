@@ -1,0 +1,14 @@
+{
+  "drone_id": "drone4",
+  "package": "DroneOS3",
+  "vehicle_name": "Drone4",
+  "session_id": "sess-drone4-e06bf6495c844cfc88de8871a3e8adf2",
+  "session_generation": 3,
+  "frames_captured": 34,
+  "detections_made": 68,
+  "messages_emitted": 24,
+  "mean_step_latency_ms": 2108.3892911770176,
+  "p50_step_latency_ms": 1232.6794500004326,
+  "p95_step_latency_ms": 3925.0305250010556,
+  "mean_inference_latency_ms": 587.9265294112402
+}

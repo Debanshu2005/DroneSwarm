@@ -26,6 +26,9 @@ class GarbageDetector:
         iou: float = 0.5,
         device: Optional[str] = None,
         classes: Optional[List[str]] = None,
+        min_area_ratio: float = 0.0,
+        max_area_ratio: float = 1.0,
+        max_aspect_ratio: float = 0.0,
     ):
         self.weights_path = Path(weights_path)
         self.imgsz = imgsz
@@ -33,6 +36,9 @@ class GarbageDetector:
         self.iou = iou
         self.device = device
         self.classes = set(str(c) for c in classes) if classes else None
+        self.min_area_ratio = min_area_ratio
+        self.max_area_ratio = max_area_ratio
+        self.max_aspect_ratio = max_aspect_ratio
 
         self._model = None
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -151,9 +157,25 @@ class GarbageDetector:
                 y1 = max(0.0, min(float(img_h), y1))
                 y2 = max(0.0, min(float(img_h), y2))
 
+            bw = x2 - x1
+            bh = y2 - y1
+
             # Reject degenerate zero-area boxes
-            if (x2 - x1) <= 0.0 or (y2 - y1) <= 0.0:
+            if bw <= 0.0 or bh <= 0.0:
                 continue
+
+            # Defensive geometric filtering (area and aspect ratio)
+            if img_w is not None and img_h is not None and (img_w * img_h) > 0:
+                area_ratio = (bw * bh) / float(img_w * img_h)
+                if self.min_area_ratio > 0.0 and area_ratio < self.min_area_ratio:
+                    continue
+                if self.max_area_ratio < 1.0 and area_ratio > self.max_area_ratio:
+                    continue
+
+            if self.max_aspect_ratio > 0.0 and bw > 0.0 and bh > 0.0:
+                aspect_ratio = max(bw / bh, bh / bw)
+                if aspect_ratio > self.max_aspect_ratio:
+                    continue
 
             bbox = (x1, y1, x2, y2)
             detections.append(Detection(bbox_xyxy=bbox, confidence=conf, label=label))

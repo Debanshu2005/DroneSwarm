@@ -1,0 +1,112 @@
+{
+  "system": "DroneSwarm YOLO26n Perception Subsystem",
+  "branch": "garbage-detection",
+  "audit_date": "2026-11-13",
+  "model_checkpoint": {
+    "pytorch_path": "models/garbage.pt",
+    "onnx_path": "models/garbage.onnx",
+    "sha256": "5e6fe97ead40c8d24edcdb5517b210bf8415ec23719beb8a575fdab3a4028d20",
+    "parameters": 2389735,
+    "gflops": 5.4,
+    "onnx_size_mb": 9.40
+  },
+  "dataset": {
+    "name": "UAVVaste",
+    "train_instances": 2595,
+    "val_instances": 616,
+    "test_instances": 507,
+    "total_images": 772,
+    "total_instances": 3718
+  },
+  "confidence_threshold_sweep": [
+    {"conf": 0.25, "precision": 0.8837, "recall": 0.7695, "f1": 0.8227, "fp": 62},
+    {"conf": 0.30, "precision": 0.8837, "recall": 0.7695, "f1": 0.8227, "fp": 62},
+    {"conf": 0.35, "precision": 0.8807, "recall": 0.7789, "f1": 0.8267, "fp": 65},
+    {"conf": 0.40, "precision": 0.8856, "recall": 0.7662, "f1": 0.8216, "fp": 61},
+    {"conf": 0.45, "precision": 0.9025, "recall": 0.7516, "f1": 0.8202, "fp": 50},
+    {"conf": 0.50, "precision": 0.9228, "recall": 0.7370, "f1": 0.8195, "fp": 38},
+    {"conf": 0.55, "precision": 0.9399, "recall": 0.7110, "f1": 0.8096, "fp": 28},
+    {"conf": 0.60, "precision": 0.9470, "recall": 0.6672, "f1": 0.7829, "fp": 23},
+    {"conf": 0.65, "precision": 0.9596, "recall": 0.6169, "f1": 0.7510, "fp": 16},
+    {"conf": 0.70, "precision": 0.9719, "recall": 0.5049, "f1": 0.6645, "fp": 9}
+  ],
+  "temporal_confirmation_matrix": [
+    {
+      "experiment": "Baseline",
+      "confidence": 0.35,
+      "min_hits": 1,
+      "precision": 0.4160,
+      "recall": 0.9900,
+      "f1_score": 0.5858,
+      "false_alerts_per_min": 27.80,
+      "mean_delay_sec": 1.22
+    },
+    {
+      "experiment": "Config A",
+      "confidence": 0.50,
+      "min_hits": 1,
+      "precision": 0.5380,
+      "recall": 0.9900,
+      "f1_score": 0.6972,
+      "false_alerts_per_min": 17.00,
+      "mean_delay_sec": 1.20
+    },
+    {
+      "experiment": "Config B (Recommended)",
+      "confidence": 0.55,
+      "min_hits": 2,
+      "precision": 1.0000,
+      "recall": 1.0000,
+      "f1_score": 1.0000,
+      "false_alerts_per_min": 0.00,
+      "mean_delay_sec": 2.60
+    },
+    {
+      "experiment": "Config C",
+      "confidence": 0.60,
+      "min_hits": 2,
+      "precision": 0.9524,
+      "recall": 1.0000,
+      "f1_score": 0.9756,
+      "false_alerts_per_min": 1.00,
+      "mean_delay_sec": 2.96
+    },
+    {
+      "experiment": "Config D",
+      "confidence": 0.60,
+      "min_hits": 3,
+      "precision": 1.0000,
+      "recall": 0.9400,
+      "f1_score": 0.9691,
+      "false_alerts_per_min": 0.00,
+      "mean_delay_sec": 4.49
+    }
+  ],
+  "hard_negatives": {
+    "total_mined": 92,
+    "vegetation_and_dry_leaves": 32,
+    "road_markings_and_infrastructure": 22,
+    "rocks_and_gravel": 15,
+    "man_made_structures_other": 13,
+    "soil_mud_and_ground_patches": 10
+  },
+  "edge_rpi5_benchmarks": {
+    "onnx_cpu_latency_mean_ms": 75.32,
+    "onnx_cpu_latency_p95_ms": 93.84,
+    "onnx_cpu_fps": 13.3,
+    "cosine_similarity_to_pytorch": 1.000000,
+    "mean_abs_error": 2.545e-5
+  },
+  "production_configuration": {
+    "confidence": 0.55,
+    "min_hits": 2,
+    "merge_radius_m": 2.5,
+    "update_interval_s": 10.0,
+    "unconfirmed_ttl_s": 30.0,
+    "min_area_ratio": 0.00005,
+    "max_area_ratio": 0.40,
+    "max_aspect_ratio": 8.0,
+    "synchronized_nodes": ["DroneOS", "DroneOS1", "DroneOS2", "DroneOS3", "DroneOS4"]
+  }
+}
+

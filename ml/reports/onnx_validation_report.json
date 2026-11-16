@@ -1,0 +1,50 @@
+{
+  "pytorch_model": {
+    "path": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\models\\garbage.pt",
+    "sha256": "5e6fe97ead40c8d24edcdb5517b210bf8415ec23719beb8a575fdab3a4028d20",
+    "parameters": 2389735,
+    "gflops": 5.4
+  },
+  "onnx_model": {
+    "path": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\models\\garbage.onnx",
+    "sha256": "400ccea079def49d2500cdd567e1a38630c5fb5d7e1f3aeef166bc5c721f4a29",
+    "size_bytes": 9852088,
+    "size_mb": 9.4,
+    "opset": 17,
+    "imgsz": 640,
+    "input_tensor": {
+      "name": "images",
+      "shape": [
+        1,
+        3,
+        640,
+        640
+      ],
+      "type": "tensor(float)"
+    },
+    "output_tensor": {
+      "name": "output0",
+      "shape": [
+        1,
+        5,
+        8400
+      ],
+      "type": "tensor(float)"
+    }
+  },
+  "numerical_validation": {
+    "max_absolute_difference": 0.00152587890625,
+    "mean_absolute_difference": 2.5450068278587423e-05,
+    "cosine_similarity": 1.0,
+    "tolerance_threshold": 0.001,
+    "is_equivalent": false
+  },
+  "cpu_benchmark": {
+    "device": "CPUExecutionProvider (4 threads)",
+    "iterations": 30,
+    "mean_latency_ms": 75.32,
+    "std_latency_ms": 11.28,
+    "p95_latency_ms": 93.84,
+    "fps": 13.3
+  }
+}

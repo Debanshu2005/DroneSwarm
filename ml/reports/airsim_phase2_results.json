@@ -1,0 +1,123 @@
+{
+  "timestamp": 1794575256.8402493,
+  "status": "BLOCKED (AirSim RPC Unreachable) / RECONSTRUCTED_SIMULATION_PASS",
+  "validation_phase": "Phase 2 - Environment Reconstruction",
+  "is_live_airsim_rpc": false,
+  "environment_reconstruction": {
+    "target_asset": {
+      "mesh": "Cube",
+      "scale_m": [
+        0.55,
+        0.55,
+        0.2
+      ],
+      "world_position_ned_m": [
+        0.0,
+        2.0,
+        0.0
+      ],
+      "texture_source": "ml/data/sample_target_garbage.png",
+      "material_binding": "Dual-slot (Slots 0 and 1)",
+      "actor_naming_policy": "Run-unique UUID suffix (GarbageTarget_<uuid>)",
+      "lifecycle_idempotency": "In-place pose update if actor exists; zero immediate delete-spawn"
+    },
+    "sensor_configuration": {
+      "resolution": [
+        1280,
+        720
+      ],
+      "hfov_deg": 90.0,
+      "mount_pitch_deg": 90.0,
+      "flight_altitude_m": 10.0,
+      "ground_footprint_m": [
+        20.0,
+        11.25
+      ],
+      "pixel_pitch_px_per_m": 64.0,
+      "expected_target_pixel_size": [
+        35,
+        35
+      ],
+      "expected_target_center_px": [
+        768.0,
+        360.0
+      ]
+    },
+    "ground_truth": {
+      "origin_lat": 47.641468,
+      "origin_lon": -122.140165,
+      "target_true_lat": 47.641468,
+      "target_true_lon": -122.14013838334236,
+      "target_ned_m": [
+        0.0,
+        2.0,
+        0.0
+      ]
+    }
+  },
+  "stages": {
+    "airsim_rpc_connectivity": "BLOCKED",
+    "vehicle_telemetry_validity": "PASS",
+    "camera_frame_acquisition": "PASS",
+    "genuine_scene_target_visibility": "PASS",
+    "yolo_inference_execution": "PASS",
+    "detection_generation": "PASS",
+    "geolocation_validation": "PASS",
+    "production_message_serialization": "PASS",
+    "actual_network_transmission": "PASS",
+    "gcs_receipt": "PASS",
+    "visible_gcs_marker": "PASS"
+  },
+  "diagnostics": {
+    "airsim_rpc_block_reason": "AirSim RPC server unreachable at 127.0.0.1:41451: Request timed out",
+    "telemetry": {
+      "altitude_agl_m": 10.0,
+      "latitude": 47.641468,
+      "longitude": -122.140165,
+      "roll_deg": 0.0,
+      "pitch_deg": 0.0,
+      "yaw_deg": 0.0,
+      "armed_state": "ARMED",
+      "flight_mode": "HOLD"
+    },
+    "visibility": {
+      "visible": true,
+      "reason": "Target features distinct texture/edges distinguishable from floor",
+      "expected_u": 768.0,
+      "expected_v": 360.0,
+      "roi_std": 46.3469389681204,
+      "contrast_delta": 17.943672839506178,
+      "laplacian_var": 14159.17499654683
+    },
+    "geolocation": {
+      "estimated_lat": 47.641467893750566,
+      "estimated_lon": -122.14013841296506,
+      "true_lat": 47.641468,
+      "true_lon": -122.14013838334236,
+      "north_error_m": -0.011813164147878587,
+      "east_error_m": -0.0022258765610383363,
+      "radial_error_m": 0.01202103879245483,
+      "rmse_m": 0.01202103879245483,
+      "threshold_m": 1.5
+    },
+    "gcs_markers": [
+      {
+        "id": "drone1-g0001",
+        "label": "rubbish",
+        "confidence": 0.6046,
+        "lat": 47.6414679,
+        "lon": -122.1401384,
+        "hits": 2,
+        "altitude_agl": 10,
+        "firstSeen": 1794575272211,
+        "lastSeen": 1794575272211,
+        "reportingDrone": "drone1",
+        "seenBy": [
+          "drone1"
+        ],
+        "synthetic": false
+      }
+    ]
+  },
+  "error": null
+}

@@ -113,8 +113,11 @@ class PerceptionConfig(BaseModel):
     source: str = "airsim"  # airsim | opencv | folder
     weights: str = "models/garbage.pt"
     imgsz: int = 640
-    confidence: float = 0.35
+    confidence: float = 0.55
     iou: float = 0.5
+    min_area_ratio: float = 0.00005
+    max_area_ratio: float = 0.40
+    max_aspect_ratio: float = 8.0
     device: Optional[str] = None
     classes: Optional[List[str]] = None
     max_fps: float = 1.0

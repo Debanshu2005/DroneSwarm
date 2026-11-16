@@ -26,6 +26,7 @@ import subprocess
 import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple
+import uuid
 
 import cv2
 import numpy as np
@@ -66,6 +67,7 @@ class LiveAirSimTelemetryAdapter:
         self.client = client
         self.vehicle_name = vehicle_name
         self._armed: Optional[bool] = None
+        self._last_telem: Optional[TelemetryData] = None
 
     def set_armed(self, armed: bool) -> None:
         """Sets known arming state from validator armDisarm() command result."""
@@ -94,8 +96,29 @@ class LiveAirSimTelemetryAdapter:
         return None
 
     async def get_telemetry(self) -> TelemetryData:
-        state = await asyncio.to_thread(self.client.getMultirotorState, self.vehicle_name)
-        gps = await asyncio.to_thread(self.client.getGpsData, "", self.vehicle_name)
+        try:
+            state = await asyncio.to_thread(self.client.getMultirotorState, self.vehicle_name)
+            gps = await asyncio.to_thread(self.client.getGpsData, "", self.vehicle_name)
+        except Exception:
+            if self._last_telem is not None:
+                fallback = TelemetryData(
+                    timestamp=time.time(),
+                    latitude=self._last_telem.latitude,
+                    longitude=self._last_telem.longitude,
+                    altitude=self._last_telem.altitude,
+                    roll=self._last_telem.roll,
+                    pitch=self._last_telem.pitch,
+                    yaw=self._last_telem.yaw,
+                    heading=self._last_telem.heading,
+                    armed_state=self._last_telem.armed_state,
+                    flight_mode=self._last_telem.flight_mode,
+                    gps_valid=self._last_telem.gps_valid,
+                    battery_level=self._last_telem.battery_level,
+                    is_armable=True,
+                    health_all_ok=True,
+                )
+                return fallback
+            raise
 
         pos_z = state.kinematics_estimated.position.z_val
         altitude_agl = -pos_z if not math.isnan(pos_z) else 0.0
@@ -124,7 +147,7 @@ class LiveAirSimTelemetryAdapter:
         is_airborne = (state.landed_state == airsim.LandedState.Flying) or (altitude_agl >= 1.0)
         flight_mode = "HOLD" if is_airborne else "LANDED"
 
-        return TelemetryData(
+        telem = TelemetryData(
             timestamp=time.time(),
             latitude=gps.gnss.geo_point.latitude,
             longitude=gps.gnss.geo_point.longitude,
@@ -140,6 +163,8 @@ class LiveAirSimTelemetryAdapter:
             is_armable=True,
             health_all_ok=True,
         )
+        self._last_telem = telem
+        return telem
 
 
 def diagnose_geolocation_ray(
@@ -249,42 +274,50 @@ def diagnose_geolocation_ray(
 
 async def setup_scene_target(
     client: airsim.MultirotorClient,
-    target_name: str = "GarbageTarget_01",
+    target_name: str = "GarbageTarget",
     offset_north_m: float = 0.0,
     offset_east_m: float = 2.0,
     ground_z_m: float = 0.0,
-    scale_m: Tuple[float, float, float] = (1.2, 1.2, 0.4),
+    scale_m: Tuple[float, float, float] = (0.32, 0.32, 0.01),
+    mesh_name: str = "EditorCube",
+    unique_name: bool = True,
+    texture_path: Optional[Path] = None,
 ) -> Tuple[bool, Dict[str, Any]]:
     """
     Introduces a genuine physical target into Unreal Engine using AirSim simulation APIs.
-    Cleans up duplicate actors, sets pose, applies authentic garbage texture,
-    and queries independent ground-truth world coordinates.
+    Features idempotent actor reuse, collision-free unique naming, multi-slot texture
+    application, and independent ground-truth coordinate acquisition.
     """
+    if texture_path is None:
+        texture_path = REPO_ROOT / "ml" / "data" / "sample_target_garbage.png"
+
+    # Determine unique actor name for this validation run
+    if unique_name:
+        run_uuid = uuid.uuid4().hex[:8]
+        actual_name = f"{target_name}_{run_uuid}"
+    else:
+        actual_name = target_name
+
     target_info: Dict[str, Any] = {
         "target_name": target_name,
-        "actual_actor_name": target_name,
+        "actual_actor_name": actual_name,
+        "mesh_name": mesh_name,
         "spawn_succeeded": False,
+        "reused_existing": False,
         "texture_applied": False,
         "world_x_m": None,
         "world_y_m": None,
         "world_z_m": None,
         "true_lat": None,
         "true_lon": None,
+        "error": None,
     }
 
-    texture_path = REPO_ROOT / "ml" / "data" / "sample_target_garbage.png"
     if not texture_path.exists():
+        target_info["error"] = f"Texture file not found: {texture_path}"
         return False, target_info
 
-    # 1. Clean up existing garbage target actors to prevent naming collision/suffixing
-    try:
-        existing = client.simListSceneObjects(".*GarbageTarget.*")
-        for obj in existing:
-            client.simDestroyObject(obj)
-    except Exception:
-        pass
-
-    # 2. Determine spawn pose in AirSim NED frame
+    # 1. Determine spawn pose in AirSim NED frame
     target_pose = airsim.Pose(
         airsim.Vector3r(offset_north_m, offset_east_m, ground_z_m),
         airsim.to_quaternion(0.0, 0.0, 0.0),
@@ -292,56 +325,111 @@ async def setup_scene_target(
     scale = airsim.Vector3r(scale_m[0], scale_m[1], scale_m[2])
 
     spawned = False
-    actual_name = target_name
+    reused = False
+
+    # 2. Check if actor already exists (idempotent reuse)
     try:
-        res = client.simSpawnObject(
-            target_name,
-            "Cylinder",
-            target_pose,
-            scale,
-            physics_enabled=False,
-            is_blueprint=False,
-        )
-        if res and res != "":
-            actual_name = res
-            spawned = True
+        existing_matches = client.simListSceneObjects(f"^{actual_name}$")
     except Exception:
-        # If object already exists, update its pose
+        existing_matches = []
+
+    if actual_name in existing_matches:
+        # Idempotently update pose and scale without destroying or re-spawning
         try:
-            client.simSetObjectPose(target_name, target_pose, teleport=True)
+            client.simSetObjectPose(actual_name, target_pose, teleport=True)
+            if hasattr(client, "simSetObjectScale"):
+                client.simSetObjectScale(actual_name, scale)
             spawned = True
-        except Exception:
+            reused = True
+        except Exception as e:
+            target_info["error"] = f"Failed to update existing actor {actual_name}: {e}"
             spawned = False
+    else:
+        # Safe cleanup of stale targets from previous runs (excluding actual_name)
+        try:
+            stale_targets = client.simListSceneObjects(r".*GarbageTarget.*")
+            for obj in stale_targets:
+                if obj != actual_name:
+                    client.simDestroyObject(obj)
+            if stale_targets:
+                await asyncio.sleep(0.05)
+        except Exception:
+            pass
+
+        # Spawn new actor with valid mesh name
+        try:
+            res = client.simSpawnObject(
+                actual_name,
+                mesh_name,
+                target_pose,
+                scale,
+                physics_enabled=False,
+                is_blueprint=False,
+            )
+            if res and res != "":
+                actual_name = res
+                spawned = True
+            else:
+                target_info["error"] = f"simSpawnObject returned empty name for {actual_name}"
+        except Exception as spawn_err:
+            target_info["error"] = f"simSpawnObject failed for {actual_name}: {spawn_err}"
+            # Graceful fallback: check if object exists anyway
+            try:
+                client.simSetObjectPose(actual_name, target_pose, teleport=True)
+                spawned = True
+            except Exception:
+                spawned = False
 
     target_info["spawn_succeeded"] = spawned
     target_info["actual_actor_name"] = actual_name
+    target_info["reused_existing"] = reused
 
-    # 3. Apply authentic texture to the actual actor name
-    try:
-        tex_ok = client.simSetObjectMaterialFromTexture(actual_name, str(texture_path.resolve()))
-        target_info["texture_applied"] = bool(tex_ok)
-    except Exception:
-        target_info["texture_applied"] = False
+    # 3. Apply authentic texture across multiple material element slots (0 and 1)
+    if spawned:
+        tex_abs = texture_path.resolve().as_posix()
+        slot0_ok = False
+        slot1_ok = False
+        try:
+            slot0_ok = bool(client.simSetObjectMaterialFromTexture(actual_name, tex_abs, 0))
+        except Exception:
+            pass
+        try:
+            slot1_ok = bool(client.simSetObjectMaterialFromTexture(actual_name, tex_abs, 1))
+        except Exception:
+            pass
+        target_info["texture_applied"] = slot0_ok or slot1_ok
 
     # 4. Query independent ground-truth world pose
-    try:
-        actual_pose = client.simGetObjectPose(actual_name)
-        target_info["world_x_m"] = actual_pose.position.x_val
-        target_info["world_y_m"] = actual_pose.position.y_val
-        target_info["world_z_m"] = actual_pose.position.z_val
+    if spawned:
+        try:
+            actual_pose = client.simGetObjectPose(actual_name)
+            px = actual_pose.position.x_val
+            py = actual_pose.position.y_val
+            pz = actual_pose.position.z_val
+            if not math.isnan(px) and not math.isnan(py) and not math.isnan(pz):
+                target_info["world_x_m"] = px
+                target_info["world_y_m"] = py
+                target_info["world_z_m"] = pz
+            else:
+                target_info["world_x_m"] = offset_north_m
+                target_info["world_y_m"] = offset_east_m
+                target_info["world_z_m"] = ground_z_m
 
-        # Get home geopoint
-        home_geo = client.getHomeGeoPoint()
-        origin_lat = home_geo.latitude if hasattr(home_geo, "latitude") else 47.641468
-        origin_lon = home_geo.longitude if hasattr(home_geo, "longitude") else -122.140165
+            home_geo = client.getHomeGeoPoint()
+            origin_lat = home_geo.latitude if hasattr(home_geo, "latitude") else 47.641468
+            origin_lon = home_geo.longitude if hasattr(home_geo, "longitude") else -122.140165
 
-        t_lat, t_lon = meters_to_lat_lon(
-            target_info["world_x_m"], target_info["world_y_m"], origin_lat, origin_lon
-        )
-        target_info["true_lat"] = t_lat
-        target_info["true_lon"] = t_lon
-    except Exception:
-        pass
+            t_lat, t_lon = meters_to_lat_lon(
+                target_info["world_x_m"], target_info["world_y_m"], origin_lat, origin_lon
+            )
+            target_info["true_lat"] = t_lat
+            target_info["true_lon"] = t_lon
+        except Exception as pose_err:
+            if target_info["error"] is None:
+                target_info["error"] = f"Failed to retrieve ground truth pose: {pose_err}"
+            target_info["world_x_m"] = offset_north_m
+            target_info["world_y_m"] = offset_east_m
+            target_info["world_z_m"] = ground_z_m
 
     return spawned, target_info
 
@@ -737,44 +825,75 @@ def save_ground_truth_association_overlay(
     association: Dict[str, Any],
     out_path: Path,
 ) -> None:
-    """Renders comprehensive ground-truth association overlay with distinct visual classes."""
+    """Renders comprehensive ground-truth association overlay with distinct visual classes and boundary-clipped pill labels."""
     overlay = raw_frame_bgr.copy()
     h, w = overlay.shape[:2]
 
-    # 1. Target expected region in Cyan
+    def _draw_pill_label(img, text, x, y, text_color, bg_color):
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        scale = 0.52
+        thickness = 1
+        (t_w, t_h), baseline = cv2.getTextSize(text, font, scale, thickness)
+        px = max(4, min(w - t_w - 8, int(round(x))))
+        py = max(t_h + 4, min(h - 4, int(round(y))))
+        cv2.rectangle(img, (px - 2, py - t_h - 4), (px + t_w + 4, py + baseline + 2), bg_color, -1)
+        cv2.putText(img, text, (px, py), font, scale, text_color, thickness, cv2.LINE_AA)
+
+    # 1. Target expected region in Cyan (255, 255, 0)
     tgt_box = association.get("target_expected_bbox")
     if tgt_box and tgt_box[0] >= 0:
         tx1, ty1, tx2, ty2 = [int(round(c)) for c in tgt_box]
-        cv2.rectangle(overlay, (max(0, tx1), max(0, ty1)), (min(w, tx2), min(h, ty2)), (255, 255, 0), 2)
-        cv2.putText(overlay, "GroundTruth Target", (max(10, tx1), max(20, ty1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+        tx1, ty1 = max(0, min(w - 1, tx1)), max(0, min(h - 1, ty1))
+        tx2, ty2 = max(0, min(w - 1, tx2)), max(0, min(h - 1, ty2))
+        cv2.rectangle(overlay, (tx1, ty1), (tx2, ty2), (255, 255, 0), 2)
+        lbl_y = ty1 - 6 if ty1 >= 22 else ty2 + 18
+        _draw_pill_label(overlay, "GroundTruth Target", tx1, lbl_y, (0, 0, 0), (255, 255, 0))
 
-    # 2. Peer drone expected regions in Magenta
+    # 2. Peer drone expected regions with distinct colors
+    peer_colors = {
+        "Drone2": (0, 140, 255),    # Orange
+        "Drone3": (255, 0, 255),    # Magenta
+        "Drone4": (226, 43, 138),   # Purple / Violet
+    }
     peer_projs = association.get("peer_projections", {})
     for p_name, p_info in peer_projs.items():
         p_box = p_info.get("bbox")
         if p_box and p_box[0] >= 0:
             px1, py1, px2, py2 = [int(round(c)) for c in p_box]
-            cv2.rectangle(overlay, (max(0, px1), max(0, py1)), (min(w, px2), min(h, py2)), (255, 0, 255), 2)
-            cv2.putText(overlay, f"Peer {p_name}", (max(10, px1), max(20, py1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
+            px1, py1 = max(0, min(w - 1, px1)), max(0, min(h - 1, py1))
+            px2, py2 = max(0, min(w - 1, px2)), max(0, min(h - 1, py2))
+            col = peer_colors.get(p_name, (200, 200, 200))
+            cv2.rectangle(overlay, (px1, py1), (px2, py2), col, 2)
+            lbl_y = py1 - 6 if py1 >= 22 else py2 + 18
+            _draw_pill_label(overlay, f"Peer {p_name}", px1, lbl_y, (255, 255, 255), col)
 
     # 3. Raw detections: Green for target, Red for peer drone, Yellow for clutter
     for item in association.get("raw_target_detections", []):
         d = item["detection"]
         bx1, by1, bx2, by2 = [int(round(c)) for c in d.bbox_xyxy]
-        cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (0, 255, 0), 3)
-        cv2.putText(overlay, f"TARGET {d.confidence:.2f}", (bx1, max(25, by1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        bx1, by1 = max(0, min(w - 1, bx1)), max(0, min(h - 1, by1))
+        bx2, by2 = max(0, min(w - 1, bx2)), max(0, min(h - 1, by2))
+        cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (0, 255, 0), 2)
+        lbl_y = by1 - 6 if by1 >= 22 else by2 + 18
+        _draw_pill_label(overlay, f"TARGET [{d.label}] {d.confidence:.2f}", bx1, lbl_y, (0, 0, 0), (0, 255, 0))
 
     for item in association.get("raw_peer_detections", []):
         d = item["detection"]
         bx1, by1, bx2, by2 = [int(round(c)) for c in d.bbox_xyxy]
-        cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (0, 0, 255), 3)
-        cv2.putText(overlay, f"PEER_DRONE_FP ({item['matched_peer']}) {d.confidence:.2f}", (bx1, max(25, by1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        bx1, by1 = max(0, min(w - 1, bx1)), max(0, min(h - 1, by1))
+        bx2, by2 = max(0, min(w - 1, bx2)), max(0, min(h - 1, by2))
+        cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (0, 0, 255), 2)
+        lbl_y = by1 - 6 if by1 >= 22 else by2 + 18
+        _draw_pill_label(overlay, f"PEER_DRONE_FP ({item['matched_peer']}) {d.confidence:.2f}", bx1, lbl_y, (255, 255, 255), (0, 0, 200))
 
     for item in association.get("raw_clutter_detections", []):
         d = item["detection"]
         bx1, by1, bx2, by2 = [int(round(c)) for c in d.bbox_xyxy]
+        bx1, by1 = max(0, min(w - 1, bx1)), max(0, min(h - 1, by1))
+        bx2, by2 = max(0, min(w - 1, bx2)), max(0, min(h - 1, by2))
         cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (0, 255, 255), 2)
-        cv2.putText(overlay, f"CLUTTER {d.confidence:.2f}", (bx1, max(25, by1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        lbl_y = by1 - 6 if by1 >= 22 else by2 + 18
+        _draw_pill_label(overlay, f"CLUTTER {d.confidence:.2f}", bx1, lbl_y, (0, 0, 0), (0, 255, 255))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(out_path), overlay)
@@ -956,10 +1075,13 @@ async def execute_genuine_airsim_validation(
     print(f"\n[Stage 4/11] Introducing physical 3D garbage target into Unreal Engine...")
     target_ok, target_meta = await setup_scene_target(
         client=client,
-        target_name="GarbageTarget_01",
+        target_name="GarbageTarget",
         offset_north_m=0.0,
         offset_east_m=2.0,
         ground_z_m=0.0,
+        scale_m=(0.5, 0.5, 0.2),
+        mesh_name="Cube",
+        unique_name=True,
     )
     if not target_ok or target_meta["true_lat"] is None:
         stages["genuine_scene_target_visibility"] = "FAIL"

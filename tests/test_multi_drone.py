@@ -1,3 +1,4 @@
+import os
 import asyncio
 import json
 import logging
@@ -11,6 +12,32 @@ import websockets
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class TestMultiDrone(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.relay = None
+        self.relay_task = None
+        if "RELAY_WS_URI" not in os.environ:
+            from relay.relay import UdpWebsocketRelay
+            self.relay = UdpWebsocketRelay(
+                ws_host="127.0.0.1",
+                ws_port=8089,
+                udp_bind_port=14559,
+                relay_ack_db="data/test_multi_drone_relay_acks.db",
+                allow_duplicate_ips=True
+            )
+            self.relay_task = asyncio.create_task(self.relay.start())
+            await asyncio.sleep(0.5)
+            self.ws_uri = "ws://127.0.0.1:8089"
+        else:
+            self.ws_uri = os.environ["RELAY_WS_URI"]
+
+    async def asyncTearDown(self):
+        if self.relay_task:
+            self.relay_task.cancel()
+            try:
+                await self.relay_task
+            except asyncio.CancelledError:
+                pass
+
     async def simulate_drone(self, drone_id: str, ws_uri: str, duration: int = 15, index: int = 0):
         try:
             async with websockets.connect(ws_uri) as websocket:
@@ -95,7 +122,7 @@ class TestMultiDrone(unittest.IsolatedAsyncioTestCase):
             self.skipTest("Relay not running, skipping multi-drone simulation")
             
     async def test_multi_drone_connections(self):
-        ws_uri = "ws://localhost:8080"
+        ws_uri = self.ws_uri
         num_drones = 5
         duration = 5
         

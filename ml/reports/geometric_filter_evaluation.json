@@ -1,0 +1,51 @@
+{
+  "confidence_threshold": 0.55,
+  "total_ground_truth": 616,
+  "parameters": {
+    "min_area_ratio": 0.0001,
+    "max_area_ratio": 0.35,
+    "max_aspect_ratio": 6.0
+  },
+  "results": {
+    "Raw (No Geometric Filter)": {
+      "true_positives": 398,
+      "false_positives": 36,
+      "false_negatives": 218,
+      "precision": 0.9171,
+      "recall": 0.6461,
+      "f1_score": 0.7581
+    },
+    "Min Area Only (area >= 0.01%)": {
+      "true_positives": 395,
+      "false_positives": 36,
+      "false_negatives": 221,
+      "precision": 0.9165,
+      "recall": 0.6412,
+      "f1_score": 0.7545
+    },
+    "Max Area Only (area <= 35%)": {
+      "true_positives": 398,
+      "false_positives": 36,
+      "false_negatives": 218,
+      "precision": 0.9171,
+      "recall": 0.6461,
+      "f1_score": 0.7581
+    },
+    "Aspect Ratio Only (ar <= 6.0)": {
+      "true_positives": 398,
+      "false_positives": 36,
+      "false_negatives": 218,
+      "precision": 0.9171,
+      "recall": 0.6461,
+      "f1_score": 0.7581
+    },
+    "Combined Filter (Area + AR)": {
+      "true_positives": 395,
+      "false_positives": 36,
+      "false_negatives": 221,
+      "precision": 0.9165,
+      "recall": 0.6412,
+      "f1_score": 0.7545
+    }
+  }
+}

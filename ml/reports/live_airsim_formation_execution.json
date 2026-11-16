@@ -1,0 +1,120 @@
+{
+  "timestamp": 1794804013.4441986,
+  "formation_type": "V",
+  "spacing_m": 15.0,
+  "position_tolerance_m": 1.0,
+  "stable_interval_s": 2.0,
+  "max_settle_timeout_s": 60.0,
+  "hold_seconds": 20.0,
+  "min_separation_threshold_m": 8.0,
+  "convergence": {
+    "drone2": {
+      "converged": true,
+      "convergence_time_s": 2.08,
+      "target_coordinate": [
+        47.6416027,
+        -122.140165
+      ],
+      "actual_coordinate": [
+        47.6416027,
+        -122.140165
+      ],
+      "target_error_m": 0.0,
+      "max_error_during_hold_m": 0.0,
+      "slot": 0
+    },
+    "drone4": {
+      "converged": true,
+      "convergence_time_s": 13.0,
+      "target_coordinate": [
+        47.6414678,
+        -122.1399648
+      ],
+      "actual_coordinate": [
+        47.6414678,
+        -122.1399648
+      ],
+      "target_error_m": 0.0,
+      "max_error_during_hold_m": 0.108,
+      "slot": 1
+    },
+    "drone1": {
+      "converged": true,
+      "convergence_time_s": 10.38,
+      "target_coordinate": [
+        47.6414678,
+        -122.1403652
+      ],
+      "actual_coordinate": [
+        47.6414678,
+        -122.1403652
+      ],
+      "target_error_m": 0.0,
+      "max_error_during_hold_m": 0.054,
+      "slot": 2
+    },
+    "drone3": {
+      "converged": true,
+      "convergence_time_s": 14.81,
+      "target_coordinate": [
+        47.641333,
+        -122.1397646
+      ],
+      "actual_coordinate": [
+        47.6413329,
+        -122.1397646
+      ],
+      "target_error_m": 0.0,
+      "max_error_during_hold_m": 0.24,
+      "slot": 3
+    }
+  },
+  "pairwise_separation": {
+    "min_observed_m": 13.602,
+    "pair_responsible": [
+      "drone2",
+      "drone4"
+    ],
+    "violations_count": 0
+  },
+  "hold_metrics": {
+    "max_target_errors_m": {
+      "drone2": 0.0,
+      "drone4": 0.108,
+      "drone1": 0.054,
+      "drone3": 0.24
+    },
+    "overall_max_error_during_hold_m": 0.24
+  },
+  "landing_verification": {
+    "Drone1": {
+      "landed": true,
+      "landed_state": 1,
+      "pos_z_ned": 1.681,
+      "speed_mps": 0.0
+    },
+    "Drone2": {
+      "landed": true,
+      "landed_state": 1,
+      "pos_z_ned": 1.681,
+      "speed_mps": 0.0
+    },
+    "Drone3": {
+      "landed": true,
+      "landed_state": 1,
+      "pos_z_ned": 1.681,
+      "speed_mps": 0.0
+    },
+    "Drone4": {
+      "landed": true,
+      "landed_state": 1,
+      "pos_z_ned": 1.681,
+      "speed_mps": 0.0
+    }
+  },
+  "all_converged": true,
+  "all_landed": true,
+  "all_moved": true,
+  "test_passed": true,
+  "exit_code": 0
+}

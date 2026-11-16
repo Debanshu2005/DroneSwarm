@@ -30,6 +30,8 @@ class PerceptionPipeline:
         flight_controller,
         network_adapter,
         config,
+        session_id: Optional[str] = None,
+        session_generation: Optional[int] = None,
     ):
         self.drone_id = drone_id
         self.frame_source = frame_source
@@ -37,6 +39,8 @@ class PerceptionPipeline:
         self.fc = flight_controller
         self.network = network_adapter
         self.config = config
+        self.session_id = session_id
+        self.session_generation = session_generation
 
         self.aggregator = TrackAggregator(
             drone_id=drone_id,
@@ -346,6 +350,8 @@ class PerceptionPipeline:
                 detections=items,
                 synthetic=is_synthetic,
                 frame_id=self._frame_id,
+                drone_session_id=self.session_id,
+                session_generation=self.session_generation,
             )
             try:
                 await self.network.broadcast_message(msg)

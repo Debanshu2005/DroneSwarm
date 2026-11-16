@@ -1,0 +1,9 @@
+{
+  "gcs_url": "http://127.0.0.1:5173/?view=MAP&ws=ws://127.0.0.1:8088",
+  "browser": "Headless Google Chrome",
+  "ws_connected": true,
+  "markers_rendered": 2,
+  "expected_distinct_objects": 2,
+  "deduplication_verified": true,
+  "screenshot_saved": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\ml\\reports\\live_airsim_collaborative_perception\\gcs_map_verification.png"
+}

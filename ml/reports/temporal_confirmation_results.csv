@@ -1,0 +1,6 @@
+experiment,confidence,min_hits,precision,recall,f1_score,true_positives,false_alerts,missed_detections,total_ground_truth,mean_confirmation_delay_sec,false_alerts_per_minute,duplicate_event_rate_pct
+Baseline,0.35,1,0.416,0.99,0.5858,99,139,1,100,1.22,27.8,9.93
+Config A,0.5,1,0.538,0.99,0.6972,99,85,1,100,1.2,17.0,11.63
+Config B,0.55,2,1.0,1.0,1.0,100,0,0,100,2.6,0.0,12.07
+Config C,0.6,2,0.9524,1.0,0.9756,100,5,0,100,2.96,1.0,8.62
+Config D,0.6,3,1.0,0.94,0.9691,94,0,6,100,4.49,0.0,0.0

@@ -1,0 +1,133 @@
+{
+  "audit_metadata": {
+    "audit_type": "FORENSIC_ACCOUNTING_AUDIT",
+    "mission": "PHASE_3_LIVE_FOUR_DRONE_COLLABORATIVE_PERCEPTION",
+    "timestamp_iso": "2026-11-16T05:55:00Z",
+    "auditor": "Independent Forensic Auditor (Antigravity)",
+    "status": "RECONCILED"
+  },
+  "raw_detections": {
+    "drone1": {
+      "frames_captured": 34,
+      "raw_detections_per_frame": 2,
+      "raw_detections_total": 68
+    },
+    "drone2": {
+      "frames_captured": 34,
+      "raw_detections_per_frame": 2,
+      "raw_detections_total": 68
+    },
+    "drone3": {
+      "frames_captured": 34,
+      "raw_detections_per_frame": 3,
+      "raw_detections_total": 102
+    },
+    "drone4": {
+      "frames_captured": 34,
+      "raw_detections_per_frame": 2,
+      "raw_detections_total": 68
+    },
+    "swarm_raw_detections_total": 306
+  },
+  "local_filtering_and_temporal_smoothing": {
+    "filtering_mechanism": "DroneOS TrackAggregator (min_hits=2, update_interval_s=1.0)",
+    "unconfirmed_initial_hits_suppressed": 8,
+    "temporal_smoothing_and_rate_limiting_suppressed": 72,
+    "total_locally_filtered": 80,
+    "total_emitted_items": 226
+  },
+  "transport_and_ingestion": {
+    "drone1_messages_emitted": 27,
+    "drone2_messages_emitted": 26,
+    "drone3_messages_emitted": 24,
+    "drone4_messages_emitted": 24,
+    "total_messages_emitted": 101,
+    "transport_protocol": "UDP / Loopback",
+    "transport_accepted_packets": 101,
+    "transport_rejected_packets": 0,
+    "transport_dropped_packets": 0,
+    "gfs_inbox_packets_ingested": 101,
+    "gfs_inbox_items_ingested": 226
+  },
+  "gfs_disposition_accounting": {
+    "total_ingested_items": 226,
+    "fused_items": {
+      "count": 130,
+      "by_target": {
+        "G-0ab2d222 (Target 1)": {
+          "total_items": 66,
+          "sources": {
+            "drone1-g0002": 23,
+            "drone3-g0002": 22,
+            "drone3-g0003": 21
+          }
+        },
+        "G-467e474f (Target 2)": {
+          "total_items": 64,
+          "sources": {
+            "drone2-g0002": 23,
+            "drone4-g0001": 21,
+            "drone4-g0002": 20
+          }
+        }
+      }
+    },
+    "deferred_items": {
+      "count": 96,
+      "breakdown": {
+        "isolated_single_drone_tracklets": {
+          "reason": "LOW_CONFIDENCE (Isolated tracklet awaiting co-observation by second drone)",
+          "count": 77,
+          "sources": {
+            "drone1-g0001": 27,
+            "drone2-g0001": 26,
+            "drone3-g0001": 24
+          }
+        },
+        "pre_hypothesis_warmup_items": {
+          "reason": "DEFERRED_DURING_INITIAL_CLIQUE_FORMATION (Pending hypothesis confirmation)",
+          "count": 19,
+          "sources": {
+            "drone1-g0002": 4,
+            "drone2-g0002": 3,
+            "drone3-g0002": 2,
+            "drone3-g0003": 3,
+            "drone4-g0001": 3,
+            "drone4-g0002": 4
+          }
+        }
+      }
+    },
+    "quarantined_items": 0,
+    "rejected_corrupt_items": 0,
+    "silently_lost_items": 0,
+    "accounting_balance_check": {
+      "formula": "fused (130) + deferred (96) = ingested (226)",
+      "balanced": true
+    }
+  },
+  "global_track_observation_accounting": {
+    "target_1_G_0ab2d222": {
+      "initial_hypothesis_observations": 7,
+      "subsequent_occ_batch_updates": 68,
+      "total_represented_observations": 75,
+      "final_version": 36
+    },
+    "target_2_G_467e474f": {
+      "initial_hypothesis_observations": 8,
+      "subsequent_occ_batch_updates": 66,
+      "total_represented_observations": 74,
+      "final_version": 33
+    },
+    "total_global_track_observations": 149
+  },
+  "outbox_and_delivery_accounting": {
+    "unique_versioned_events_generated": 69,
+    "target_1_events": 36,
+    "target_2_events": 33,
+    "total_forwarding_attempts_sent": 189,
+    "average_attempts_per_event": 2.74,
+    "delivery_status": "ALL_SENT",
+    "unacknowledged_drops": 0
+  }
+}

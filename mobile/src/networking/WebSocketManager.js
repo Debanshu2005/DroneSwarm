@@ -65,8 +65,8 @@ export class WebSocketManager {
         this.ws.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
-                if (!message || typeof message !== 'object' || !message.msg_type) {
-                    throw new Error("Invalid message format: missing msg_type");
+                if (!message || typeof message !== 'object' || (!message.msg_type && !message.type)) {
+                    throw new Error("Invalid message format: missing msg_type or type");
                 }
                 this._dispatch(message);
             } catch (e) {
@@ -148,7 +148,7 @@ export class WebSocketManager {
     }
 
     _dispatch(message) {
-        const type = message.msg_type;
+        const type = message.msg_type || message.type;
         if (this.listeners[type]) {
             this.listeners[type].forEach(cb => {
                 try { cb(message); } catch (e) { console.error("Error in listener:", e); }

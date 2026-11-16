@@ -124,7 +124,7 @@ export class MultiWebSocketManager {
     }
 
     _dispatch(message) {
-        const type = message.msg_type;
+        const type = message.msg_type || message.type;
         if (this.listeners[type]) {
             this.listeners[type].forEach(cb => {
                 try { cb(message); } catch (e) { console.error("Error in listener:", e); }

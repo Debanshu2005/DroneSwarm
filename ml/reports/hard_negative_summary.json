@@ -1,0 +1,1210 @@
+{
+  "total_false_positives": 92,
+  "confidence_threshold": 0.35,
+  "category_breakdown": {
+    "Vegetation & Dry Leaves": 32,
+    "Rocks & Gravel": 15,
+    "Road Markings & Infrastructure": 22,
+    "Shadows & Contrast Edges": 0,
+    "Soil, Mud & Ground Patches": 10,
+    "Man-Made Structures / Other": 13
+  },
+  "records": [
+    {
+      "id": 1,
+      "image": "BATCH_d07_img_2600.jpg",
+      "confidence": 0.6958,
+      "bbox_xyxy": [
+        3648.2,
+        1022.7,
+        3756.7,
+        1118.2
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": "fp_001_BATCH_d07_img_2600_c69.jpg"
+    },
+    {
+      "id": 2,
+      "image": "BATCH_d07_img_2600.jpg",
+      "confidence": 0.5625,
+      "bbox_xyxy": [
+        2992.1,
+        471.0,
+        3078.9,
+        536.6
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": "fp_002_BATCH_d07_img_2600_c56.jpg"
+    },
+    {
+      "id": 3,
+      "image": "GOPR0028.JPG",
+      "confidence": 0.7307,
+      "bbox_xyxy": [
+        341.1,
+        1587.7,
+        440.4,
+        1696.1
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": "fp_003_GOPR0028_c73.jpg"
+    },
+    {
+      "id": 4,
+      "image": "GOPR0028.JPG",
+      "confidence": 0.6941,
+      "bbox_xyxy": [
+        112.6,
+        1839.9,
+        201.2,
+        1914.1
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": "fp_004_GOPR0028_c69.jpg"
+    },
+    {
+      "id": 5,
+      "image": "GOPR0028.JPG",
+      "confidence": 0.6427,
+      "bbox_xyxy": [
+        233.6,
+        1944.0,
+        312.2,
+        2003.0
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": "fp_005_GOPR0028_c64.jpg"
+    },
+    {
+      "id": 6,
+      "image": "GOPR0028.JPG",
+      "confidence": 0.4961,
+      "bbox_xyxy": [
+        149.7,
+        553.0,
+        240.1,
+        646.4
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": "fp_006_GOPR0028_c49.jpg"
+    },
+    {
+      "id": 7,
+      "image": "GOPR0028.JPG",
+      "confidence": 0.4796,
+      "bbox_xyxy": [
+        974.8,
+        721.1,
+        1056.7,
+        790.1
+      ],
+      "category": "Soil, Mud & Ground Patches",
+      "crop_saved": "fp_007_GOPR0028_c47.jpg"
+    },
+    {
+      "id": 8,
+      "image": "GOPR0028.JPG",
+      "confidence": 0.4068,
+      "bbox_xyxy": [
+        296.7,
+        1227.0,
+        366.8,
+        1305.6
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": "fp_008_GOPR0028_c40.jpg"
+    },
+    {
+      "id": 9,
+      "image": "BATCH_d08_img_350.jpg",
+      "confidence": 0.6645,
+      "bbox_xyxy": [
+        3303.4,
+        1088.0,
+        3351.4,
+        1127.2
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": "fp_009_BATCH_d08_img_350_c66.jpg"
+    },
+    {
+      "id": 10,
+      "image": "BATCH_d08_img_350.jpg",
+      "confidence": 0.5427,
+      "bbox_xyxy": [
+        0.0,
+        1440.9,
+        23.1,
+        1474.7
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": "fp_010_BATCH_d08_img_350_c54.jpg"
+    },
+    {
+      "id": 11,
+      "image": "BATCH_d08_img_350.jpg",
+      "confidence": 0.5104,
+      "bbox_xyxy": [
+        1148.3,
+        370.8,
+        1205.3,
+        417.5
+      ],
+      "category": "Soil, Mud & Ground Patches",
+      "crop_saved": "fp_011_BATCH_d08_img_350_c51.jpg"
+    },
+    {
+      "id": 12,
+      "image": "BATCH_s03_img_2220.jpg",
+      "confidence": 0.3743,
+      "bbox_xyxy": [
+        2689.3,
+        1426.7,
+        2746.0,
+        1460.1
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": "fp_012_BATCH_s03_img_2220_c37.jpg"
+    },
+    {
+      "id": 13,
+      "image": "BATCH_s05_img_4250.jpg",
+      "confidence": 0.6926,
+      "bbox_xyxy": [
+        2963.4,
+        1543.0,
+        3036.3,
+        1599.7
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": "fp_013_BATCH_s05_img_4250_c69.jpg"
+    },
+    {
+      "id": 14,
+      "image": "BATCH_s05_img_4250.jpg",
+      "confidence": 0.5142,
+      "bbox_xyxy": [
+        2443.1,
+        390.9,
+        2488.1,
+        450.6
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": "fp_014_BATCH_s05_img_4250_c51.jpg"
+    },
+    {
+      "id": 15,
+      "image": "BATCH_s04_img_5840.jpg",
+      "confidence": 0.3532,
+      "bbox_xyxy": [
+        2662.3,
+        1271.3,
+        2694.1,
+        1319.4
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": "fp_015_BATCH_s04_img_5840_c35.jpg"
+    },
+    {
+      "id": 16,
+      "image": "BATCH_d08_img_710.jpg",
+      "confidence": 0.6635,
+      "bbox_xyxy": [
+        2877.4,
+        1700.7,
+        2918.6,
+        1759.0
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": "fp_016_BATCH_d08_img_710_c66.jpg"
+    },
+    {
+      "id": 17,
+      "image": "batch_s02_img_104.jpg",
+      "confidence": 0.6848,
+      "bbox_xyxy": [
+        1774.0,
+        669.6,
+        1826.0,
+        758.6
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": "fp_017_batch_s02_img_104_c68.jpg"
+    },
+    {
+      "id": 18,
+      "image": "batch_s02_img_104.jpg",
+      "confidence": 0.4053,
+      "bbox_xyxy": [
+        3519.9,
+        381.8,
+        3575.9,
+        414.1
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": "fp_018_batch_s02_img_104_c40.jpg"
+    },
+    {
+      "id": 19,
+      "image": "batch_01_frame_12.jpg",
+      "confidence": 0.5296,
+      "bbox_xyxy": [
+        2275.0,
+        881.5,
+        2316.2,
+        923.1
+      ],
+      "category": "Soil, Mud & Ground Patches",
+      "crop_saved": "fp_019_batch_01_frame_12_c52.jpg"
+    },
+    {
+      "id": 20,
+      "image": "BATCH_s03_img_1100.jpg",
+      "confidence": 0.5659,
+      "bbox_xyxy": [
+        2306.2,
+        70.6,
+        2349.4,
+        96.3
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": "fp_020_BATCH_s03_img_1100_c56.jpg"
+    },
+    {
+      "id": 21,
+      "image": "BATCH_s05_img_8070.jpg",
+      "confidence": 0.6982,
+      "bbox_xyxy": [
+        804.3,
+        921.3,
+        857.8,
+        966.3
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": "fp_021_BATCH_s05_img_8070_c69.jpg"
+    },
+    {
+      "id": 22,
+      "image": "BATCH_s05_img_8070.jpg",
+      "confidence": 0.6546,
+      "bbox_xyxy": [
+        996.0,
+        668.0,
+        1052.8,
+        721.5
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 23,
+      "image": "batch_s02_img_86.jpg",
+      "confidence": 0.519,
+      "bbox_xyxy": [
+        3118.3,
+        1196.1,
+        3162.0,
+        1236.4
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": "fp_023_batch_s02_img_86_c51.jpg"
+    },
+    {
+      "id": 24,
+      "image": "camera_img_2.jpg",
+      "confidence": 0.7481,
+      "bbox_xyxy": [
+        1639.1,
+        1650.0,
+        1769.9,
+        1820.4
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 25,
+      "image": "batch_s02_img_55.jpg",
+      "confidence": 0.5959,
+      "bbox_xyxy": [
+        1355.5,
+        405.6,
+        1380.2,
+        437.7
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 26,
+      "image": "batch_s02_img_55.jpg",
+      "confidence": 0.4387,
+      "bbox_xyxy": [
+        1284.0,
+        584.5,
+        1307.0,
+        601.1
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 27,
+      "image": "batch_s02_img_55.jpg",
+      "confidence": 0.3707,
+      "bbox_xyxy": [
+        1336.6,
+        536.1,
+        1357.4,
+        555.1
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 28,
+      "image": "batch_s01_img_540.jpg",
+      "confidence": 0.5742,
+      "bbox_xyxy": [
+        3022.9,
+        957.8,
+        3074.4,
+        996.2
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 29,
+      "image": "batch_s02_img_26.jpg",
+      "confidence": 0.4777,
+      "bbox_xyxy": [
+        3640.0,
+        1098.7,
+        3668.0,
+        1178.4
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": "fp_029_batch_s02_img_26_c47.jpg"
+    },
+    {
+      "id": 30,
+      "image": "BATCH_d08_img_1210.jpg",
+      "confidence": 0.6373,
+      "bbox_xyxy": [
+        151.3,
+        1267.9,
+        211.6,
+        1323.4
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 31,
+      "image": "BATCH_d08_img_1210.jpg",
+      "confidence": 0.5126,
+      "bbox_xyxy": [
+        352.4,
+        1309.7,
+        426.2,
+        1376.2
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": "fp_031_BATCH_d08_img_1210_c51.jpg"
+    },
+    {
+      "id": 32,
+      "image": "BATCH_d08_img_1210.jpg",
+      "confidence": 0.4083,
+      "bbox_xyxy": [
+        121.6,
+        376.0,
+        166.7,
+        428.8
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 33,
+      "image": "BATCH_s04_img_8360.jpg",
+      "confidence": 0.4542,
+      "bbox_xyxy": [
+        2252.1,
+        879.0,
+        2300.7,
+        923.0
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 34,
+      "image": "BATCH_s05_img_9110.jpg",
+      "confidence": 0.6455,
+      "bbox_xyxy": [
+        535.1,
+        388.7,
+        601.5,
+        427.3
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": "fp_034_BATCH_s05_img_9110_c64.jpg"
+    },
+    {
+      "id": 35,
+      "image": "BATCH_s05_img_9110.jpg",
+      "confidence": 0.5831,
+      "bbox_xyxy": [
+        2168.5,
+        474.2,
+        2295.6,
+        585.7
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": "fp_035_BATCH_s05_img_9110_c58.jpg"
+    },
+    {
+      "id": 36,
+      "image": "BATCH_s05_img_9110.jpg",
+      "confidence": 0.5483,
+      "bbox_xyxy": [
+        1540.5,
+        421.3,
+        1600.5,
+        496.9
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": "fp_036_BATCH_s05_img_9110_c54.jpg"
+    },
+    {
+      "id": 37,
+      "image": "BATCH_s05_img_9110.jpg",
+      "confidence": 0.4838,
+      "bbox_xyxy": [
+        2226.6,
+        500.6,
+        2297.4,
+        578.3
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": "fp_037_BATCH_s05_img_9110_c48.jpg"
+    },
+    {
+      "id": 38,
+      "image": "BATCH_s05_img_9110.jpg",
+      "confidence": 0.3711,
+      "bbox_xyxy": [
+        1542.2,
+        429.2,
+        1646.3,
+        503.4
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": "fp_038_BATCH_s05_img_9110_c37.jpg"
+    },
+    {
+      "id": 39,
+      "image": "batch_s02_img_21.jpg",
+      "confidence": 0.4265,
+      "bbox_xyxy": [
+        1889.9,
+        947.4,
+        1941.6,
+        972.7
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": "fp_039_batch_s02_img_21_c42.jpg"
+    },
+    {
+      "id": 40,
+      "image": "batch_s02_img_21.jpg",
+      "confidence": 0.408,
+      "bbox_xyxy": [
+        1164.7,
+        170.7,
+        1187.0,
+        185.4
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 41,
+      "image": "batch_s02_img_21.jpg",
+      "confidence": 0.4022,
+      "bbox_xyxy": [
+        1441.2,
+        1406.5,
+        1496.0,
+        1436.9
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 42,
+      "image": "batch_s02_img_21.jpg",
+      "confidence": 0.3757,
+      "bbox_xyxy": [
+        1400.2,
+        415.9,
+        1425.4,
+        430.8
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 43,
+      "image": "batch_01_frame_2.jpg",
+      "confidence": 0.725,
+      "bbox_xyxy": [
+        2477.2,
+        43.0,
+        2548.3,
+        151.9
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 44,
+      "image": "BATCH_d08_img_2280.jpg",
+      "confidence": 0.4432,
+      "bbox_xyxy": [
+        448.9,
+        1798.9,
+        512.8,
+        1863.5
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 45,
+      "image": "BATCH_d08_img_2280.jpg",
+      "confidence": 0.3506,
+      "bbox_xyxy": [
+        556.9,
+        659.5,
+        591.8,
+        715.1
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 46,
+      "image": "BATCH_d07_img_2720.jpg",
+      "confidence": 0.7045,
+      "bbox_xyxy": [
+        915.5,
+        958.2,
+        1010.7,
+        1049.4
+      ],
+      "category": "Soil, Mud & Ground Patches",
+      "crop_saved": "fp_046_BATCH_d07_img_2720_c70.jpg"
+    },
+    {
+      "id": 47,
+      "image": "photo_2020-10-23_14-02-05.jpg",
+      "confidence": 0.4818,
+      "bbox_xyxy": [
+        272.8,
+        1024.3,
+        282.7,
+        1040.0
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": "fp_047_photo_2020-10-23_14-02-05_c48.jpg"
+    },
+    {
+      "id": 48,
+      "image": "photo_2020-10-23_14-02-05.jpg",
+      "confidence": 0.459,
+      "bbox_xyxy": [
+        103.2,
+        188.1,
+        127.7,
+        205.0
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": "fp_048_photo_2020-10-23_14-02-05_c45.jpg"
+    },
+    {
+      "id": 49,
+      "image": "photo_2020-10-23_14-02-05.jpg",
+      "confidence": 0.435,
+      "bbox_xyxy": [
+        157.3,
+        1099.3,
+        175.0,
+        1117.9
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 50,
+      "image": "batch_04_img_2560.jpg",
+      "confidence": 0.6951,
+      "bbox_xyxy": [
+        2756.9,
+        1418.3,
+        2812.3,
+        1472.0
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 51,
+      "image": "BATCH_d08_img_3090.jpg",
+      "confidence": 0.417,
+      "bbox_xyxy": [
+        3016.1,
+        802.3,
+        3049.3,
+        857.8
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 52,
+      "image": "BATCH_s04_img_4640.jpg",
+      "confidence": 0.4671,
+      "bbox_xyxy": [
+        3532.2,
+        0.0,
+        3604.6,
+        86.7
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 53,
+      "image": "BATCH_d06_img_710.jpg",
+      "confidence": 0.6241,
+      "bbox_xyxy": [
+        3335.3,
+        1726.0,
+        3414.5,
+        1794.7
+      ],
+      "category": "Soil, Mud & Ground Patches",
+      "crop_saved": "fp_053_BATCH_d06_img_710_c62.jpg"
+    },
+    {
+      "id": 54,
+      "image": "BATCH_d06_img_710.jpg",
+      "confidence": 0.5618,
+      "bbox_xyxy": [
+        786.2,
+        6.8,
+        843.4,
+        64.3
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 55,
+      "image": "BATCH_d08_img_3190.jpg",
+      "confidence": 0.4817,
+      "bbox_xyxy": [
+        3349.8,
+        1508.6,
+        3401.2,
+        1549.0
+      ],
+      "category": "Soil, Mud & Ground Patches",
+      "crop_saved": "fp_055_BATCH_d08_img_3190_c48.jpg"
+    },
+    {
+      "id": 56,
+      "image": "BATCH_d08_img_3190.jpg",
+      "confidence": 0.4763,
+      "bbox_xyxy": [
+        2477.1,
+        1705.1,
+        2543.6,
+        1816.2
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 57,
+      "image": "batch_s02_img_70.jpg",
+      "confidence": 0.4977,
+      "bbox_xyxy": [
+        2080.3,
+        1252.1,
+        2114.8,
+        1305.8
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": null
+    },
+    {
+      "id": 58,
+      "image": "BATCH_d08_img_520.jpg",
+      "confidence": 0.4928,
+      "bbox_xyxy": [
+        2869.2,
+        1324.3,
+        2906.1,
+        1387.9
+      ],
+      "category": "Soil, Mud & Ground Patches",
+      "crop_saved": "fp_058_BATCH_d08_img_520_c49.jpg"
+    },
+    {
+      "id": 59,
+      "image": "BATCH_d08_img_520.jpg",
+      "confidence": 0.4712,
+      "bbox_xyxy": [
+        869.5,
+        1487.6,
+        919.9,
+        1558.4
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 60,
+      "image": "batch_01_frame_3.jpg",
+      "confidence": 0.7593,
+      "bbox_xyxy": [
+        129.7,
+        900.8,
+        220.2,
+        996.2
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": "fp_060_batch_01_frame_3_c75.jpg"
+    },
+    {
+      "id": 61,
+      "image": "batch_01_frame_3.jpg",
+      "confidence": 0.6234,
+      "bbox_xyxy": [
+        1880.3,
+        1746.6,
+        1945.1,
+        1796.5
+      ],
+      "category": "Soil, Mud & Ground Patches",
+      "crop_saved": "fp_061_batch_01_frame_3_c62.jpg"
+    },
+    {
+      "id": 62,
+      "image": "batch_s01_img_1560.jpg",
+      "confidence": 0.6726,
+      "bbox_xyxy": [
+        2562.9,
+        388.1,
+        2607.9,
+        461.3
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": "fp_062_batch_s01_img_1560_c67.jpg"
+    },
+    {
+      "id": 63,
+      "image": "BATCH_d07_img_6940.jpg",
+      "confidence": 0.46,
+      "bbox_xyxy": [
+        3468.6,
+        1098.6,
+        3536.7,
+        1184.8
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": "fp_063_BATCH_d07_img_6940_c45.jpg"
+    },
+    {
+      "id": 64,
+      "image": "GOPR0039.JPG",
+      "confidence": 0.3669,
+      "bbox_xyxy": [
+        1793.9,
+        2146.2,
+        2019.9,
+        2353.2
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 65,
+      "image": "GOPR0039.JPG",
+      "confidence": 0.3656,
+      "bbox_xyxy": [
+        2296.0,
+        2570.9,
+        2346.2,
+        2606.4
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": null
+    },
+    {
+      "id": 66,
+      "image": "batch_01_frame_5.jpg",
+      "confidence": 0.6537,
+      "bbox_xyxy": [
+        2514.7,
+        242.1,
+        2560.2,
+        291.4
+      ],
+      "category": "Soil, Mud & Ground Patches",
+      "crop_saved": null
+    },
+    {
+      "id": 67,
+      "image": "GOPR0023.JPG",
+      "confidence": 0.5719,
+      "bbox_xyxy": [
+        2856.5,
+        577.6,
+        2944.4,
+        661.5
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": null
+    },
+    {
+      "id": 68,
+      "image": "GOPR0023.JPG",
+      "confidence": 0.5188,
+      "bbox_xyxy": [
+        3291.8,
+        323.8,
+        3366.9,
+        402.0
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": null
+    },
+    {
+      "id": 69,
+      "image": "GOPR0023.JPG",
+      "confidence": 0.5136,
+      "bbox_xyxy": [
+        527.4,
+        1369.6,
+        655.4,
+        1421.6
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 70,
+      "image": "GOPR0023.JPG",
+      "confidence": 0.5131,
+      "bbox_xyxy": [
+        2137.8,
+        1342.7,
+        2226.8,
+        1441.4
+      ],
+      "category": "Soil, Mud & Ground Patches",
+      "crop_saved": null
+    },
+    {
+      "id": 71,
+      "image": "GOPR0023.JPG",
+      "confidence": 0.4625,
+      "bbox_xyxy": [
+        2900.9,
+        451.3,
+        2968.4,
+        505.5
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": null
+    },
+    {
+      "id": 72,
+      "image": "GOPR0023.JPG",
+      "confidence": 0.41,
+      "bbox_xyxy": [
+        2876.6,
+        825.8,
+        2984.2,
+        882.3
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": null
+    },
+    {
+      "id": 73,
+      "image": "batch_02_img_3640.jpg",
+      "confidence": 0.3679,
+      "bbox_xyxy": [
+        2144.6,
+        1531.4,
+        2170.9,
+        1583.3
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 74,
+      "image": "BATCH_s03_img_3120.jpg",
+      "confidence": 0.4817,
+      "bbox_xyxy": [
+        364.7,
+        1442.7,
+        432.1,
+        1530.9
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 75,
+      "image": "BATCH_s03_img_3120.jpg",
+      "confidence": 0.4537,
+      "bbox_xyxy": [
+        2253.3,
+        549.3,
+        2299.3,
+        587.5
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": null
+    },
+    {
+      "id": 76,
+      "image": "BATCH_s03_img_3160.jpg",
+      "confidence": 0.3844,
+      "bbox_xyxy": [
+        2788.6,
+        113.4,
+        2828.0,
+        146.4
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": null
+    },
+    {
+      "id": 77,
+      "image": "BATCH_d08_img_490.jpg",
+      "confidence": 0.541,
+      "bbox_xyxy": [
+        912.9,
+        982.9,
+        951.9,
+        1037.3
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 78,
+      "image": "BATCH_s04_img_5660.jpg",
+      "confidence": 0.4361,
+      "bbox_xyxy": [
+        3222.8,
+        1332.3,
+        3273.6,
+        1374.0
+      ],
+      "category": "Rocks & Gravel",
+      "crop_saved": null
+    },
+    {
+      "id": 79,
+      "image": "BATCH_s04_img_5660.jpg",
+      "confidence": 0.4227,
+      "bbox_xyxy": [
+        2625.1,
+        712.9,
+        2677.5,
+        738.5
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 80,
+      "image": "BATCH_s05_img_5660.jpg",
+      "confidence": 0.6352,
+      "bbox_xyxy": [
+        1185.3,
+        72.4,
+        1247.1,
+        110.2
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": null
+    },
+    {
+      "id": 81,
+      "image": "GOPR0030.JPG",
+      "confidence": 0.6362,
+      "bbox_xyxy": [
+        1735.2,
+        831.1,
+        1797.3,
+        936.0
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 82,
+      "image": "GOPR0030.JPG",
+      "confidence": 0.6077,
+      "bbox_xyxy": [
+        1937.3,
+        1815.4,
+        2024.7,
+        1881.2
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 83,
+      "image": "GOPR0030.JPG",
+      "confidence": 0.3588,
+      "bbox_xyxy": [
+        3201.9,
+        1272.5,
+        3257.4,
+        1323.5
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 84,
+      "image": "batch_s02_img_24.jpg",
+      "confidence": 0.5288,
+      "bbox_xyxy": [
+        1453.9,
+        187.7,
+        1489.5,
+        224.0
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 85,
+      "image": "BATCH_d08_img_2810.jpg",
+      "confidence": 0.6282,
+      "bbox_xyxy": [
+        969.9,
+        848.2,
+        1015.3,
+        897.5
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 86,
+      "image": "batch_s02_img_67.jpg",
+      "confidence": 0.3533,
+      "bbox_xyxy": [
+        621.9,
+        1120.2,
+        669.3,
+        1151.7
+      ],
+      "category": "Road Markings & Infrastructure",
+      "crop_saved": null
+    },
+    {
+      "id": 87,
+      "image": "GOPR0052.JPG",
+      "confidence": 0.6059,
+      "bbox_xyxy": [
+        2146.1,
+        230.4,
+        2262.4,
+        330.0
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": null
+    },
+    {
+      "id": 88,
+      "image": "GOPR0052.JPG",
+      "confidence": 0.5471,
+      "bbox_xyxy": [
+        1358.4,
+        1765.8,
+        1448.8,
+        1960.4
+      ],
+      "category": "Man-Made Structures / Other",
+      "crop_saved": null
+    },
+    {
+      "id": 89,
+      "image": "batch_s01_img_2920.jpg",
+      "confidence": 0.5666,
+      "bbox_xyxy": [
+        1937.3,
+        532.2,
+        2041.6,
+        631.4
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 90,
+      "image": "BATCH_s04_img_4980.jpg",
+      "confidence": 0.4674,
+      "bbox_xyxy": [
+        28.6,
+        611.7,
+        89.1,
+        671.8
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 91,
+      "image": "BATCH_s04_img_3400.jpg",
+      "confidence": 0.7222,
+      "bbox_xyxy": [
+        204.1,
+        963.8,
+        257.1,
+        1025.5
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    },
+    {
+      "id": 92,
+      "image": "BATCH_s04_img_3400.jpg",
+      "confidence": 0.6602,
+      "bbox_xyxy": [
+        2029.0,
+        1055.8,
+        2076.1,
+        1091.8
+      ],
+      "category": "Vegetation & Dry Leaves",
+      "crop_saved": null
+    }
+  ]
+}

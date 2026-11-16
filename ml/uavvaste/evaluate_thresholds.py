@@ -154,13 +154,13 @@ def generate_charts(results: List[Dict], out_path: Path):
     recs = [r["recall"] for r in results]
     f1s = [r["f1_score"] for r in results]
 
-    # Chart 1: Precision & Recall vs Confidence
+    # Chart 1: Precision & Recall vs Confidence (Combined)
     plt.figure(figsize=(9, 5.5), dpi=150)
     plt.plot(confs, precs, "o-", color="#10b981", linewidth=2.2, label="Precision")
     plt.plot(confs, recs, "s-", color="#3b82f6", linewidth=2.2, label="Recall")
     plt.plot(confs, f1s, "^--", color="#f59e0b", linewidth=1.8, label="F1 Score")
     plt.axvline(0.35, color="#6b7280", linestyle=":", alpha=0.8, label="Baseline (0.35)")
-    plt.axvline(0.50, color="#8b5cf6", linestyle="--", alpha=0.8, label="Candidate A (0.50)")
+    plt.axvline(0.55, color="#8b5cf6", linestyle="--", alpha=0.8, label="Recommended (0.55)")
     plt.title("YOLO26n Performance vs Confidence Threshold (Validation Split)", fontsize=13, fontweight="bold")
     plt.xlabel("Confidence Threshold", fontsize=11)
     plt.ylabel("Score", fontsize=11)
@@ -196,6 +196,42 @@ def generate_charts(results: List[Dict], out_path: Path):
     plt.savefig(chart2)
     plt.close()
     print(f"[OK] Saved chart: {chart2}")
+
+    # Chart 3: Confidence vs Precision
+    plt.figure(figsize=(7.5, 5), dpi=150)
+    plt.plot(confs, precs, "o-", color="#10b981", linewidth=2.2, label="Precision")
+    for c, p in zip(confs, precs):
+        plt.annotate(f"{p*100:.1f}%", (c, p), textcoords="offset points", xytext=(0, 6), ha="center", fontsize=8)
+    plt.axvline(0.55, color="#8b5cf6", linestyle="--", alpha=0.8, label="Recommended (0.55: 94.0%)")
+    plt.title("Confidence Threshold vs Detection Precision", fontsize=13, fontweight="bold")
+    plt.xlabel("Confidence Threshold", fontsize=11)
+    plt.ylabel("Precision", fontsize=11)
+    plt.ylim([0.80, 1.02])
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.legend(loc="lower right", frameon=True)
+    plt.tight_layout()
+    chart3 = out_path / "conf_vs_precision.png"
+    plt.savefig(chart3)
+    plt.close()
+    print(f"[OK] Saved chart: {chart3}")
+
+    # Chart 4: Confidence vs Recall
+    plt.figure(figsize=(7.5, 5), dpi=150)
+    plt.plot(confs, recs, "s-", color="#3b82f6", linewidth=2.2, label="Recall")
+    for c, r in zip(confs, recs):
+        plt.annotate(f"{r*100:.1f}%", (c, r), textcoords="offset points", xytext=(0, 6), ha="center", fontsize=8)
+    plt.axvline(0.55, color="#8b5cf6", linestyle="--", alpha=0.8, label="Recommended (0.55: 71.1%)")
+    plt.title("Confidence Threshold vs Detection Recall", fontsize=13, fontweight="bold")
+    plt.xlabel("Confidence Threshold", fontsize=11)
+    plt.ylabel("Recall", fontsize=11)
+    plt.ylim([0.45, 0.85])
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.legend(loc="lower left", frameon=True)
+    plt.tight_layout()
+    chart4 = out_path / "conf_vs_recall.png"
+    plt.savefig(chart4)
+    plt.close()
+    print(f"[OK] Saved chart: {chart4}")
 
 
 def main():

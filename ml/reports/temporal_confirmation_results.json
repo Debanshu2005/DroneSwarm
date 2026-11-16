@@ -1,0 +1,81 @@
+{
+  "description": "Multi-frame temporal confirmation evaluation across DroneSwarm configurations",
+  "configurations_evaluated": 5,
+  "results": [
+    {
+      "experiment": "Baseline",
+      "confidence": 0.35,
+      "min_hits": 1,
+      "precision": 0.416,
+      "recall": 0.99,
+      "f1_score": 0.5858,
+      "true_positives": 99,
+      "false_alerts": 139,
+      "missed_detections": 1,
+      "total_ground_truth": 100,
+      "mean_confirmation_delay_sec": 1.22,
+      "false_alerts_per_minute": 27.8,
+      "duplicate_event_rate_pct": 9.93
+    },
+    {
+      "experiment": "Config A",
+      "confidence": 0.5,
+      "min_hits": 1,
+      "precision": 0.538,
+      "recall": 0.99,
+      "f1_score": 0.6972,
+      "true_positives": 99,
+      "false_alerts": 85,
+      "missed_detections": 1,
+      "total_ground_truth": 100,
+      "mean_confirmation_delay_sec": 1.2,
+      "false_alerts_per_minute": 17.0,
+      "duplicate_event_rate_pct": 11.63
+    },
+    {
+      "experiment": "Config B",
+      "confidence": 0.55,
+      "min_hits": 2,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "true_positives": 100,
+      "false_alerts": 0,
+      "missed_detections": 0,
+      "total_ground_truth": 100,
+      "mean_confirmation_delay_sec": 2.6,
+      "false_alerts_per_minute": 0.0,
+      "duplicate_event_rate_pct": 12.07
+    },
+    {
+      "experiment": "Config C",
+      "confidence": 0.6,
+      "min_hits": 2,
+      "precision": 0.9524,
+      "recall": 1.0,
+      "f1_score": 0.9756,
+      "true_positives": 100,
+      "false_alerts": 5,
+      "missed_detections": 0,
+      "total_ground_truth": 100,
+      "mean_confirmation_delay_sec": 2.96,
+      "false_alerts_per_minute": 1.0,
+      "duplicate_event_rate_pct": 8.62
+    },
+    {
+      "experiment": "Config D",
+      "confidence": 0.6,
+      "min_hits": 3,
+      "precision": 1.0,
+      "recall": 0.94,
+      "f1_score": 0.9691,
+      "true_positives": 94,
+      "false_alerts": 0,
+      "missed_detections": 6,
+      "total_ground_truth": 100,
+      "mean_confirmation_delay_sec": 4.49,
+      "false_alerts_per_minute": 0.0,
+      "duplicate_event_rate_pct": 0.0
+    }
+  ]
+}
