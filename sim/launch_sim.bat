@@ -1,9 +1,14 @@
 @echo off
 setlocal
 set DRONEOS_PROFILE=test
+set DRONEOS_PERCEPTION=1
 
 rem Remove only stale Python processes that occupy simulation-reserved ports.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop_sim.ps1"
+
+rem Start the Global Fusion Service (GFS) background aggregator
+start "Global Fusion Service (GFS)" python -m gfs.service
+ping 127.0.0.1 -n 2 > nul
 
 rem Each starter selects its simulation-only relay/network endpoint (WS ports 8081-8084 in order).
 start "DroneOS 1 (AirSim)" python start_drone1.py
@@ -14,4 +19,4 @@ start "DroneOS 3 (AirSim)" python start_drone3.py
 ping 127.0.0.1 -n 2 > nul
 start "DroneOS 4 (AirSim)" python start_drone4.py
 
-echo Launched 4 sim nodes in %DRONEOS_PROFILE% profile (coordination active + armed).
+echo Launched 4 sim nodes + GFS in %DRONEOS_PROFILE% profile (coordination + ML perception active).

@@ -1,0 +1,31 @@
+[Unit]
+Description=PhoneOS Drone__DRONE_NUM__ Unified Service (RPi 5)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+SupplementaryGroups=video dialout
+WorkingDirectory=__WORK_DIR__
+Environment="PYTHONPATH=__WORK_DIR__"
+Environment="DRONEOS_PERCEPTION=1"
+
+# Raspberry Pi 5 Resource Constraints (4GB/8GB RAM, Quad Cortex-A76)
+CPUQuota=250%
+MemoryMax=2500M
+MemoryHigh=2000M
+IOWeight=100
+OOMScoreAdjust=0
+Nice=-2
+
+ExecStart=__VENV_PYTHON__ __START_SCRIPT__
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
