@@ -427,5 +427,50 @@ async def test_pipeline_synthetic_provenance_airsim():
     assert sent_msg.synthetic is False
 
 
+@pytest.mark.asyncio
+async def test_pipeline_peer_drone_exclusion_filter():
+    """Verify that peer drones directly below an upper drone in formation are excluded from garbage detections."""
+    now = time.time()
+    dummy_img = np.zeros((720, 1280, 3), dtype=np.uint8)
+    frame_src = FakeFrameSource(Frame(image=dummy_img, timestamp=now))
+    # Detection centered in camera frame
+    detector = FakeDetector([Detection(bbox_xyxy=(620, 340, 660, 380), confidence=0.88, label="rubbish")])
+    fc = AsyncMock()
+    # Upper drone at 15m
+    fc.get_telemetry.return_value = make_valid_telemetry()
+    fc.get_telemetry.return_value.altitude = 15.0
+    fc.get_telemetry.return_value.latitude = 47.641468
+    fc.get_telemetry.return_value.longitude = -122.140165
+    fc.get_telemetry.return_value.timestamp = now
+    network = AsyncMock()
 
+    # Mock swarm_manager with airborne peer drone directly beneath the upper drone
+    class FakePeer:
+        def __init__(self, drone_id, lat, lon, alt):
+            self.drone_id = drone_id
+            self.lat = lat
+            self.lon = lon
+            self.alt = alt
+            self.is_active = True
 
+    class FakeSwarmManager:
+        def __init__(self):
+            class FakeRegistry:
+                peers = {
+                    "drone2": FakePeer("drone2", 47.641468, -122.140165, 10.0)
+                }
+            self.registry = FakeRegistry()
+
+    swarm_mgr = FakeSwarmManager()
+    cfg = PerceptionConfig(enabled=True, min_hits=1, peer_exclusion_radius_m=4.0)
+    pipeline = PerceptionPipeline("drone1", frame_src, detector, fc, network, cfg, swarm_manager=swarm_mgr)
+
+    await pipeline._step()
+    # Must NOT broadcast because it was filtered out as peer drone2
+    network.broadcast_message.assert_not_called()
+
+    # If peer moves away (> 10m away)
+    swarm_mgr.registry.peers["drone2"].lat = 47.641700
+    await pipeline._step()
+    # Now it should be detected as real ground target and emitted
+    assert network.broadcast_message.call_count == 1

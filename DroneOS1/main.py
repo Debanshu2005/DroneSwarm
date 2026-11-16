@@ -348,6 +348,7 @@ class DroneOSApp:
                     config=self.perception_cfg,
                     session_id=self.session_id,
                     session_generation=self.session_generation,
+                    swarm_manager=self.swarm_manager,
                 )
                 logger.info("Perception pipeline initialized.")
             except Exception as e:

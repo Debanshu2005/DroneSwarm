@@ -126,6 +126,7 @@ class PerceptionConfig(BaseModel):
     max_range_m: float = 120.0
     ground_elevation_m: float = 0.0
     merge_radius_m: float = 2.5
+    peer_exclusion_radius_m: float = 4.0
     min_hits: int = 2
     update_interval_s: float = 10.0
     max_tracks: int = 2000

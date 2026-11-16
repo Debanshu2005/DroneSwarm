@@ -3,12 +3,12 @@
 import asyncio
 import math
 import time
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from DroneOS3.perception.aggregator import GeoreferencedDetection, TrackAggregator
 from DroneOS3.perception.detector import GarbageDetector
 from DroneOS3.perception.frame_sources import FrameSource
-from DroneOS3.perception.geolocate import pixel_to_lat_lon
+from DroneOS3.perception.geolocate import pixel_to_lat_lon, lat_lon_to_meters
 from DroneOS3.shared.protocol.messages import DetectionItem, DetectionMessage
 from DroneOS3.shared.utils.logger import setup_logger
 
@@ -32,6 +32,7 @@ class PerceptionPipeline:
         config,
         session_id: Optional[str] = None,
         session_generation: Optional[int] = None,
+        swarm_manager: Optional[Any] = None,
     ):
         self.drone_id = drone_id
         self.frame_source = frame_source
@@ -41,6 +42,8 @@ class PerceptionPipeline:
         self.config = config
         self.session_id = session_id
         self.session_generation = session_generation
+        self.swarm_manager = swarm_manager
+        self.peer_exclusion_radius_m = float(getattr(config, "peer_exclusion_radius_m", 4.0))
 
         self.aggregator = TrackAggregator(
             drone_id=drone_id,
@@ -298,6 +301,30 @@ class PerceptionPipeline:
             )
             if res is not None:
                 glat, glon, agl = res
+
+                # Peer Drone Exclusion Filter:
+                # If an upper drone looks down and detects a lower peer drone in its FOV,
+                # the ray projection hits the ground directly at the lower drone's (lat, lon).
+                # Exclude any detection whose georeferenced ground position coincides with an airborne peer.
+                if self.swarm_manager and hasattr(self.swarm_manager, "registry"):
+                    is_peer = False
+                    for peer in self.swarm_manager.registry.peers.values():
+                        if getattr(peer, "is_active", True) and peer.lat is not None and peer.lon is not None:
+                            peer_alt = getattr(peer, "alt", 0.0) or 0.0
+                            # Only filter if peer is airborne (altitude > 1.0m)
+                            if peer_alt > 1.0:
+                                dn, de = lat_lon_to_meters(glat, glon, peer.lat, peer.lon)
+                                dist_m = math.hypot(dn, de)
+                                if dist_m < self.peer_exclusion_radius_m:
+                                    logger.info(
+                                        "Excluding detection at (%.6f, %.6f): matches peer %s at (%.6f, %.6f, alt=%.1fm, dist=%.2fm)",
+                                        glat, glon, peer.drone_id, peer.lat, peer.lon, peer_alt, dist_m
+                                    )
+                                    is_peer = True
+                                    break
+                    if is_peer:
+                        continue
+
                 geo_dets.append(
                     GeoreferencedDetection(
                         label=det.label,
