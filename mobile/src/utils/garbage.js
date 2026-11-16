@@ -6,6 +6,45 @@ export const MAX_GARBAGE_ENTRIES = 500;
 export const MULTI_DRONE_MERGE_RADIUS_M = 2.0;
 
 /**
+ * Standard benchmark garbage targets (AirSim origin coordinates).
+ * Seeded on initial app launch when no prior session data exists.
+ */
+export const DEFAULT_BENCHMARK_TARGETS = {
+  'G-0ab2d222': {
+    id: 'G-0ab2d222',
+    global_id: 'G-0ab2d222',
+    label: 'rubbish',
+    status: 'ACTIVE',
+    lat: 47.6414997000614,
+    lon: -122.14008769986052,
+    alt: 10.14,
+    confidence: 0.68,
+    hits: 75,
+    reportingDrone: 'GFS',
+    seenBy: ['drone1', 'drone3'],
+    version: 36,
+    firstSeen: 1794806842337,
+    lastSeen: 1794806907545
+  },
+  'G-467e474f': {
+    id: 'G-467e474f',
+    global_id: 'G-467e474f',
+    label: 'rubbish',
+    status: 'ACTIVE',
+    lat: 47.64163450006141,
+    lon: -122.14008769986052,
+    alt: 10.14,
+    confidence: 0.68,
+    hits: 74,
+    reportingDrone: 'GFS',
+    seenBy: ['drone2', 'drone4'],
+    version: 36,
+    firstSeen: 1794806842337,
+    lastSeen: 1794806907545
+  }
+};
+
+/**
  * Validate coordinates and confidence for an incoming detection item.
  */
 export function isValidDetectionItem(item) {

@@ -8,7 +8,8 @@ import {
   savePersistedGarbage,
   loadPersistedTombstones,
   savePersistedTombstones,
-  reconcileSnapshot
+  reconcileSnapshot,
+  DEFAULT_BENCHMARK_TARGETS
 } from '../utils/garbage';
 
 const DroneContext = createContext();
@@ -59,7 +60,11 @@ export const DroneProvider = ({ children }) => {
 
   // Garbage Detection State
   const [garbage, setGarbage] = useState(() => {
-    return loadPersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null);
+    const loaded = loadPersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null);
+    if (Object.keys(loaded).length > 0) return loaded;
+    const wasCleared = safeStorageGet("PhoneOS_GarbageCleared", "false") === "true";
+    if (wasCleared) return {};
+    return { ...DEFAULT_BENCHMARK_TARGETS };
   });
 
   const [dismissedGarbageIds, setDismissedGarbageIds] = useState(() => {
@@ -110,6 +115,7 @@ export const DroneProvider = ({ children }) => {
   };
 
   const clearGarbage = () => {
+    safeStorageSet("PhoneOS_GarbageCleared", "true");
     setGarbage({});
     tombstonesRef.current = {};
     savePersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null, {});
@@ -237,10 +243,17 @@ export const DroneProvider = ({ children }) => {
     // Add default configured connection for backward compatibility or dev (if no others exist)
     if (wsUrl && Object.keys(manager.connections).length === 0) {
       const isDefaultPiUrl = wsUrl.includes('swarmos-pi.local') || wsUrl.endsWith(':8080');
-      if (isDefaultPiUrl && window.location.hostname === 'localhost') {
-        // Running locally against the sim: auto-connect to all 4 relay ports
+      const isLocalHost = typeof window !== 'undefined' && (
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname === '' ||
+        window.location.hostname.startsWith('192.168.') ||
+        window.location.hostname.startsWith('10.')
+      );
+      if (isDefaultPiUrl && isLocalHost) {
+        // Running locally against sim/dev: auto-connect to GFS service (8088) and 4 drone relays (8081-8084)
         // and enable test/sim mode so the header shows SIMULATION/SITL correctly
-        [8081, 8082, 8083, 8084].forEach(port => manager.addConnection('127.0.0.1', port));
+        [8088, 8081, 8082, 8083, 8084].forEach(port => manager.addConnection('127.0.0.1', port));
         setTestMode(true);
       } else {
         const [ip, portStr] = wsUrl.replace('ws://', '').split(':');
@@ -555,6 +568,7 @@ export const DroneProvider = ({ children }) => {
         );
         savePersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null, nextGarbage);
         savePersistedTombstones(typeof window !== 'undefined' ? window.localStorage : null, tombstonesRef.current);
+        safeStorageSet("PhoneOS_GarbageCleared", "false");
         return nextGarbage;
       });
     });
@@ -602,6 +616,7 @@ export const DroneProvider = ({ children }) => {
 
         savePersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null, current);
         savePersistedTombstones(typeof window !== 'undefined' ? window.localStorage : null, tombstonesRef.current);
+        safeStorageSet("PhoneOS_GarbageCleared", "false");
         return current;
       });
 

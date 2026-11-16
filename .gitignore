@@ -96,6 +96,7 @@ ml/reports/test_*.png
 # ------------------------------------------------------------------------------
 # Mobile & Frontend Build Artifacts
 # ------------------------------------------------------------------------------
+*.apk
 node_modules/
 mobile/node_modules/
 mobile/android/.gradle/

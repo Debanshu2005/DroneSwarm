@@ -4,8 +4,9 @@ import {
   ShieldCheck, Navigation, ArrowUp, ArrowDown,
   ArrowLeft, Square, RotateCcw, RotateCw, ArrowRight, Menu,
   Battery, Compass, Gauge, AlertTriangle, Lock, Unlock,
-  Plus, Minus, Settings, X, LocateFixed, Radar, Crosshair
+  Plus, Minus, Settings, X, LocateFixed, Radar, Crosshair, Trash2
 } from 'lucide-react';
+import GarbageLayer from '../components/GarbageLayer';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -74,11 +75,16 @@ function RecenterAutomatically({ center }) {
 }
 
 export default function DroneControlView({ setView }) {
-  const { drones, nowMs, sendCommand, isConnected, indoorMode, setIndoorMode, selectedDrones, selectAll, selectOnly } = useDroneContext();
+  const {
+    drones, nowMs, sendCommand, isConnected, indoorMode, setIndoorMode,
+    selectedDrones, selectAll, selectOnly,
+    garbage, dismissGarbage, clearGarbage
+  } = useDroneContext();
 
   const [mapStyle, setMapStyle] = useState('satellite');
   const [centerMode, setCenterMode] = useState('DRONE');
   const [centerTarget, setCenterTarget] = useState(null);
+  const [showGarbage, setShowGarbage] = useState(true);
   
   const tiles = {
      street: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -209,9 +215,14 @@ export default function DroneControlView({ setView }) {
   const connectedDronesCount = droneIds.filter(id => (nowMs - drones[id].lastSeen) < 4000).length;
 
   
+  const garbageList = Object.values(garbage || {});
+  const hasGarbage = garbageList.length > 0 && Number.isFinite(garbageList[0].lat) && Number.isFinite(garbageList[0].lon);
+
   let mapCenter;
   if (centerMode === 'PILOT' && userLocation) {
       mapCenter = userLocation;
+  } else if (centerMode === 'GARBAGE' && hasGarbage) {
+      mapCenter = [garbageList[0].lat, garbageList[0].lon];
   } else if (activeDrone && tel.latitude && tel.longitude && tel.latitude !== 0) {
       mapCenter = [tel.latitude, tel.longitude];
   } else if (userLocation) {
@@ -222,6 +233,9 @@ export default function DroneControlView({ setView }) {
       if (validDroneId) {
           mapCenter = [drones[validDroneId].telemetry.latitude, drones[validDroneId].telemetry.longitude];
       }
+  }
+  if (!mapCenter && hasGarbage) {
+      mapCenter = [garbageList[0].lat, garbageList[0].lon];
   }
   if (!mapCenter) mapCenter = DEFAULT_MAP_CENTER;
 
@@ -292,6 +306,8 @@ export default function DroneControlView({ setView }) {
                   </Popup>
                </CircleMarker>
             )}
+
+            {showGarbage && <GarbageLayer garbage={garbage} onDismiss={dismissGarbage} />}
          </MapContainer>
          </ErrorBoundary>
       </div>
@@ -327,6 +343,7 @@ export default function DroneControlView({ setView }) {
                     <select value={centerMode} onChange={(e) => setCenterMode(e.target.value)}>
                        <option value="DRONE">DRONE</option>
                        <option value="PILOT">PILOT</option>
+                       <option value="GARBAGE">GARBAGE ({garbageList.length})</option>
                     </select>
                  </div>
 
@@ -337,6 +354,28 @@ export default function DroneControlView({ setView }) {
                  <button className="hud-btn" onClick={handleCenter}>
                     <Crosshair size={14}/> RECENTER
                  </button>
+
+                 <button
+                    className={`hud-btn ${showGarbage ? 'active' : ''} ${garbageList.length > 0 ? 'garbage-btn has-garbage' : 'garbage-btn'}`}
+                    onClick={() => setShowGarbage(prev => !prev)}
+                    title="Toggle Garbage Detection Pins"
+                 >
+                    <Trash2 size={13}/> GARBAGE ({garbageList.length})
+                 </button>
+
+                 {garbageList.length > 0 && (
+                    <button
+                       className="hud-btn"
+                       onClick={() => {
+                          if (window.confirm("Clear all detected garbage markers?")) {
+                             clearGarbage();
+                          }
+                       }}
+                       title="Clear Garbage Markers"
+                    >
+                       CLEAR
+                    </button>
+                 )}
              </div>
              
              <div className="hud-top-right">
@@ -776,6 +815,16 @@ export default function DroneControlView({ setView }) {
            background: var(--bg-color); border: 1px solid var(--border); border-radius: 6px; 
            padding: 6px 10px; cursor: pointer; display: flex; align-items: center; gap: 4px; 
            font-size: 11px; font-weight: bold; color: var(--text-muted);
+        }
+        .hud-btn.active {
+           background: rgba(47, 157, 255, 0.15);
+           border-color: var(--primary);
+           color: var(--primary);
+        }
+        .hud-btn.garbage-btn.has-garbage {
+           border-color: rgba(239, 68, 68, 0.6);
+           color: #ef4444;
+           background: rgba(239, 68, 68, 0.12);
         }
         .hud-target-selector {
            display: flex; align-items: center; gap: 6px; background: var(--bg-color); 
