@@ -14,6 +14,7 @@ doc/
 │   ├── system-overview.md              # End-to-end topology, dataflow, and 4-node design
 │   ├── droneos-internals.md            # Pipeline, FlightState, SafetyFilter, Arbiter, Managers
 │   ├── swarm-coordination-healing.md   # Quorum, Anchor Election, Formations & Self-Healing Engine
+│   ├── collaborative-perception-and-peer-exclusion.md # 3D CPA peer exclusion, GFS fusion, depth contracts
 │   ├── communication-and-protocols.md  # P2P UDP mesh, Relay bridge, WebSocket, and Pydantic schemas
 │   ├── flight-adapters.md              # Hardware abstraction: PX4/MAVSDK, AirSim, and Mock
 │   └── mobile-gcs-architecture.md      # React / Capacitor Ground Control Station architecture

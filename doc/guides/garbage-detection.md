@@ -101,7 +101,17 @@ Immediately after frame capture (before model inference), a flight telemetry sna
 4. **Ground Plane Intersection**: $t = h_{\text{AGL}} / d_{\text{down}}$; $\text{North} = t \cdot d_n, \text{East} = t \cdot d_e$.
 5. **WGS84 Conversion**: Metres-per-degree series converts NED offsets to latitude/longitude.
 
-### 4.3 Temporal Track Aggregation
+### 4.3 3D Ray-to-Peer CPA Exclusion Filter (Swarm Formation Protection)
+During swarm formation flight, upper drones often point downward cameras at lower peer drones, which can be misclassified as garbage. To prevent peer drones from creating false ground targets (`GARBAGE (6)`), detections are filtered before track aggregation using a 3D ray-to-cylinder Closest Point of Approach (CPA) test:
+1. **Ray Projection**: The pixel center is converted into a normalized 3D sightline ray in NED: $\hat{r}_{\text{NED}}$.
+2. **Relative Peer Vector**: $\vec{w} = \vec{p}_{\text{peer}} - \vec{p}_{\text{camera}}$ is computed from live peer telemetry.
+3. **Along-Ray Depth & Miss Distance**:
+   $$s = \vec{w} \cdot \hat{r}_{\text{NED}}, \quad d_\perp = \sqrt{\|\vec{w}\|^2 - s^2}$$
+4. **Airborne Peer Decision**: If $s > 0.0$ (peer is in front of camera) and $d_\perp < R_{\text{excl}}$ (where $R_{\text{excl}} = 2.0\text{ m}$), the detection is **REJECTED** as `REJECTED_PEER_EXCLUSION_MATCH_3D`.
+5. **Landed Peer Decision**: If peer altitude is within $1.0\text{ m}$ of ground, exclusion evaluates 2D ground Euclidean distance: $d_{\text{ground}} < R_{\text{excl}}$.
+6. **Telemetry Age Gating**: If a peer's telemetry exceeds `max_telemetry_age_s = 2.0s`, ambiguous sightlines are marked `DEFERRED` to prevent unverified track emission.
+
+### 4.4 Temporal Track Aggregation
 To prevent one static piece of garbage from generating multiple markers across successive frames:
 - **Association Radius**: Greedy matching within `merge_radius_m = 2.5 m`.
 - **Position Smoothing**: Running confidence-weighted mean position across detections.
@@ -130,6 +140,8 @@ max_tilt_deg: 20.0      # Max roll/pitch tilt allowed for nadir projection
 max_range_m: 120.0      # Maximum valid ground projection distance
 ground_elevation_m: 0.0 # Elevation of target ground plane in meters
 merge_radius_m: 2.5     # Ground distance radius for temporal association
+peer_exclusion_radius_m: 2.0 # 3D ray-to-peer CPA exclusion cylinder radius (meters)
+max_telemetry_age_s: 2.0 # Maximum peer telemetry age before marking DEFERRED
 min_hits: 2             # Hits required to confirm a track (suppresses single-frame noise)
 update_interval_s: 10.0 # Throttle interval between track update broadcasts
 max_tracks: 2000        # Maximum active tracks kept in memory
