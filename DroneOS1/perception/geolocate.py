@@ -55,7 +55,7 @@ def lat_lon_to_meters(lat: float, lon: float, base_lat: float, base_lon: float) 
     return dn, de
 
 
-def project_pixel_to_ned(
+def pixel_to_ray_ned(
     u: float,
     v: float,
     img_w: int,
@@ -65,17 +65,13 @@ def project_pixel_to_ned(
     roll_deg: float,
     pitch_deg: float,
     yaw_deg: float,
-    height_agl: float,
-    max_range_m: float = 120.0,
-) -> Optional[Tuple[float, float]]:
+) -> Optional[Tuple[float, float, float]]:
     """
-    Project image pixel coordinates (u, v) onto flat ground under the drone.
-    Returns (north_m, east_m) relative to drone position, or None if rejected.
+    Computes normalized unit direction vector (d_n, d_e, d_down) of the camera ray in NED frame.
     """
-    if height_agl <= 0.0 or img_w <= 0 or img_h <= 0:
+    if img_w <= 0 or img_h <= 0:
         return None
 
-    # Camera model: pinhole
     cx = img_w / 2.0
     cy = img_h / 2.0
     fx = (img_w / 2.0) / math.tan(math.radians(hfov_deg) / 2.0)
@@ -100,7 +96,73 @@ def project_pixel_to_ned(
     R_body_to_ned = _mat_mul(Rz, _mat_mul(Ry, Rx))
 
     d_ned = _mat_vec(R_body_to_ned, v_body)
-    d_n, d_e, d_down = d_ned
+    norm = math.sqrt(d_ned[0] ** 2 + d_ned[1] ** 2 + d_ned[2] ** 2)
+    if norm < 1e-9:
+        return None
+    return d_ned[0] / norm, d_ned[1] / norm, d_ned[2] / norm
+
+
+def compute_ray_to_point_cpa(
+    ray_dir_ned: Tuple[float, float, float],
+    point_ned: Tuple[float, float, float],
+    ray_origin_ned: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> Tuple[float, float]:
+    """
+    Computes closest point of approach (CPA) on a forward semi-infinite ray to a 3D point.
+    Returns:
+        (along_ray_depth_s, orthogonal_miss_distance_d_perp)
+        If along_ray_depth_s <= 0, the point is behind the camera ray.
+    """
+    w = (
+        point_ned[0] - ray_origin_ned[0],
+        point_ned[1] - ray_origin_ned[1],
+        point_ned[2] - ray_origin_ned[2],
+    )
+    # Unit direction vector dot product
+    s = w[0] * ray_dir_ned[0] + w[1] * ray_dir_ned[1] + w[2] * ray_dir_ned[2]
+    w_sq = w[0] ** 2 + w[1] ** 2 + w[2] ** 2
+    if s <= 0.0:
+        # Behind camera: distance to origin
+        return s, math.sqrt(w_sq)
+    d_perp_sq = max(0.0, w_sq - s ** 2)
+    return s, math.sqrt(d_perp_sq)
+
+
+def project_pixel_to_ned(
+    u: float,
+    v: float,
+    img_w: int,
+    img_h: int,
+    hfov_deg: float,
+    mount_pitch_deg: float,
+    roll_deg: float,
+    pitch_deg: float,
+    yaw_deg: float,
+    height_agl: float,
+    max_range_m: float = 120.0,
+) -> Optional[Tuple[float, float]]:
+    """
+    Project image pixel coordinates (u, v) onto flat ground under the drone.
+    Returns (north_m, east_m) relative to drone position, or None if rejected.
+    """
+    if height_agl <= 0.0 or img_w <= 0 or img_h <= 0:
+        return None
+
+    ray = pixel_to_ray_ned(
+        u=u,
+        v=v,
+        img_w=img_w,
+        img_h=img_h,
+        hfov_deg=hfov_deg,
+        mount_pitch_deg=mount_pitch_deg,
+        roll_deg=roll_deg,
+        pitch_deg=pitch_deg,
+        yaw_deg=yaw_deg,
+    )
+    if ray is None:
+        return None
+
+    d_n, d_e, d_down = ray
 
     # Reject if ray is at/above horizon or looking upward
     if d_down < 0.05:

@@ -15,6 +15,11 @@ logger = logging.getLogger("PhoneOS_Relay")
 import sqlite3
 from pathlib import Path
 
+try:
+    from DroneOS.perception.diagnostics import log_relay_fwd
+except ImportError:
+    log_relay_fwd = None
+
 def init_relay_ack_db(db_path: str):
     """Initializes the durable SQLite ledger for relay ACK persistence."""
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -183,6 +188,21 @@ class UdpWebsocketRelay:
 
             # Broadcast to all connected WebSockets
             if self.clients:
+                m_type = msg_dict.get('msg_type') or msg_dict.get('type')
+                if log_relay_fwd:
+                    if m_type == 'detection':
+                        log_relay_fwd("RELAY_DETECTION_FWD", self.ws_port, {
+                            "sender_id": sender_id,
+                            "detection_ids": [d.get("id") for d in msg_dict.get("detections", [])],
+                            "forwarded_to_clients": len(self.clients)
+                        })
+                    elif m_type == 'gfs_outbox_event':
+                        log_relay_fwd("RELAY_GFS_EVENT_FWD", self.ws_port, {
+                            "global_id": msg_dict.get("global_id"),
+                            "status": msg_dict.get("status"),
+                            "forwarded_to_clients": len(self.clients)
+                        })
+
                 # A slow or abandoned app connection must not hold up the
                 # healthy GCS client.  Bound each send and evict only the
                 # failed client; this matters when several simulated relays
@@ -247,6 +267,9 @@ class UdpWebsocketRelay:
                 return
             if isinstance(msg_dict, dict) and msg_dict.get('type') == 'gfs_snapshot_request':
                 await self._handle_gfs_snapshot_request(websocket, msg_dict)
+                return
+            if isinstance(msg_dict, dict) and msg_dict.get('type') == 'gfs_clear_request':
+                await self._handle_gfs_clear_request(websocket, msg_dict)
                 return
             target_id = msg_dict.get('target_id')
             route_target_id = target_id.strip().lower() if isinstance(target_id, str) else target_id
@@ -440,8 +463,41 @@ class UdpWebsocketRelay:
             try:
                 await websocket.send(json.dumps(response))
                 logger.info(f"Served GFS snapshot response ({len(objects)} active, {len(tombstones)} tombstones, watermark={watermark_event_id}) to {getattr(websocket, 'remote_address', 'client')}")
+                if log_relay_fwd:
+                    log_relay_fwd("RELAY_GFS_SNAPSHOT_FWD", self.ws_port, {
+                        "active_objects_count": len(objects),
+                        "tombstones_count": len(tombstones),
+                        "forwarded_to_clients": 1
+                    })
             except Exception as e:
                 logger.warning(f"Failed to send snapshot response to client: {e}")
+
+    async def _handle_gfs_clear_request(self, websocket, msg_dict: dict):
+        """Authoritative GFS clear request: clears all global objects and outbox events."""
+        if self.gfs_db_path and Path(self.gfs_db_path).exists():
+            try:
+                con = sqlite3.connect(self.gfs_db_path, timeout=5.0)
+                cur = con.cursor()
+                cur.execute("DELETE FROM global_objects")
+                cur.execute("DELETE FROM gfs_outbox_events")
+                con.commit()
+                con.close()
+                logger.info("Cleared GFS database upon client request.")
+            except Exception as e:
+                logger.error(f"Error clearing GFS database: {e}")
+
+        # Broadcast empty snapshot response to all connected clients
+        now_ms = int(time.time() * 1000)
+        clear_snapshot = {
+            "type": "gfs_snapshot_response",
+            "msg_type": "gfs_snapshot_response",
+            "snapshot_revision": now_ms,
+            "watermark_event_id": 0,
+            "timestamp_ms": now_ms,
+            "objects": [],
+            "tombstones": {}
+        }
+        await self.broadcast_to_websockets(clear_snapshot)
 
     async def _relay_ack_recovery_loop(self):
         """Periodically recovers and re-forwards unconfirmed ACKs to GFS."""

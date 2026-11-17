@@ -380,4 +380,101 @@ assert(raceGarbage["G-1"] !== undefined && raceGarbage["G-1"].version === 3, "Du
 
 console.log("Section 1: Exact Snapshot Recovery Ordering & Race Suite Passed 100%!");
 
+// 17. Local Track <-> Global Object Bidirectional Deduplication Tests
+console.log("Running Section 2: Local Track <-> Global Object Bidirectional Deduplication Suite...");
+
+// Case A: Local detection merges into an existing global object within 2m
+const stateWithGlobal = {
+  "G-0ab2d222": {
+    id: "G-0ab2d222",
+    global_id: "G-0ab2d222",
+    label: "rubbish",
+    lat: 47.641500,
+    lon: -122.140087,
+    confidence: 0.70,
+    hits: 10,
+    seenBy: ["drone1"],
+    version: 1,
+    status: "ACTIVE"
+  }
+};
+const localSighting = {
+  id: "drone2-g0001",
+  label: "rubbish",
+  lat: 47.641505, // ~0.55m away
+  lon: -122.140087,
+  confidence: 0.85,
+  hits: 2
+};
+const stateAfterLocalSighting = mergeDetections(stateWithGlobal, [localSighting], "drone2", 7000);
+assert(Object.keys(stateAfterLocalSighting).length === 1, "Must NOT duplicate: local track must merge into existing G-0ab2d222");
+assert(stateAfterLocalSighting["G-0ab2d222"] !== undefined, "G-0ab2d222 preserved as primary key");
+assert(stateAfterLocalSighting["drone2-g0001"] === undefined, "drone2-g0001 must not be added as a duplicate");
+assert(stateAfterLocalSighting["G-0ab2d222"].confidence === 0.85, "Confidence updated to 0.85");
+assert(stateAfterLocalSighting["G-0ab2d222"].hits === 12, "Hits incremented (10 + 2 = 12)");
+assert(stateAfterLocalSighting["G-0ab2d222"].seenBy.includes("drone2"), "drone2 added to seenBy");
+
+// Case B: Global object arrives and subsumes an existing local track within 2m
+const stateWithLocal = {
+  "drone1-g0001": {
+    id: "drone1-g0001",
+    label: "rubbish",
+    lat: 47.641500,
+    lon: -122.140087,
+    confidence: 0.75,
+    hits: 5,
+    seenBy: ["drone1"],
+    status: "ACTIVE"
+  }
+};
+const globalArrival = {
+  id: "G-467e474f",
+  global_id: "G-467e474f",
+  label: "rubbish",
+  lat: 47.641504, // ~0.44m away
+  lon: -122.140087,
+  confidence: 0.80,
+  hits: 8,
+  version: 2,
+  status: "ACTIVE"
+};
+const stateAfterGlobalArrival = mergeDetections(stateWithLocal, [globalArrival], "gfs", 8000);
+assert(Object.keys(stateAfterGlobalArrival).length === 1, "Must NOT duplicate: global object must subsume local track");
+assert(stateAfterGlobalArrival["G-467e474f"] !== undefined, "G-467e474f exists");
+assert(stateAfterGlobalArrival["drone1-g0001"] === undefined, "drone1-g0001 must be pruned");
+assert(stateAfterGlobalArrival["G-467e474f"].hits === 13, "Hits folded in (8 + 5 = 13)");
+assert(stateAfterGlobalArrival["G-467e474f"].seenBy.includes("drone1"), "seenBy preserved from local track");
+
+// Case C: Reconcile snapshot subsumes an existing local track within 2m
+const localBeforeSnapshot = {
+  "drone3-g0001": {
+    id: "drone3-g0001",
+    label: "rubbish",
+    lat: 47.641600,
+    lon: -122.140050,
+    confidence: 0.65,
+    hits: 3,
+    seenBy: ["drone3"]
+  }
+};
+const snapshotObj = [{
+  id: "G-9999",
+  global_id: "G-9999",
+  label: "rubbish",
+  lat: 47.641602,
+  lon: -122.140050,
+  confidence: 0.90,
+  observation_count: 10,
+  source_drones: ["drone1", "drone2"],
+  version: 1,
+  status: "ACTIVE"
+}];
+const stateAfterSnapshotSubsume = reconcileSnapshot(localBeforeSnapshot, snapshotObj, {});
+assert(Object.keys(stateAfterSnapshotSubsume).length === 1, "Snapshot must subsume local track within 2m");
+assert(stateAfterSnapshotSubsume["G-9999"] !== undefined, "G-9999 added");
+assert(stateAfterSnapshotSubsume["drone3-g0001"] === undefined, "drone3-g0001 pruned");
+assert(stateAfterSnapshotSubsume["G-9999"].seenBy.includes("drone3"), "seenBy drone3 folded into snapshot object");
+
+console.log("Section 2: Local Track <-> Global Object Bidirectional Deduplication Suite Passed 100%!");
+
 console.log("All garbage utility and recovery tests passed successfully!");

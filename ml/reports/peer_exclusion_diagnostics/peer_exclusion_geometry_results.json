@@ -1,0 +1,608 @@
+{
+  "audit_summary": {
+    "scenario": "Drone 1 at alt=15m, Drone 2 at alt=5m, varying horizontal separation r",
+    "derivation_discrepancy_resolved": true,
+    "root_cause_explanation": "The report prose derived 1D collinear distance |1.5r - r| = 0.5r, whereas the reproduction script placed the peer North (dn=r, de=0) while the camera ray was varied East (u_px -> dn=0, de=1.5r). The resulting 2D distance in the script was hypot(-r, 1.5r) = sqrt(1^2 + 1.5^2)*r = sqrt(3.25)*r = 1.8028*r. At r=2.5m, 1.8028*2.5 = 4.507m, which matched the test output table exactly.",
+    "fundamental_flaw_of_2d_ground_projection": "Ground projection scales horizontal separation r by (z_peer / delta_z). For close vertical formations where delta_z is small (e.g. 1.0m at 14m alt), the multiplier is 14x. A 0.3m separation produces 4.2m ground error, bypassing the 4m filter."
+  },
+  "horizontal_separation_sweep": [
+    {
+      "r_separation_m": 0.0,
+      "pixel_u": 640,
+      "pixel_v": 360,
+      "collinear_1d": {
+        "peer_ned": [
+          0.0,
+          0.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          0.0,
+          15.0
+        ],
+        "evaluated_dist_m": 0.0,
+        "decision_4m_radius": "REJECTED"
+      },
+      "script_orthogonal": {
+        "peer_ned": [
+          0.0,
+          0.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          0.0,
+          15.0
+        ],
+        "evaluated_dist_m": 0.0,
+        "decision_4m_radius": "REJECTED"
+      },
+      "cpa_3d": {
+        "d_perp_collinear_m": 0.0,
+        "d_perp_script_m": 0.0,
+        "s_depth_collinear_m": 10.0
+      }
+    },
+    {
+      "r_separation_m": 1.0,
+      "pixel_u": 704,
+      "pixel_v": 360,
+      "collinear_1d": {
+        "peer_ned": [
+          0.0,
+          1.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          1.5,
+          15.0
+        ],
+        "evaluated_dist_m": 0.5,
+        "decision_4m_radius": "REJECTED"
+      },
+      "script_orthogonal": {
+        "peer_ned": [
+          1.0,
+          0.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          1.5,
+          15.0
+        ],
+        "evaluated_dist_m": 1.8028,
+        "decision_4m_radius": "REJECTED"
+      },
+      "cpa_3d": {
+        "d_perp_collinear_m": 0.0,
+        "d_perp_script_m": 1.4107,
+        "s_depth_collinear_m": 10.0499
+      }
+    },
+    {
+      "r_separation_m": 2.0,
+      "pixel_u": 768,
+      "pixel_v": 360,
+      "collinear_1d": {
+        "peer_ned": [
+          0.0,
+          2.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          3.0,
+          15.0
+        ],
+        "evaluated_dist_m": 1.0,
+        "decision_4m_radius": "REJECTED"
+      },
+      "script_orthogonal": {
+        "peer_ned": [
+          2.0,
+          0.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          3.0,
+          15.0
+        ],
+        "evaluated_dist_m": 3.6056,
+        "decision_4m_radius": "REJECTED"
+      },
+      "cpa_3d": {
+        "d_perp_collinear_m": 0.0,
+        "d_perp_script_m": 2.8011,
+        "s_depth_collinear_m": 10.198
+      }
+    },
+    {
+      "r_separation_m": 2.5,
+      "pixel_u": 800,
+      "pixel_v": 360,
+      "collinear_1d": {
+        "peer_ned": [
+          0.0,
+          2.5,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          3.75,
+          15.0
+        ],
+        "evaluated_dist_m": 1.25,
+        "decision_4m_radius": "REJECTED"
+      },
+      "script_orthogonal": {
+        "peer_ned": [
+          2.5,
+          0.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          3.75,
+          15.0
+        ],
+        "evaluated_dist_m": 4.5069,
+        "decision_4m_radius": "ACCEPTED"
+      },
+      "cpa_3d": {
+        "d_perp_collinear_m": 0.0,
+        "d_perp_script_m": 3.4832,
+        "s_depth_collinear_m": 10.3078
+      }
+    },
+    {
+      "r_separation_m": 3.5,
+      "pixel_u": 864,
+      "pixel_v": 360,
+      "collinear_1d": {
+        "peer_ned": [
+          0.0,
+          3.5,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          5.25,
+          15.0
+        ],
+        "evaluated_dist_m": 1.75,
+        "decision_4m_radius": "REJECTED"
+      },
+      "script_orthogonal": {
+        "peer_ned": [
+          3.5,
+          0.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          5.25,
+          15.0
+        ],
+        "evaluated_dist_m": 6.3097,
+        "decision_4m_radius": "ACCEPTED"
+      },
+      "cpa_3d": {
+        "d_perp_collinear_m": 0.0,
+        "d_perp_script_m": 4.8128,
+        "s_depth_collinear_m": 10.5948
+      }
+    },
+    {
+      "r_separation_m": 4.0,
+      "pixel_u": 896,
+      "pixel_v": 360,
+      "collinear_1d": {
+        "peer_ned": [
+          0.0,
+          4.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          6.0,
+          15.0
+        ],
+        "evaluated_dist_m": 2.0,
+        "decision_4m_radius": "REJECTED"
+      },
+      "script_orthogonal": {
+        "peer_ned": [
+          4.0,
+          0.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          6.0,
+          15.0
+        ],
+        "evaluated_dist_m": 7.2111,
+        "decision_4m_radius": "ACCEPTED"
+      },
+      "cpa_3d": {
+        "d_perp_collinear_m": 0.0,
+        "d_perp_script_m": 5.4583,
+        "s_depth_collinear_m": 10.7703
+      }
+    },
+    {
+      "r_separation_m": 4.5,
+      "pixel_u": 928,
+      "pixel_v": 360,
+      "collinear_1d": {
+        "peer_ned": [
+          0.0,
+          4.5,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          6.75,
+          15.0
+        ],
+        "evaluated_dist_m": 2.25,
+        "decision_4m_radius": "REJECTED"
+      },
+      "script_orthogonal": {
+        "peer_ned": [
+          4.5,
+          0.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          6.75,
+          15.0
+        ],
+        "evaluated_dist_m": 8.1125,
+        "decision_4m_radius": "ACCEPTED"
+      },
+      "cpa_3d": {
+        "d_perp_collinear_m": 0.0,
+        "d_perp_script_m": 6.0901,
+        "s_depth_collinear_m": 10.9659
+      }
+    },
+    {
+      "r_separation_m": 6.0,
+      "pixel_u": 1024,
+      "pixel_v": 360,
+      "collinear_1d": {
+        "peer_ned": [
+          0.0,
+          6.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          9.0,
+          15.0
+        ],
+        "evaluated_dist_m": 3.0,
+        "decision_4m_radius": "REJECTED"
+      },
+      "script_orthogonal": {
+        "peer_ned": [
+          6.0,
+          0.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          9.0,
+          15.0
+        ],
+        "evaluated_dist_m": 10.8167,
+        "decision_4m_radius": "ACCEPTED"
+      },
+      "cpa_3d": {
+        "d_perp_collinear_m": 0.0,
+        "d_perp_script_m": 7.9038,
+        "s_depth_collinear_m": 11.6619
+      }
+    },
+    {
+      "r_separation_m": 8.0,
+      "pixel_u": 1152,
+      "pixel_v": 360,
+      "collinear_1d": {
+        "peer_ned": [
+          0.0,
+          8.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          12.0,
+          15.0
+        ],
+        "evaluated_dist_m": 4.0,
+        "decision_4m_radius": "ACCEPTED"
+      },
+      "script_orthogonal": {
+        "peer_ned": [
+          8.0,
+          0.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          12.0,
+          15.0
+        ],
+        "evaluated_dist_m": 14.4222,
+        "decision_4m_radius": "ACCEPTED"
+      },
+      "cpa_3d": {
+        "d_perp_collinear_m": 0.0,
+        "d_perp_script_m": 10.1501,
+        "s_depth_collinear_m": 12.8062
+      }
+    },
+    {
+      "r_separation_m": 10.0,
+      "pixel_u": 1280,
+      "pixel_v": 360,
+      "collinear_1d": {
+        "peer_ned": [
+          0.0,
+          10.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          15.0,
+          15.0
+        ],
+        "evaluated_dist_m": 5.0,
+        "decision_4m_radius": "ACCEPTED"
+      },
+      "script_orthogonal": {
+        "peer_ned": [
+          10.0,
+          0.0,
+          10.0
+        ],
+        "ray_ground_ned": [
+          0.0,
+          15.0,
+          15.0
+        ],
+        "evaluated_dist_m": 18.0278,
+        "decision_4m_radius": "ACCEPTED"
+      },
+      "cpa_3d": {
+        "d_perp_collinear_m": 0.0,
+        "d_perp_script_m": 12.2474,
+        "s_depth_collinear_m": 14.1421
+      }
+    }
+  ],
+  "altitude_amplification_analysis": [
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 14.5,
+      "delta_z_m": 0.5,
+      "horizontal_sep_r_m": 0.5,
+      "ground_projection_multiplier": 29.0,
+      "ground_projection_eval_dist_m": 14.5,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 14.5,
+      "delta_z_m": 0.5,
+      "horizontal_sep_r_m": 1.0,
+      "ground_projection_multiplier": 29.0,
+      "ground_projection_eval_dist_m": 29.0,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 14.5,
+      "delta_z_m": 0.5,
+      "horizontal_sep_r_m": 2.0,
+      "ground_projection_multiplier": 29.0,
+      "ground_projection_eval_dist_m": 58.0,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 14.0,
+      "delta_z_m": 1.0,
+      "horizontal_sep_r_m": 0.5,
+      "ground_projection_multiplier": 14.0,
+      "ground_projection_eval_dist_m": 7.0,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 14.0,
+      "delta_z_m": 1.0,
+      "horizontal_sep_r_m": 1.0,
+      "ground_projection_multiplier": 14.0,
+      "ground_projection_eval_dist_m": 14.0,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 14.0,
+      "delta_z_m": 1.0,
+      "horizontal_sep_r_m": 2.0,
+      "ground_projection_multiplier": 14.0,
+      "ground_projection_eval_dist_m": 28.0,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 13.5,
+      "delta_z_m": 1.5,
+      "horizontal_sep_r_m": 0.5,
+      "ground_projection_multiplier": 9.0,
+      "ground_projection_eval_dist_m": 4.5,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 13.5,
+      "delta_z_m": 1.5,
+      "horizontal_sep_r_m": 1.0,
+      "ground_projection_multiplier": 9.0,
+      "ground_projection_eval_dist_m": 9.0,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 13.5,
+      "delta_z_m": 1.5,
+      "horizontal_sep_r_m": 2.0,
+      "ground_projection_multiplier": 9.0,
+      "ground_projection_eval_dist_m": 18.0,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 13.0,
+      "delta_z_m": 2.0,
+      "horizontal_sep_r_m": 0.5,
+      "ground_projection_multiplier": 6.5,
+      "ground_projection_eval_dist_m": 3.25,
+      "bypasses_4m_filter": false
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 13.0,
+      "delta_z_m": 2.0,
+      "horizontal_sep_r_m": 1.0,
+      "ground_projection_multiplier": 6.5,
+      "ground_projection_eval_dist_m": 6.5,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 13.0,
+      "delta_z_m": 2.0,
+      "horizontal_sep_r_m": 2.0,
+      "ground_projection_multiplier": 6.5,
+      "ground_projection_eval_dist_m": 13.0,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 12.0,
+      "delta_z_m": 3.0,
+      "horizontal_sep_r_m": 0.5,
+      "ground_projection_multiplier": 4.0,
+      "ground_projection_eval_dist_m": 2.0,
+      "bypasses_4m_filter": false
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 12.0,
+      "delta_z_m": 3.0,
+      "horizontal_sep_r_m": 1.0,
+      "ground_projection_multiplier": 4.0,
+      "ground_projection_eval_dist_m": 4.0,
+      "bypasses_4m_filter": false
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 12.0,
+      "delta_z_m": 3.0,
+      "horizontal_sep_r_m": 2.0,
+      "ground_projection_multiplier": 4.0,
+      "ground_projection_eval_dist_m": 8.0,
+      "bypasses_4m_filter": true
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 10.0,
+      "delta_z_m": 5.0,
+      "horizontal_sep_r_m": 0.5,
+      "ground_projection_multiplier": 2.0,
+      "ground_projection_eval_dist_m": 1.0,
+      "bypasses_4m_filter": false
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 10.0,
+      "delta_z_m": 5.0,
+      "horizontal_sep_r_m": 1.0,
+      "ground_projection_multiplier": 2.0,
+      "ground_projection_eval_dist_m": 2.0,
+      "bypasses_4m_filter": false
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 10.0,
+      "delta_z_m": 5.0,
+      "horizontal_sep_r_m": 2.0,
+      "ground_projection_multiplier": 2.0,
+      "ground_projection_eval_dist_m": 4.0,
+      "bypasses_4m_filter": false
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 5.0,
+      "delta_z_m": 10.0,
+      "horizontal_sep_r_m": 0.5,
+      "ground_projection_multiplier": 0.5,
+      "ground_projection_eval_dist_m": 0.25,
+      "bypasses_4m_filter": false
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 5.0,
+      "delta_z_m": 10.0,
+      "horizontal_sep_r_m": 1.0,
+      "ground_projection_multiplier": 0.5,
+      "ground_projection_eval_dist_m": 0.5,
+      "bypasses_4m_filter": false
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 5.0,
+      "delta_z_m": 10.0,
+      "horizontal_sep_r_m": 2.0,
+      "ground_projection_multiplier": 0.5,
+      "ground_projection_eval_dist_m": 1.0,
+      "bypasses_4m_filter": false
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 3.0,
+      "delta_z_m": 12.0,
+      "horizontal_sep_r_m": 0.5,
+      "ground_projection_multiplier": 0.25,
+      "ground_projection_eval_dist_m": 0.125,
+      "bypasses_4m_filter": false
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 3.0,
+      "delta_z_m": 12.0,
+      "horizontal_sep_r_m": 1.0,
+      "ground_projection_multiplier": 0.25,
+      "ground_projection_eval_dist_m": 0.25,
+      "bypasses_4m_filter": false
+    },
+    {
+      "z_upper_m": 15.0,
+      "z_lower_m": 3.0,
+      "delta_z_m": 12.0,
+      "horizontal_sep_r_m": 2.0,
+      "ground_projection_multiplier": 0.25,
+      "ground_projection_eval_dist_m": 0.5,
+      "bypasses_4m_filter": false
+    }
+  ]
+}

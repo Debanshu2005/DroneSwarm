@@ -159,10 +159,28 @@ export function mergeDetections(
         version: rawItem.version !== undefined ? Math.max(incomingVersion, existingVersion || 0) : existing.version,
         status: rawItem.status || existing.status || 'ACTIVE',
       };
+
+      if (isGlobal) {
+        // Subsume any co-located local tracks that coincide with this global object
+        for (const [key, locObj] of Object.entries(nextById)) {
+          if (key === itemId) continue;
+          if (key.startsWith('G-') || locObj.global_id) continue;
+          const d = calculateDistance(Number(rawItem.lat), Number(rawItem.lon), locObj.lat, locObj.lon);
+          if (d <= MULTI_DRONE_MERGE_RADIUS_M) {
+            if (Array.isArray(locObj.seenBy)) {
+              for (const s of locObj.seenBy) {
+                if (!nextById[itemId].seenBy.includes(s)) nextById[itemId].seenBy.push(s);
+              }
+            }
+            nextById[itemId].hits += Number(locObj.hits || 1);
+            delete nextById[key];
+          }
+        }
+      }
       continue;
     }
 
-    // 4. Rule B: Proximity merge (only for legacy items lacking authoritative global IDs)
+    // 4. Rule B: Proximity merge (merge into closest existing object within radius)
     const isGlobalObject = itemId.startsWith('G-') || Boolean(rawItem.global_id);
     let matchedKey = null;
     let minDistance = Infinity;
@@ -170,7 +188,6 @@ export function mergeDetections(
     if (!isGlobalObject) {
       for (const [key, existing] of Object.entries(nextById)) {
         if (dismissedSet.has(key)) continue;
-        if (key.startsWith('G-')) continue; // Do not merge legacy local tracks into authoritative GFS globals
         const d = calculateDistance(rawItem.lat, rawItem.lon, existing.lat, existing.lon);
         if (d <= MULTI_DRONE_MERGE_RADIUS_M && d < minDistance) {
           minDistance = d;
@@ -212,6 +229,24 @@ export function mergeDetections(
       version: rawItem.version !== undefined ? incomingVersion : undefined,
       status: rawItem.status || 'ACTIVE',
     };
+
+    if (isGlobalObject) {
+      // Subsume any co-located local tracks that were created before this global object arrived
+      for (const [key, locObj] of Object.entries(nextById)) {
+        if (key === itemId) continue;
+        if (key.startsWith('G-') || locObj.global_id) continue;
+        const d = calculateDistance(Number(rawItem.lat), Number(rawItem.lon), locObj.lat, locObj.lon);
+        if (d <= MULTI_DRONE_MERGE_RADIUS_M) {
+          if (Array.isArray(locObj.seenBy)) {
+            for (const s of locObj.seenBy) {
+              if (!nextById[itemId].seenBy.includes(s)) nextById[itemId].seenBy.push(s);
+            }
+          }
+          nextById[itemId].hits += Number(locObj.hits || 1);
+          delete nextById[key];
+        }
+      }
+    }
   }
 
   // Bound to MAX_GARBAGE_ENTRIES (500), dropping oldest by lastSeen
@@ -379,6 +414,22 @@ export function reconcileSnapshot(
       status: rawObj.status || 'ACTIVE',
       watermark_event_id: watermarkEventId
     };
+
+    // Subsume any co-located local tracks that coincide with this authoritative global object
+    for (const [key, locObj] of Object.entries(next)) {
+      if (key === id) continue;
+      if (key.startsWith('G-') || locObj.global_id) continue;
+      const d = calculateDistance(Number(rawObj.lat), Number(rawObj.lon), locObj.lat, locObj.lon);
+      if (d <= MULTI_DRONE_MERGE_RADIUS_M) {
+        if (Array.isArray(locObj.seenBy)) {
+          for (const s of locObj.seenBy) {
+            if (!next[id].seenBy.includes(s)) next[id].seenBy.push(s);
+          }
+        }
+        next[id].hits = Math.max(next[id].hits, (next[id].hits || 0) + (locObj.hits || 1));
+        delete next[key];
+      }
+    }
   }
   return next;
 }

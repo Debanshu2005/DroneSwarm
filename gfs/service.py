@@ -121,6 +121,25 @@ class GFSService:
             if not claimed_observations:
                 return {"status": "NO_OBSERVATIONS", "fused": 0, "new_globals": 0}
 
+            try:
+                from DroneOS.perception.diagnostics import log_gfs_observation_rx, log_gfs_fusion_result
+            except ImportError:
+                log_gfs_observation_rx = None
+                log_gfs_fusion_result = None
+
+            if log_gfs_observation_rx:
+                for obs in claimed_observations:
+                    log_gfs_observation_rx(
+                        drone_id=obs.drone_id,
+                        obs_id=obs.obs_id,
+                        local_track_id=obs.local_track_id,
+                        trace_id=getattr(obs, "trace_id", None) or f"{obs.drone_id}-{obs.local_track_id}",
+                        lat=obs.lat,
+                        lon=obs.lon,
+                        alt=obs.alt,
+                        confidence=obs.confidence
+                    )
+
             # Project coordinates into topocentric ENU in metres
             for obs in claimed_observations:
                 e, n, u = wgs84_to_enu(
@@ -365,6 +384,27 @@ class GFSService:
                         item_dispositions[o.obs_id] = ("DEFERRED", "LOW_CONFIDENCE", None)
 
             # 7. Phase B: Atomic Database Commit
+            if log_gfs_fusion_result:
+                new_ids = {ng.global_id for ng in new_globals}
+                for g_id in updated_global_ids:
+                    glob = active_globals.get(g_id)
+                    if glob:
+                        action = "CREATED_NEW" if g_id in new_ids else "FUSED_EXISTING"
+                        src_drones = list(glob.source_estimates.keys())
+                        trk_ids = [se.local_track_id for se in glob.source_estimates.values()]
+                        log_gfs_fusion_result(
+                            global_id=glob.global_id,
+                            action=action,
+                            label=glob.label,
+                            lat=glob.lat,
+                            lon=glob.lon,
+                            alt=glob.alt,
+                            confidence=glob.confidence,
+                            observation_count=glob.observation_count,
+                            source_drones=src_drones,
+                            contributing_local_tracks=trk_ids
+                        )
+
             # Update / Insert Global Objects
             for g_id in updated_global_ids:
                 glob = active_globals[g_id]

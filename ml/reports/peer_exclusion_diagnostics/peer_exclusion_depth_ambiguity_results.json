@@ -1,0 +1,218 @@
+[
+  {
+    "scenario_name": "scenario_1_peer_10m_garbage_15m_collinear",
+    "description": "Peer drone at 10m depth, genuine garbage at 15m depth, both on approximately the same camera ray",
+    "drone_alt_m": 15.0,
+    "ray_dir_ned": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ground_depth_s_m": 15.0,
+    "peers_evaluated": [
+      {
+        "peer_id": "drone2",
+        "peer_pos_ned": [
+          0.0,
+          0.0,
+          10.0
+        ],
+        "peer_alt": 5.0,
+        "s_depth_m": 10.0,
+        "d_perp_m": 0.0,
+        "within_2m_sphere": true,
+        "intersects_cylinder_tube": true
+      }
+    ],
+    "pipeline_decision": "REJECTED",
+    "pipeline_rejection_reason": "GEOLOCATION_ALL_FAILED",
+    "geo_detections_emitted": 0
+  },
+  {
+    "scenario_name": "scenario_2_peer_15m_garbage_10m_collinear",
+    "description": "Peer drone at 15m depth, genuine garbage at 10m depth (peer behind foreground target)",
+    "drone_alt_m": 20.0,
+    "ray_dir_ned": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ground_depth_s_m": 20.0,
+    "peers_evaluated": [
+      {
+        "peer_id": "drone2",
+        "peer_pos_ned": [
+          0.0,
+          0.0,
+          15.0
+        ],
+        "peer_alt": 5.0,
+        "s_depth_m": 15.0,
+        "d_perp_m": 0.0,
+        "within_2m_sphere": true,
+        "intersects_cylinder_tube": true
+      }
+    ],
+    "pipeline_decision": "REJECTED",
+    "pipeline_rejection_reason": "GEOLOCATION_ALL_FAILED",
+    "geo_detections_emitted": 0
+  },
+  {
+    "scenario_name": "scenario_3_similar_depth_lateral_separation",
+    "description": "Peer drone and garbage at similar depth (15m) but separated laterally (4m > 2m radius)",
+    "drone_alt_m": 15.0,
+    "ray_dir_ned": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ground_depth_s_m": 15.0,
+    "peers_evaluated": [
+      {
+        "peer_id": "drone2",
+        "peer_pos_ned": [
+          0.0,
+          4.0,
+          15.0
+        ],
+        "peer_alt": 0.0,
+        "s_depth_m": 15.0,
+        "d_perp_m": 4.0,
+        "within_2m_sphere": false,
+        "intersects_cylinder_tube": false
+      }
+    ],
+    "pipeline_decision": "ACCEPTED",
+    "pipeline_rejection_reason": "ACCEPTED",
+    "geo_detections_emitted": 1
+  },
+  {
+    "scenario_name": "scenario_4_partial_occlusion_grazing_ray",
+    "description": "Peer drone at 5m depth with 1.2m lateral offset (< 2.0m radius), partially occluding genuine garbage at 15m",
+    "drone_alt_m": 15.0,
+    "ray_dir_ned": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ground_depth_s_m": 15.0,
+    "peers_evaluated": [
+      {
+        "peer_id": "drone2",
+        "peer_pos_ned": [
+          0.0,
+          1.2,
+          5.0
+        ],
+        "peer_alt": 10.0,
+        "s_depth_m": 5.0,
+        "d_perp_m": 1.2,
+        "within_2m_sphere": false,
+        "intersects_cylinder_tube": true
+      }
+    ],
+    "pipeline_decision": "REJECTED",
+    "pipeline_rejection_reason": "GEOLOCATION_ALL_FAILED",
+    "geo_detections_emitted": 0
+  },
+  {
+    "scenario_name": "scenario_5_multiple_peers_collinear",
+    "description": "Multiple peers along the same camera ray (Peer 1 at 10m depth, Peer 2 at 20m depth)",
+    "drone_alt_m": 25.0,
+    "ray_dir_ned": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ground_depth_s_m": 25.0,
+    "peers_evaluated": [
+      {
+        "peer_id": "drone2",
+        "peer_pos_ned": [
+          0.0,
+          0.0,
+          10.0
+        ],
+        "peer_alt": 15.0,
+        "s_depth_m": 10.0,
+        "d_perp_m": 0.0,
+        "within_2m_sphere": true,
+        "intersects_cylinder_tube": true
+      },
+      {
+        "peer_id": "drone3",
+        "peer_pos_ned": [
+          0.0,
+          0.0,
+          20.0
+        ],
+        "peer_alt": 5.0,
+        "s_depth_m": 20.0,
+        "d_perp_m": 0.0,
+        "within_2m_sphere": true,
+        "intersects_cylinder_tube": true
+      }
+    ],
+    "pipeline_decision": "REJECTED",
+    "pipeline_rejection_reason": "GEOLOCATION_ALL_FAILED",
+    "geo_detections_emitted": 0
+  },
+  {
+    "scenario_name": "scenario_6_garbage_near_peer_outside_volume",
+    "description": "Genuine garbage near peer drone but outside peer physical exclusion volume (2.8m lateral separation)",
+    "drone_alt_m": 15.0,
+    "ray_dir_ned": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ground_depth_s_m": 15.0,
+    "peers_evaluated": [
+      {
+        "peer_id": "drone2",
+        "peer_pos_ned": [
+          0.0,
+          2.8,
+          10.0
+        ],
+        "peer_alt": 5.0,
+        "s_depth_m": 10.0,
+        "d_perp_m": 2.8,
+        "within_2m_sphere": false,
+        "intersects_cylinder_tube": false
+      }
+    ],
+    "pipeline_decision": "ACCEPTED",
+    "pipeline_rejection_reason": "ACCEPTED",
+    "geo_detections_emitted": 1
+  },
+  {
+    "scenario_name": "scenario_7_garbage_directly_behind_peer",
+    "description": "Genuine garbage directly behind peer drone from observer perspective (exact collinear nadir alignment)",
+    "drone_alt_m": 20.0,
+    "ray_dir_ned": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "ground_depth_s_m": 20.0,
+    "peers_evaluated": [
+      {
+        "peer_id": "drone2",
+        "peer_pos_ned": [
+          0.0,
+          0.0,
+          10.0
+        ],
+        "peer_alt": 10.0,
+        "s_depth_m": 10.0,
+        "d_perp_m": 0.0,
+        "within_2m_sphere": true,
+        "intersects_cylinder_tube": true
+      }
+    ],
+    "pipeline_decision": "REJECTED",
+    "pipeline_rejection_reason": "GEOLOCATION_ALL_FAILED",
+    "geo_detections_emitted": 0
+  }
+]

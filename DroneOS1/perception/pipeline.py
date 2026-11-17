@@ -8,9 +8,15 @@ from typing import List, Optional, Any
 from DroneOS1.perception.aggregator import GeoreferencedDetection, TrackAggregator
 from DroneOS1.perception.detector import GarbageDetector
 from DroneOS1.perception.frame_sources import FrameSource
-from DroneOS1.perception.geolocate import pixel_to_lat_lon, lat_lon_to_meters
+from DroneOS1.perception.geolocate import pixel_to_lat_lon, lat_lon_to_meters, pixel_to_ray_ned, compute_ray_to_point_cpa
 from DroneOS1.shared.protocol.messages import DetectionItem, DetectionMessage
 from DroneOS1.shared.utils.logger import setup_logger
+
+try:
+    from DroneOS1.perception.diagnostics import log_raw_detection, log_peer_exclusion_eval
+except ImportError:
+    log_raw_detection = None
+    log_peer_exclusion_eval = None
 
 logger = setup_logger("PerceptionPipeline")
 
@@ -278,8 +284,34 @@ class PerceptionPipeline:
 
         # 5. Geolocation
         geo_dets: List[GeoreferencedDetection] = []
-        for det in detections:
+        now_curr = time.time()
+
+        for det_idx, det in enumerate(detections):
+            trace_id = f"{self.drone_id}-f{self._frame_id}-d{det_idx}-{int(now_curr*1000)}"
             x1, y1, x2, y2 = det.bbox_xyxy
+            bbox_list = [round(float(c), 2) for c in (x1, y1, x2, y2)]
+
+            drone_gps_data = {
+                "lat": drone_lat,
+                "lon": drone_lon,
+                "alt": alt,
+                "roll": round(roll, 2),
+                "pitch": round(pitch, 2),
+                "yaw": round(yaw, 2)
+            }
+
+            if log_raw_detection:
+                log_raw_detection(
+                    drone_id=self.drone_id,
+                    frame_id=self._frame_id,
+                    det_idx=det_idx,
+                    trace_id=trace_id,
+                    bbox_xyxy=bbox_list,
+                    confidence=round(float(det.confidence), 4),
+                    label=det.label,
+                    drone_gps=drone_gps_data
+                )
+
             u = (x1 + x2) / 2.0
             v = (y1 + y2) / 2.0
 
@@ -299,41 +331,177 @@ class PerceptionPipeline:
                 drone_lon=drone_lon,
                 max_range_m=self.config.max_range_m,
             )
-            if res is not None:
-                glat, glon, agl = res
-
-                # Peer Drone Exclusion Filter:
-                # If an upper drone looks down and detects a lower peer drone in its FOV,
-                # the ray projection hits the ground directly at the lower drone's (lat, lon).
-                # Exclude any detection whose georeferenced ground position coincides with an airborne peer.
-                if self.swarm_manager and hasattr(self.swarm_manager, "registry"):
-                    is_peer = False
-                    for peer in self.swarm_manager.registry.peers.values():
-                        if getattr(peer, "is_active", True) and peer.lat is not None and peer.lon is not None:
-                            peer_alt = getattr(peer, "alt", 0.0) or 0.0
-                            # Only filter if peer is airborne (altitude > 1.0m)
-                            if peer_alt > 1.0:
-                                dn, de = lat_lon_to_meters(glat, glon, peer.lat, peer.lon)
-                                dist_m = math.hypot(dn, de)
-                                if dist_m < self.peer_exclusion_radius_m:
-                                    logger.info(
-                                        "Excluding detection at (%.6f, %.6f): matches peer %s at (%.6f, %.6f, alt=%.1fm, dist=%.2fm)",
-                                        glat, glon, peer.drone_id, peer.lat, peer.lon, peer_alt, dist_m
-                                    )
-                                    is_peer = True
-                                    break
-                    if is_peer:
-                        continue
-
-                geo_dets.append(
-                    GeoreferencedDetection(
-                        label=det.label,
-                        confidence=det.confidence,
-                        lat=glat,
-                        lon=glon,
-                        altitude_agl=agl,
+            if res is None:
+                if log_peer_exclusion_eval:
+                    log_peer_exclusion_eval(
+                        drone_id=self.drone_id,
+                        frame_id=self._frame_id,
+                        det_idx=det_idx,
+                        trace_id=trace_id,
+                        projected_ground={"lat": None, "lon": None, "agl": None},
+                        peer_registry_contents=list(self.swarm_manager.registry.peers.keys()) if (self.swarm_manager and hasattr(self.swarm_manager, "registry")) else [],
+                        peers=[],
+                        decision="REJECTED",
+                        reason="GEOLOCATION_RAY_INTERSECTION_FAILED"
                     )
+                continue
+
+            glat, glon, agl = res
+
+            # 3D Camera Ray in NED frame
+            ray_ned = pixel_to_ray_ned(
+                u=u,
+                v=v,
+                img_w=w,
+                img_h=h,
+                hfov_deg=cam_cfg.hfov_deg,
+                mount_pitch_deg=cam_cfg.mount_pitch_deg,
+                roll_deg=roll,
+                pitch_deg=pitch,
+                yaw_deg=yaw,
+            )
+
+            # Peer Drone Exclusion Filter (3D Ray-to-Volume) Diagnostics & Evaluation:
+            registry_contents: List[str] = []
+            peers_eval: List[Dict[str, Any]] = []
+            is_peer = False
+            matched_peer_id = None
+            matched_dist = None
+            exclusion_reason = "ACCEPTED_GENUINE_TARGET"
+            decision = "ACCEPTED"
+            exclusion_radius_3d = min(float(self.peer_exclusion_radius_m), 2.5)  # 2.0m-2.5m physical bounding volume
+
+            unpositioned_or_stale_peers: List[str] = []
+
+            if self.swarm_manager and hasattr(self.swarm_manager, "registry"):
+                registry_contents = list(self.swarm_manager.registry.peers.keys())
+                for peer in self.swarm_manager.registry.peers.values():
+                    p_id = getattr(peer, "drone_id", "unknown")
+                    p_active = getattr(peer, "is_active", True)
+                    p_lat = getattr(peer, "lat", None)
+                    p_lon = getattr(peer, "lon", None)
+                    p_alt = getattr(peer, "alt", 0.0) or 0.0
+                    last_pos_time = getattr(peer, "last_position_time", None)
+                    pos_age = (now_curr - last_pos_time) if last_pos_time is not None else None
+                    max_age = float(getattr(self.config, "max_telemetry_age_s", 2.0))
+                    is_stale = (pos_age is not None and pos_age > max_age)
+                    has_pos = (p_lat is not None and p_lon is not None)
+
+                    if not has_pos or is_stale:
+                        unpositioned_or_stale_peers.append(p_id)
+
+                    dist_3d_perp = None
+                    s_depth = None
+                    eligible = has_pos and not is_stale
+
+                    if has_pos and ray_ned is not None:
+                        # Vector from observing drone to peer in NED
+                        p_dn, p_de = lat_lon_to_meters(p_lat, p_lon, drone_lat, drone_lon)
+                        p_dd = -(p_alt - alt)  # Down is positive in NED
+                        s_depth, dist_3d_perp = compute_ray_to_point_cpa(ray_ned, (p_dn, p_de, p_dd))
+
+                    peer_summary = {
+                        "peer_id": p_id,
+                        "is_active": p_active,
+                        "lat": p_lat,
+                        "lon": p_lon,
+                        "alt": p_alt,
+                        "has_position": has_pos,
+                        "last_position_time": last_pos_time,
+                        "position_age_s": round(pos_age, 3) if pos_age is not None else None,
+                        "is_stale": is_stale,
+                        "distance_m": round(dist_3d_perp, 3) if dist_3d_perp is not None else None,
+                        "depth_s_m": round(s_depth, 3) if s_depth is not None else None,
+                        "eligible": eligible,
+                    }
+                    peers_eval.append(peer_summary)
+
+                    if eligible and dist_3d_perp is not None:
+                        # Forward camera ray constraint: peer must be in front of the camera (s_depth > 0)
+                        if s_depth > 0.0:
+                            is_airborne = (p_alt > (self.config.ground_elevation_m + 1.0))
+                            if is_airborne:
+                                # Airborne peer: 3D ray closest approach inside physical exclusion volume
+                                if dist_3d_perp < exclusion_radius_3d:
+                                    is_peer = True
+                                    matched_peer_id = p_id
+                                    matched_dist = dist_3d_perp
+                                    exclusion_reason = (
+                                        f"REJECTED_PEER_EXCLUSION_MATCH_3D (peer={p_id}, "
+                                        f"d_perp={dist_3d_perp:.2f}m < {exclusion_radius_3d:.2f}m, "
+                                        f"depth={s_depth:.1f}m, alt={p_alt:.1f}m)"
+                                    )
+                                    decision = "REJECTED"
+                                    break
+                            else:
+                                # Landed peer on ground: check ground distance to avoid excluding nearby garbage
+                                dn_g, de_g = lat_lon_to_meters(glat, glon, p_lat, p_lon)
+                                d_ground = math.hypot(dn_g, de_g)
+                                if d_ground < exclusion_radius_3d:
+                                    is_peer = True
+                                    matched_peer_id = p_id
+                                    matched_dist = d_ground
+                                    exclusion_reason = (
+                                        f"REJECTED_LANDED_PEER_MATCH (peer={p_id}, "
+                                        f"dist_ground={d_ground:.2f}m < {exclusion_radius_3d:.2f}m)"
+                                    )
+                                    decision = "REJECTED"
+                                    break
+
+                if not is_peer:
+                    if unpositioned_or_stale_peers:
+                        # Stale or missing peer telemetry: do NOT silently confirm ambiguous targets
+                        # Mark as DEFERRED so it does not prematurely create a confirmed GFS global target
+                        decision = "DEFERRED"
+                        exclusion_reason = f"DEFERRED_UNCERTAIN_PEER_TELEMETRY (stale_or_missing={unpositioned_or_stale_peers})"
+                    elif not registry_contents:
+                        exclusion_reason = "ACCEPTED_REGISTRY_EMPTY"
+                        decision = "ACCEPTED"
+                    else:
+                        exclusion_reason = "ACCEPTED_NO_PEER_MATCH"
+                        decision = "ACCEPTED"
+            else:
+                exclusion_reason = "ACCEPTED_NO_SWARM_MANAGER"
+                decision = "ACCEPTED"
+
+            if log_peer_exclusion_eval:
+                log_peer_exclusion_eval(
+                    drone_id=self.drone_id,
+                    frame_id=self._frame_id,
+                    det_idx=det_idx,
+                    trace_id=trace_id,
+                    projected_ground={"lat": glat, "lon": glon, "agl": agl},
+                    peer_registry_contents=registry_contents,
+                    peers=peers_eval,
+                    decision=decision,
+                    reason=exclusion_reason,
+                    matched_peer_id=matched_peer_id,
+                    matched_distance_m=round(matched_dist, 3) if matched_dist is not None else None,
                 )
+
+            if is_peer:
+                logger.info(
+                    "Excluding detection at (%.6f, %.6f): matches peer %s (dist=%.2fm, reason=%s)",
+                    glat, glon, matched_peer_id, matched_dist or 0.0, exclusion_reason
+                )
+                continue
+
+            if decision == "DEFERRED":
+                logger.warning(
+                    "Deferring detection at (%.6f, %.6f): %s",
+                    glat, glon, exclusion_reason
+                )
+                continue
+
+            geo_dets.append(
+                GeoreferencedDetection(
+                    label=det.label,
+                    confidence=det.confidence,
+                    lat=glat,
+                    lon=glon,
+                    altitude_agl=agl,
+                )
+            )
 
         self.last_step_stats["geo_detections"] = len(geo_dets)
         if not geo_dets:

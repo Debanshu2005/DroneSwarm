@@ -8,8 +8,7 @@ import {
   savePersistedGarbage,
   loadPersistedTombstones,
   savePersistedTombstones,
-  reconcileSnapshot,
-  DEFAULT_BENCHMARK_TARGETS
+  reconcileSnapshot
 } from '../utils/garbage';
 
 const DroneContext = createContext();
@@ -62,9 +61,7 @@ export const DroneProvider = ({ children }) => {
   const [garbage, setGarbage] = useState(() => {
     const loaded = loadPersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null);
     if (Object.keys(loaded).length > 0) return loaded;
-    const wasCleared = safeStorageGet("PhoneOS_GarbageCleared", "false") === "true";
-    if (wasCleared) return {};
-    return { ...DEFAULT_BENCHMARK_TARGETS };
+    return {};
   });
 
   const [dismissedGarbageIds, setDismissedGarbageIds] = useState(() => {
@@ -120,6 +117,9 @@ export const DroneProvider = ({ children }) => {
     tombstonesRef.current = {};
     savePersistedGarbage(typeof window !== 'undefined' ? window.localStorage : null, {});
     savePersistedTombstones(typeof window !== 'undefined' ? window.localStorage : null, {});
+    if (wsManager) {
+      wsManager.send({ type: "gfs_clear_request", timestamp: Date.now() });
+    }
     addLog(`Cleared all garbage markers`, 'INFO', 'PHONEOS', null, 'GARBAGE_CLEARED');
   };
   

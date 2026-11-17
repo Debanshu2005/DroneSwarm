@@ -1,0 +1,136 @@
+{
+  "timestamp": 1794857476.8673627,
+  "airsim_rpc": "127.0.0.1:41451",
+  "vehicles": [
+    "Drone1",
+    "Drone2",
+    "Drone3",
+    "Drone4"
+  ],
+  "detector_model": "YOLO26n (models/garbage.pt)",
+  "weights_frozen": true,
+  "confidence_threshold": 0.55,
+  "exclusion_radius_m": 2.0,
+  "total_diagnostic_events": 13523,
+  "total_raw_detections": 24,
+  "accepted_detections": 10,
+  "rejected_detections": 13,
+  "deferred_detections": 1,
+  "peer_exclusion_decisions": 24,
+  "peer_exclusion_rejections": 13,
+  "gfs_confirmed_objects": 2,
+  "scenario_results": {
+    "scenario_1_telemetry_mesh": {
+      "status": "PASS",
+      "peer_count_per_node": 3
+    },
+    "scenario_2_baseline_targets": {
+      "status": "PASS",
+      "confirmed_count": 2
+    },
+    "scenario_3_formation": {
+      "status": "PASS",
+      "formation_type": "V",
+      "spacing_m": 12.0
+    },
+    "scenario_4_direct_vertical": {
+      "status": "PASS",
+      "d_perp_m": 0.0,
+      "depth_m": 10.0,
+      "decision": "REJECTED"
+    },
+    "scenario_5_reverse_vertical": {
+      "status": "PASS",
+      "d_perp_m": 0.0,
+      "depth_m": 10.0,
+      "decision": "REJECTED"
+    },
+    "scenario_6_sweep": {
+      "status": "PASS",
+      "sweep_points": [
+        {
+          "r": 0.0,
+          "u": 640,
+          "v": 360,
+          "d_perp": 0.0,
+          "decision": "REJECTED"
+        },
+        {
+          "r": 0.5,
+          "u": 640,
+          "v": 328,
+          "d_perp": 0.0,
+          "decision": "REJECTED"
+        },
+        {
+          "r": 1.0,
+          "u": 640,
+          "v": 296,
+          "d_perp": 0.0,
+          "decision": "REJECTED"
+        },
+        {
+          "r": 1.5,
+          "u": 640,
+          "v": 264,
+          "d_perp": 0.0,
+          "decision": "REJECTED"
+        },
+        {
+          "r": 2.0,
+          "u": 640,
+          "v": 232,
+          "d_perp": 0.0,
+          "decision": "REJECTED"
+        },
+        {
+          "r": 2.5,
+          "u": 640,
+          "v": 200,
+          "d_perp": 0.0,
+          "decision": "REJECTED"
+        },
+        {
+          "r": 3.5,
+          "u": 640,
+          "v": 136,
+          "d_perp": 0.0,
+          "decision": "REJECTED"
+        },
+        {
+          "r": 5.0,
+          "u": 640,
+          "v": 40,
+          "d_perp": 0.0,
+          "decision": "REJECTED"
+        }
+      ]
+    },
+    "scenario_7_crossing": {
+      "status": "PASS",
+      "crossing_rejections": 1
+    },
+    "scenario_8_standby_disarmed": {
+      "status": "PASS"
+    },
+    "scenario_9_interruption_recovery": {
+      "status": "PASS",
+      "deferred_decision": "DEFERRED",
+      "recovered_decision": "REJECTED"
+    },
+    "scenario_10_target_near_peer": {
+      "status": "PASS",
+      "decision": "ACCEPTED"
+    },
+    "scenario_11_phoneos_integration": {
+      "status": "PASS",
+      "phoneos_confirmed_count": 2
+    },
+    "scenario_12_formation_stability": {
+      "status": "PASS",
+      "cycles": 2,
+      "final_target_count": 2
+    }
+  },
+  "overall_verdict": "PASS"
+}

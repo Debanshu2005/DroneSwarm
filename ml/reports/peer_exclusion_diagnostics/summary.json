@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-11-16T18:33:56Z",
+  "output_directory": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\ml\\reports\\peer_exclusion_diagnostics",
+  "events_log": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\ml\\reports\\peer_exclusion_diagnostics\\events.jsonl",
+  "metrics": {
+    "total_raw_detections": 14,
+    "accepted_detections": 2,
+    "rejected_detections": 11,
+    "deferred_detections": 1,
+    "peer_exclusion_decisions": 14,
+    "peer_exclusion_rejections": 11,
+    "missing_peer_positions": 0,
+    "stale_peer_positions": 0,
+    "gfs_objects_created": 2,
+    "gfs_objects_updated": 0,
+    "events_forwarded_to_phoneos": 2,
+    "peer_telemetry_received": 204,
+    "peer_heartbeats_received": 204
+  }
+}
