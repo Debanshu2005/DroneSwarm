@@ -1,6 +1,6 @@
 # Peer-Drone Exclusion & Collaborative Perception Diagnostic Summary
 **Generated:** 2026-11-16T18:33:56Z
-**Log File:** `D:\CityGrid\my-project\PhoneOS_Swarm\ml\reports\peer_exclusion_diagnostics\events.jsonl`
+**Log File:** `ml/reports/peer_exclusion_diagnostics/events.jsonl`
 
 ## Key Metrics
 | Metric | Count | Description |

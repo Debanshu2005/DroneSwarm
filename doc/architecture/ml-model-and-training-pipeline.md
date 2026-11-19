@@ -87,7 +87,7 @@ Evaluated at test resolution $1280 \times 1280$ using `ml/uavvaste/evaluate_offi
 
 ## 6. Confidence Threshold Optimization for Swarm Operations
 
-The confidence threshold trade-off was evaluated systematically across the validation split (116 images, 616 instances) using `ml/uavvaste/evaluate_thresholds.py`:
+The confidence threshold trade-off was evaluated systematically across the validation split (116 images, 616 instances) using `ml/uavvaste/evaluate_thresholds.py` (measured at high-resolution `imgsz = 1280`):
 
 | Confidence | Precision | Recall | F1 Score | Est. TP | Est. FP | Est. FN | FP Reduction | Recommended Operational Domain |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|---|
@@ -113,8 +113,8 @@ The `GarbageDetector` class supports dynamic image sizing:
 ### 7.2 ONNX & Embedded Acceleration
 For ARM64 Linux deployment without a full PyTorch CUDA environment, the pipeline supports ONNX export:
 ```bash
-# Export trained PyTorch weights to ONNX
-python ml/uavvaste/export_onnx.py --weights models/garbage.pt --imgsz 640 --opset 12
+# Export trained PyTorch weights to ONNX (default opset 17, static imgsz 640)
+python ml/uavvaste/export_onnx.py --weights models/garbage.pt --imgsz 640 --opset 17
 ```
 The resulting ONNX graph runs via `onnxruntime` or NCNN, leveraging ARM NEON SIMD instructions on the Raspberry Pi's Quad-core Cortex-A76 processor.
 

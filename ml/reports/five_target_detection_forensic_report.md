@@ -5,9 +5,9 @@
 **Investigation Date:** November 19, 2026  
 **Status:** Completed & Verified  
 **Artifacts Generated:**
-- JSON Event Trace: [`ml/reports/five_target_forensic_event_trace.json`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/five_target_forensic_event_trace.json)
-- Reproduction Script: [`scripts/forensic_five_target_investigation.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/scripts/forensic_five_target_investigation.py)
-- Regression Test Suite: [`tests/test_five_target_forensic.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/tests/test_five_target_forensic.py)
+- JSON Event Trace: [`ml/reports/five_target_forensic_event_trace.json`](ml/reports/five_target_forensic_event_trace.json)
+- Reproduction Script: [`scripts/forensic_five_target_investigation.py`](scripts/forensic_five_target_investigation.py)
+- Regression Test Suite: [`tests/test_five_target_forensic.py`](tests/test_five_target_forensic.py)
 
 ---
 
@@ -20,14 +20,14 @@ A forensic, read-only instrumentation was conducted across all ten stages of the
 ### Primary Forensic Conclusion:
 The reduction from five spawned targets to one PhoneOS marker is **not caused by a YOLO detector failure, nor a pinhole projection defect, nor false 3D peer-drone exclusion**.
 
-The exact root cause is the **GFS Stage B Hypothesis Acceptance Rule** defined in [`gfs/hypothesis.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/gfs/hypothesis.py#L248-L251):
+The exact root cause is the **GFS Stage B Hypothesis Acceptance Rule** defined in [`gfs/hypothesis.py`](gfs/hypothesis.py#L248-L251):
 $$\text{Hypothesis Accepted if: } \quad |\text{distinct\_drones}| \ge 2 \quad \lor \quad \max(\text{conf}) \ge 0.70$$
 
-1. In production swarm operations, the YOLO confidence threshold is frozen at `0.55` ([`perception.yaml`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/DroneOS/configs/perception.yaml#L5)), and true garbage detections typically evaluate between $0.58$ and $0.68$.
+1. In production swarm operations, the YOLO confidence threshold is frozen at `0.55` ([`perception.yaml`](DroneOS/configs/perception.yaml#L5)), and true garbage detections typically evaluate between $0.58$ and $0.68$.
 2. Under standard 4-drone formation geometry, four targets fall into single-drone visual coverage zones ($|\text{distinct\_drones}| = 1$), while only one target (Target 3) falls into the spatial overlap zone between two drones (`drone2` and `drone3`).
 3. Because the four single-drone targets have confidence below the $0.70$ single-drone threshold ($0.58 - 0.62 < 0.70$), GFS classifies them as `DEFERRED_LOW_CONFIDENCE` to safeguard against single-drone false positive alarms.
 4. GFS only commits confirmed `GlobalObject`s to SQLite.
-5. PhoneOS authoritatively reconciles against the GFS snapshot ([`mobile/src/utils/garbage.js`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/mobile/src/utils/garbage.js#L377-L415)), displaying strictly **one active marker**.
+5. PhoneOS authoritatively reconciles against the GFS snapshot ([`mobile/src/utils/garbage.js`](mobile/src/utils/garbage.js#L377-L415)), displaying strictly **one active marker**.
 
 ---
 
@@ -92,7 +92,7 @@ The table below traces each of the five spawned targets through every architectu
 * **GFS Stage B Decision:** In GFS, candidate clique $\{ \text{drone4-g0001} \}$ has:
   $$\text{distinct\_drones} = \{\text{'drone4'}\} \implies |\text{distinct\_drones}| = 1 < 2$$
   $$\max(\text{conf}) = 0.62 < 0.70$$
-  Under [`gfs/hypothesis.py#L316-L320`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/gfs/hypothesis.py#L316-L320), the clique fails the multi-drone confirmation rule and fails the single-drone high-confidence threshold. It is placed into `low_confidence_deferred`.
+  Under [`gfs/hypothesis.py#L316-L320`](gfs/hypothesis.py#L316-L320), the clique fails the multi-drone confirmation rule and fails the single-drone high-confidence threshold. It is placed into `low_confidence_deferred`.
 * **PhoneOS Result:** No global object is created. Snapshot reconciliation renders 0 markers for Targets 1 and 2.
 
 ---
@@ -133,7 +133,7 @@ The table below traces each of the five spawned targets through every architectu
 3. **Local Track Aggregator (`min_hits = 2`):**
    `TrackAggregator` correctly suppresses transient single-frame hits ($hits = 1$). On the second frame ($hits = 2$), all tracks are confirmed and emitted.
 4. **PhoneOS Client State Contract:**
-   [`mobile/src/utils/garbage.js`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/mobile/src/utils/garbage.js) correctly implements the GFS authoritative snapshot contract. PhoneOS does not arbitrarily drop markers; it reflects the exact set of active objects committed by GFS.
+   [`mobile/src/utils/garbage.js`](mobile/src/utils/garbage.js) correctly implements the GFS authoritative snapshot contract. PhoneOS does not arbitrarily drop markers; it reflects the exact set of active objects committed by GFS.
 
 ---
 
@@ -153,7 +153,7 @@ To ensure all five targets appear on PhoneOS without degrading false positive im
 
 ## 7. Verification & Automated Tests
 
-All findings are validated by automated tests in [`tests/test_five_target_forensic.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/tests/test_five_target_forensic.py):
+All findings are validated by automated tests in [`tests/test_five_target_forensic.py`](tests/test_five_target_forensic.py):
 - `test_full_five_target_forensic_reproduction`: Confirms 5 spawned targets produce 1 PhoneOS marker.
 - `test_gfs_stage_b_hypothesis_acceptance_rule`: Confirms rule isolation ($|\text{drones}| < 2 \land \text{conf} < 0.70 \to \text{DEFERRED}$).
 - `test_track_aggregator_min_hits_gating`: Confirms single-frame suppression ($min\_hits = 2$).

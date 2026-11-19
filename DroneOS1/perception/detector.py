@@ -27,7 +27,7 @@ class GarbageDetector:
         self,
         weights_path: str = "models/garbage.pt",
         imgsz: Union[int, Tuple[int, int]] = 640,
-        confidence: float = 0.35,
+        confidence: float = 0.55,
         iou: float = 0.5,
         device: Optional[str] = None,
         classes: Optional[List[str]] = None,

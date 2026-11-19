@@ -24,7 +24,7 @@ The objective of this engineering initiative is to introduce a formal **PROVISIO
 
 ## 2. Current Architecture & State Storage Audit
 
-### 2.1 GFS Storage Topology ([`gfs/database.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/gfs/database.py))
+### 2.1 GFS Storage Topology ([`gfs/database.py`](gfs/database.py))
 
 GFS persists its authoritative state in SQLite (`data/gfs.db`):
 
@@ -60,7 +60,7 @@ GFS persists its authoritative state in SQLite (`data/gfs.db`):
 * **`gfs_outbox_events` Table:**
   Durable outbox queue delivering JSON events to Relay and GCS clients.
 
-### 2.2 GFS Stage B Hypothesis Formation ([`gfs/hypothesis.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/gfs/hypothesis.py#L248-L251))
+### 2.2 GFS Stage B Hypothesis Formation ([`gfs/hypothesis.py`](gfs/hypothesis.py#L248-L251))
 
 In `form_new_global_objects`:
 ```python
@@ -76,7 +76,7 @@ else:
 ```
 *Current Limitation:* There is no intermediate path for candidates with $0.55 \le \text{conf} < 0.70$ to be represented as active provisional objects.
 
-### 2.3 Relay Forwarding & Snapshot Generation ([`relay/relay.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/relay/relay.py#L409-L440))
+### 2.3 Relay Forwarding & Snapshot Generation ([`relay/relay.py`](relay/relay.py#L409-L440))
 
 When PhoneOS requests a snapshot (`gfs_snapshot_request`), the relay executes:
 ```sql
@@ -86,7 +86,7 @@ FROM global_objects
 ```
 It returns all rows with `status == 'ACTIVE'` in `objects: []`. Because single-drone candidates were deferred and not written to `global_objects`, they are absent from the snapshot.
 
-### 2.4 PhoneOS Client Contract ([`mobile/src/utils/garbage.js`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/mobile/src/utils/garbage.js))
+### 2.4 PhoneOS Client Contract ([`mobile/src/utils/garbage.js`](mobile/src/utils/garbage.js))
 
 PhoneOS manages garbage state via:
 * `mergeDetections`: Merges incoming `DetectionMessage` or `gfs_outbox_event` payloads, enforcing tombstone checks and version-monotonic updates.

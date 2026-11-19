@@ -96,10 +96,23 @@ The production model weights are installed at:
 - Metadata: `ml/model_metadata.json`
 
 ### Official Test Split Results (116 Images, 507 Instances):
-- **Precision**: 91.84%
-- **Recall**: 78.50%
-- **mAP@50**: 83.62%
-- **mAP@50-95**: 51.30%
+- **High-Resolution Mode (`imgsz = 1280`, `conf = 0.55`)**:
+  - **Precision**: 91.84%
+  - **Recall**: 78.50%
+  - **mAP@50**: 83.62%
+  - **mAP@50-95**: 51.30%
+- **Deployed Swarm Edge Mode (`imgsz = 640`, `conf = 0.55`)**:
+  - **Precision**: 96.30%
+  - **Recall**: 46.15%
+  - **mAP@50**: 71.76%
+  - **mAP@50-95**: 43.79%
+  - **CPU Latency**: ~40-52 ms (20-25 FPS)
+
+### ONNX Export (Raspberry Pi 5 / Edge Target):
+```bash
+# Export PyTorch weights to static ONNX model at opset 17
+python ml/uavvaste/export_onnx.py --weights models/garbage.pt --imgsz 640 --opset 17
+```
 
 ### Running Threshold Evaluation:
 ```bash

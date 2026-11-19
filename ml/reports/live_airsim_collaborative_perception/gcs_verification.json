@@ -5,5 +5,5 @@
   "markers_rendered": 2,
   "expected_distinct_objects": 2,
   "deduplication_verified": true,
-  "screenshot_saved": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\ml\\reports\\live_airsim_collaborative_perception\\gcs_map_verification.png"
+  "screenshot_saved": "ml/reports/live_airsim_collaborative_perception/gcs_map_verification.png"
 }

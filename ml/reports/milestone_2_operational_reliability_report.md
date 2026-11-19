@@ -30,15 +30,15 @@ Milestone 2 conducted an exhaustive, adversarial audit of the multi-drone percep
 
 ### 2.1 Git Working Tree & Implementation Reality Check
 Independent inspection of git diff confirmed that:
-- [`gfs/models.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/gfs/models.py): `LifecycleState` (`PROVISIONAL`, `CONFIRMED`, `REJECTED`, `RETIRED`) is authoritative across models and schema.
-- [`gfs/database.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/gfs/database.py): Schema contains `lifecycle_state`, `confirmation_method`, `provisional_reason`, `expires_at_ms`.
-- [`gfs/service.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/gfs/service.py): Automated batch TTL enforcement transitions expired provisional objects to `RETIRED`, enqueuing `GLOBAL_OBJECT_RETIRED` outbox events.
-- [`gfs/outbox.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/gfs/outbox.py): Event leasing, HMAC authentication, and ACK handling function with monotonic attempt tracking.
-- [`relay/relay.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/relay/relay.py): Contract B snapshot handler includes both provisional and confirmed objects with full metadata.
-- [`mobile/src/utils/garbage.js`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/mobile/src/utils/garbage.js): Client-side reconciliation respects tombstones, dismissed markers, and updates existing objects cleanly without ID jumping.
+- [`gfs/models.py`](gfs/models.py): `LifecycleState` (`PROVISIONAL`, `CONFIRMED`, `REJECTED`, `RETIRED`) is authoritative across models and schema.
+- [`gfs/database.py`](gfs/database.py): Schema contains `lifecycle_state`, `confirmation_method`, `provisional_reason`, `expires_at_ms`.
+- [`gfs/service.py`](gfs/service.py): Automated batch TTL enforcement transitions expired provisional objects to `RETIRED`, enqueuing `GLOBAL_OBJECT_RETIRED` outbox events.
+- [`gfs/outbox.py`](gfs/outbox.py): Event leasing, HMAC authentication, and ACK handling function with monotonic attempt tracking.
+- [`relay/relay.py`](relay/relay.py): Contract B snapshot handler includes both provisional and confirmed objects with full metadata.
+- [`mobile/src/utils/garbage.js`](mobile/src/utils/garbage.js): Client-side reconciliation respects tombstones, dismissed markers, and updates existing objects cleanly without ID jumping.
 
 ### 2.2 Forensic Trace Validation
-Inspection of [`ml/reports/five_target_provisional_lifecycle_event_trace.json`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/five_target_provisional_lifecycle_event_trace.json) verified:
+Inspection of [`ml/reports/five_target_provisional_lifecycle_event_trace.json`](ml/reports/five_target_provisional_lifecycle_event_trace.json) verified:
 - Spawned Ground Targets: 5
 - Georeferenced Detections (3D peer-exclusion passed): 6
 - TrackAggregator Confirmed Tracks (hits $\ge 2$): 6
@@ -52,7 +52,7 @@ Inspection of [`ml/reports/five_target_provisional_lifecycle_event_trace.json`](
 ### 3.1 Cross-Drone Local Track ID Collisions (Remediated)
 * **Vulnerability:** In `gfs/service.py`, `drone_matched_pairs` was previously keyed by `trk.local_track_id`. If Drone 1 had track `trk-01` and Drone 2 also had `trk-01`, Drone 2 overwrote Drone 1's mapping, erroneously binding Drone 1's observations to Drone 2's global ID in outbox item dispositions.
 * **Remediation:** Keyed globally by `(trk.drone_id, trk.local_track_id)`.
-* **Test Verification:** [`tests/test_milestone2_identity_and_recovery.py::test_cross_drone_identical_local_track_ids`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/tests/test_milestone2_identity_and_recovery.py) passed.
+* **Test Verification:** [`tests/test_milestone2_identity_and_recovery.py::test_cross_drone_identical_local_track_ids`](tests/test_milestone2_identity_and_recovery.py) passed.
 
 ### 3.2 Cross-Session Global ID Scoping (Remediated)
 * **Vulnerability:** In `gfs/hypothesis.py`, synthetic global IDs were generated from `f"{t.drone_id}:{t.local_track_id}"`. When a drone rebooted and its local track sequence reset to `trk-01`, a detection at a completely new location 100m away generated the same hash `G-xxxxxxxx`, corrupting or overwriting the previous object in SQLite.
@@ -60,7 +60,7 @@ Inspection of [`ml/reports/five_target_provisional_lifecycle_event_trace.json`](
   ```python
   member_sig = "_".join(sorted(f"{t.drone_id}:{t.drone_session_id}:{t.session_generation}:{t.local_track_id}" for t in clean_members))
   ```
-* **Test Verification:** [`tests/test_milestone2_identity_and_recovery.py::test_cross_session_identity_collision_prevention`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/tests/test_milestone2_identity_and_recovery.py) passed.
+* **Test Verification:** [`tests/test_milestone2_identity_and_recovery.py::test_cross_session_identity_collision_prevention`](tests/test_milestone2_identity_and_recovery.py) passed.
 
 ### 3.3 Provisional Expiration, Tombstoning, and Reactivation
 * **Validation:** Verified that when provisional candidates exceed their TTL (default 60s, configurable):
@@ -86,7 +86,7 @@ Inspection of [`ml/reports/five_target_provisional_lifecycle_event_trace.json`](
 
 ## 5. Phase 4 — Long-Duration Stress Test Metrics
 
-A 500-epoch sustained multi-phase mission stress test was executed using [`scripts/run_milestone2_stress_validation.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/scripts/run_milestone2_stress_validation.py).
+A 500-epoch sustained multi-phase mission stress test was executed using [`scripts/run_milestone2_stress_validation.py`](scripts/run_milestone2_stress_validation.py).
 
 ```
 ================================================================================
@@ -118,7 +118,7 @@ xychart-beta
 
 ## 6. Phase 5 — Perception & Geolocation Robustness
 
-Robustness tests in [`tests/test_milestone2_perception_robustness.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/tests/test_milestone2_perception_robustness.py) verified:
+Robustness tests in [`tests/test_milestone2_perception_robustness.py`](tests/test_milestone2_perception_robustness.py) verified:
 
 1. **Altitude Scaling (5m – 40m):**
    - Nadir optical center projection remains directly beneath drone ($\Delta d < 0.01\text{ m}$).
@@ -147,7 +147,7 @@ Robustness tests in [`tests/test_milestone2_perception_robustness.py`](file:///d
   1. **Stationary Hovering Immunity:** Verified that hovering for 15 seconds produces baseline $= 0.0\text{ m}$ and cannot promote the object.
   2. **Baseline Constraint:** Flight translation $< 4.0\text{ m}$ does not promote.
   3. **Duration Constraint:** Tracking duration $< 5.0\text{ s}$ does not promote.
-  4. **Production Gating:** `enable_temporal_parallax_confirmation` is set to `False` by default in [`gfs/config.py`](file:///d:/CityGrid/my-project/PhoneOS_Swarm/gfs/config.py). Repeated single-drone observations remain strictly `PROVISIONAL` until multi-drone association or high confidence ($\ge 0.70$) is achieved.
+  4. **Production Gating:** `enable_temporal_parallax_confirmation` is set to `False` by default in [`gfs/config.py`](gfs/config.py). Repeated single-drone observations remain strictly `PROVISIONAL` until multi-drone association or high confidence ($\ge 0.70$) is achieved.
 
 ---
 

@@ -76,7 +76,7 @@
       "marker_count_after_dup": 0,
       "duplicate_suppression_verified": false,
       "marker_coords": null,
-      "screenshot_path": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\ml\\reports\\airsim_live_phase2_1_gcs_screenshot.png",
+      "screenshot_path": "ml/reports/airsim_live_phase2_1_gcs_screenshot.png",
       "error": null
     }
   },

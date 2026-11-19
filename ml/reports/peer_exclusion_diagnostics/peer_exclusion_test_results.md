@@ -3,8 +3,8 @@
 **Repository:** `DroneSwarm` / `PhoneOS_Swarm`  
 **Branch:** `garbage-detection`  
 **Document ID:** `peer_exclusion_test_results.md`  
-**Associated Audit File:** [peer_exclusion_geometry_audit.md](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/peer_exclusion_geometry_audit.md)  
-**Associated Data File:** [peer_exclusion_geometry_results.json](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/peer_exclusion_geometry_results.json)  
+**Associated Audit File:** [peer_exclusion_geometry_audit.md](ml/reports/peer_exclusion_diagnostics/peer_exclusion_geometry_audit.md)  
+**Associated Data File:** [peer_exclusion_geometry_results.json](ml/reports/peer_exclusion_diagnostics/peer_exclusion_geometry_results.json)  
 **Execution Date:** 2026-11-17  
 
 ---
@@ -77,7 +77,7 @@ The full reproduction suite was executed via:
 python scripts/reproduce_peer_false_detections.py
 ```
 
-### Diagnostic Summary ([summary.md](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/summary.md)):
+### Diagnostic Summary ([summary.md](ml/reports/peer_exclusion_diagnostics/summary.md)):
 - **Total Raw Detections:** 14
 - **Accepted Detections:** 2 (Only Genuine Target 1 and Genuine Target 2)
 - **Rejected Detections:** 11 (All 11 false peer detections blocked by 3D volume filter)

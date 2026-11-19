@@ -310,7 +310,7 @@ def generate_markdown_report(data: Dict, out_file: Path):
     prod = data["frozen_production_evaluation"]
     pbm = prod["per_box_matching"]
 
-    content = f"""# Independent Evaluation Report — UAVVaste Official Test Split
+    content = rf"""# Independent Evaluation Report — UAVVaste Official Test Split
 
 **Repository:** `Debanshu2005/DroneSwarm`  
 **Branch:** `garbage-detection`  

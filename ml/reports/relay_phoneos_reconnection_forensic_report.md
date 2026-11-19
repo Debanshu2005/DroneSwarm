@@ -98,7 +98,7 @@ flowchart TD
 
 ### 3.1 Root Cause 1: Duplicate-IP Mutual Eviction in `relay/relay.py`
 
-**Location:** [relay/relay.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/relay/relay.py#L235-L247)
+**Location:** [relay/relay.py](relay/relay.py#L235-L247)
 
 ```python
 # Prevent duplicate WS connections from the same IP (unless explicitly allowed)
@@ -128,7 +128,7 @@ self.clients.add(websocket)
 
 ### 3.2 Root Cause 2: Ghost Port 8088 in Auto-Connect List
 
-**Location:** [mobile/src/context/DroneContext.jsx](file:///d:/CityGrid/my-project/PhoneOS_Swarm/mobile/src/context/DroneContext.jsx#L254-L257)
+**Location:** [mobile/src/context/DroneContext.jsx](mobile/src/context/DroneContext.jsx#L254-L257)
 
 ```javascript
 // Old code:
@@ -143,7 +143,7 @@ self.clients.add(websocket)
 
 ### 3.3 Root Cause 3: Telemetry Freshness Self-Reinforcing Trap
 
-**Location:** [mobile/src/utils/DroneHealth.js](file:///d:/CityGrid/my-project/PhoneOS_Swarm/mobile/src/utils/DroneHealth.js#L54-L64)
+**Location:** [mobile/src/utils/DroneHealth.js](mobile/src/utils/DroneHealth.js#L54-L64)
 
 ```javascript
 // Old code:
@@ -164,7 +164,7 @@ export function evaluateTelemetryFreshness(drone) {
 2. Notice: `const lastSeen = drone.lastTelemetry || drone.lastSeen || 0;`
    If `drone.lastTelemetry` was populated, JavaScript short-circuited to `drone.lastTelemetry`, ignoring `drone.lastSeen` or `drone.lastHeartbeat`!
 3. If telemetry packets were delayed or paused, `now - drone.lastTelemetry` exceeded 8000ms. `evaluateTelemetryFreshness` returned `'OFFLINE'`.
-4. In [DroneContext.jsx](file:///d:/CityGrid/my-project/PhoneOS_Swarm/mobile/src/context/DroneContext.jsx#L220):
+4. In [DroneContext.jsx](mobile/src/context/DroneContext.jsx#L220):
    ```javascript
    if (freshness === 'OFFLINE') newStatus = 'OFFLINE';
    ```
@@ -174,7 +174,7 @@ export function evaluateTelemetryFreshness(drone) {
 
 ### 3.4 Root Cause 4: Destructive Detection Event Buffer Wiping & Snapshot Flooding
 
-**Location:** [mobile/src/context/DroneContext.jsx](file:///d:/CityGrid/my-project/PhoneOS_Swarm/mobile/src/context/DroneContext.jsx#L278-L284)
+**Location:** [mobile/src/context/DroneContext.jsx](mobile/src/context/DroneContext.jsx#L278-L284)
 
 ```javascript
 // Old code:
@@ -207,7 +207,7 @@ if (status === "CONNECTED") {
 - **Snapshot Request Correlation:** Extracted `request_id` from `gfs_snapshot_request` and echoed it in `gfs_snapshot_response`.
 - **Diagnostic Logging:** Enhanced disconnect logging to record WebSocket close code and reason.
 
-**Updated Starters:** Added `"--allow-duplicate-ips"` to [start_drone1.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/start_drone1.py), [start_drone2.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/start_drone2.py), [start_drone3.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/start_drone3.py), and [start_drone4.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/start_drone4.py).
+**Updated Starters:** Added `"--allow-duplicate-ips"` to [start_drone1.py](start_drone1.py), [start_drone2.py](start_drone2.py), [start_drone3.py](start_drone3.py), and [start_drone4.py](start_drone4.py).
 
 ### 4.2 PhoneOS Networking (`MultiWebSocketManager.js`)
 
@@ -253,7 +253,7 @@ if (status === "CONNECTED") {
 
 ### 5.2 Four-Relay Live Simulation Verification
 
-A dedicated multi-relay stress script ([scripts/verify_relay_phoneos_stability.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/scripts/verify_relay_phoneos_stability.py)) was executed:
+A dedicated multi-relay stress script ([scripts/verify_relay_phoneos_stability.py](scripts/verify_relay_phoneos_stability.py)) was executed:
 - **Relays Started:** 4 concurrent `UdpWebsocketRelay` instances on ports `8081`, `8082`, `8083`, `8084`.
 - **Connections Established:** 5 concurrent WebSocket connections from `127.0.0.1` (including 2 duplicate connections to port 8081).
 - **Disconnection Count:** **0** unexpected closures. All 5 connections remained active simultaneously.
@@ -281,16 +281,16 @@ A dedicated multi-relay stress script ([scripts/verify_relay_phoneos_stability.p
 
 | File | Changes Made |
 |---|---|
-| [relay/relay.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/relay/relay.py) | Added `--allow-duplicate-ips`, `--disallow-duplicate-ips`, `--ws-send-timeout` to CLI parser; defaulted `allow_duplicate_ips=True`; bound send timeout to 3.0s; echoed `request_id` in `gfs_snapshot_response`. |
-| [start_drone1.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/start_drone1.py) | Added `"--allow-duplicate-ips"` to relay launcher arguments. |
-| [start_drone2.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/start_drone2.py) | Added `"--allow-duplicate-ips"` to relay launcher arguments. |
-| [start_drone3.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/start_drone3.py) | Added `"--allow-duplicate-ips"` to relay launcher arguments. |
-| [start_drone4.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/start_drone4.py) | Added `"--allow-duplicate-ips"` to relay launcher arguments. |
-| [mobile/src/networking/MultiWebSocketManager.js](file:///d:/CityGrid/my-project/PhoneOS_Swarm/mobile/src/networking/MultiWebSocketManager.js) | Canonicalized `localhost` to `127.0.0.1` in `normalizeConnectionUrl`; added `sendTo(url, msg)`; filtered out port `8088` in `loadSavedConnections`. |
-| [mobile/src/context/DroneContext.jsx](file:///d:/CityGrid/my-project/PhoneOS_Swarm/mobile/src/context/DroneContext.jsx) | Removed ghost port 8088; preserved `eventBufferRef.current`; implemented targeted snapshot requests with `request_id`; normalized telemetry timestamps. |
-| [mobile/src/utils/DroneHealth.js](file:///d:/CityGrid/my-project/PhoneOS_Swarm/mobile/src/utils/DroneHealth.js) | Replaced fragmented `lastSeen` with `Math.max(...)` across telemetry and heartbeat; eliminated circular `OFFLINE` status check. |
-| [tests/test_cross_language_contract.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/tests/test_cross_language_contract.py) | Added cross-language contract test verifying `DroneHealth` freshness and `MultiWebSocketManager` canonicalization. |
-| [tests/test_relay_duplicate_ip_and_snapshot.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/tests/test_relay_duplicate_ip_and_snapshot.py) | Added automated regression test for duplicate IP coexistence and `request_id` echoing. |
+| [relay/relay.py](relay/relay.py) | Added `--allow-duplicate-ips`, `--disallow-duplicate-ips`, `--ws-send-timeout` to CLI parser; defaulted `allow_duplicate_ips=True`; bound send timeout to 3.0s; echoed `request_id` in `gfs_snapshot_response`. |
+| [start_drone1.py](start_drone1.py) | Added `"--allow-duplicate-ips"` to relay launcher arguments. |
+| [start_drone2.py](start_drone2.py) | Added `"--allow-duplicate-ips"` to relay launcher arguments. |
+| [start_drone3.py](start_drone3.py) | Added `"--allow-duplicate-ips"` to relay launcher arguments. |
+| [start_drone4.py](start_drone4.py) | Added `"--allow-duplicate-ips"` to relay launcher arguments. |
+| [mobile/src/networking/MultiWebSocketManager.js](mobile/src/networking/MultiWebSocketManager.js) | Canonicalized `localhost` to `127.0.0.1` in `normalizeConnectionUrl`; added `sendTo(url, msg)`; filtered out port `8088` in `loadSavedConnections`. |
+| [mobile/src/context/DroneContext.jsx](mobile/src/context/DroneContext.jsx) | Removed ghost port 8088; preserved `eventBufferRef.current`; implemented targeted snapshot requests with `request_id`; normalized telemetry timestamps. |
+| [mobile/src/utils/DroneHealth.js](mobile/src/utils/DroneHealth.js) | Replaced fragmented `lastSeen` with `Math.max(...)` across telemetry and heartbeat; eliminated circular `OFFLINE` status check. |
+| [tests/test_cross_language_contract.py](tests/test_cross_language_contract.py) | Added cross-language contract test verifying `DroneHealth` freshness and `MultiWebSocketManager` canonicalization. |
+| [tests/test_relay_duplicate_ip_and_snapshot.py](tests/test_relay_duplicate_ip_and_snapshot.py) | Added automated regression test for duplicate IP coexistence and `request_id` echoing. |
 
 ---
 

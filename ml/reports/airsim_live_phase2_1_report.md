@@ -86,7 +86,7 @@ The previously reported $4336.3\text{ ms}$ inference latency was an artifact of 
 
 ## 6. Deliverable Artifacts
 
-1. Raw Camera Frame: [airsim_live_phase2_1_raw_frame.jpg](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/airsim_live_phase2_1_raw_frame.jpg)
-2. Annotated Detection Overlay: [airsim_live_phase2_1_detection_overlay.jpg](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/airsim_live_phase2_1_detection_overlay.jpg)
-3. GCS Browser Screenshot: [airsim_live_phase2_1_gcs_screenshot.png](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/airsim_live_phase2_1_gcs_screenshot.png)
-4. Machine-Readable Results: [airsim_live_phase2_1_results.json](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/airsim_live_phase2_1_results.json)
+1. Raw Camera Frame: [airsim_live_phase2_1_raw_frame.jpg](ml/reports/airsim_live_phase2_1_raw_frame.jpg)
+2. Annotated Detection Overlay: [airsim_live_phase2_1_detection_overlay.jpg](ml/reports/airsim_live_phase2_1_detection_overlay.jpg)
+3. GCS Browser Screenshot: [airsim_live_phase2_1_gcs_screenshot.png](ml/reports/airsim_live_phase2_1_gcs_screenshot.png)
+4. Machine-Readable Results: [airsim_live_phase2_1_results.json](ml/reports/airsim_live_phase2_1_results.json)

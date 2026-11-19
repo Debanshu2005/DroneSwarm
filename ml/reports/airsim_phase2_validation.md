@@ -87,13 +87,13 @@ In earlier validation runs, AirSim garbage detection was blocked because:
 ## 5. Artifacts and Deliverables
 
 1. **Machine-Readable Results JSON:**
-   [`ml/reports/airsim_phase2_results.json`](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/airsim_phase2_results.json)
+   [`ml/reports/airsim_phase2_results.json`](ml/reports/airsim_phase2_results.json)
 2. **Unmodified Raw Camera Frame:**
-   [`ml/reports/airsim_phase2_raw_frame.jpg`](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/airsim_phase2_raw_frame.jpg)
+   [`ml/reports/airsim_phase2_raw_frame.jpg`](ml/reports/airsim_phase2_raw_frame.jpg)
 3. **Annotated Detection & Association Overlay:**
-   [`ml/reports/airsim_phase2_detection_overlay.jpg`](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/airsim_phase2_detection_overlay.jpg)
+   [`ml/reports/airsim_phase2_detection_overlay.jpg`](ml/reports/airsim_phase2_detection_overlay.jpg)
 4. **Validation Suite Source:**
-   [`scripts/validate_airsim_phase2.py`](file:///D:/CityGrid/my-project/PhoneOS_Swarm/scripts/validate_airsim_phase2.py)
+   [`scripts/validate_airsim_phase2.py`](scripts/validate_airsim_phase2.py)
 
 ---
 

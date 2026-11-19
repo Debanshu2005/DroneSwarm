@@ -253,11 +253,11 @@ To verify that perceptual and sensor failures do not compromise swarm stability 
 
 ## 8. Summary of Deliverables
 
-1. **AirSim Verification Probe:** [scripts/verify_live_airsim.py](file:///D:/CityGrid/my-project/PhoneOS_Swarm/scripts/verify_live_airsim.py)
-2. **Live AirSim Multi-Drone Perception Script:** [scripts/test_live_airsim_perception.py](file:///D:/CityGrid/my-project/PhoneOS_Swarm/scripts/test_live_airsim_perception.py)
-3. **Multi-Drone Benchmark Suite:** [scripts/benchmark_multi_drone_fusion.py](file:///D:/CityGrid/my-project/PhoneOS_Swarm/scripts/benchmark_multi_drone_fusion.py)
-4. **Multi-Drone Fusion Integration Tests:** [tests/test_multi_drone_perception_fusion.py](file:///D:/CityGrid/my-project/PhoneOS_Swarm/tests/test_multi_drone_perception_fusion.py)
-5. **AirSim Live Probe Artifact:** [ml/reports/live_airsim_probe.json](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/live_airsim_probe.json)
-6. **AirSim Live Execution Artifact:** [ml/reports/live_airsim_execution.json](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/live_airsim_execution.json)
-7. **Multi-Drone Fusion Benchmark Data:** [ml/reports/multi_drone_fusion_benchmark.json](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/multi_drone_fusion_benchmark.json)
-8. **Engineering Report:** [ml/reports/airsim_multi_drone_validation.md](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/airsim_multi_drone_validation.md)
+1. **AirSim Verification Probe:** [scripts/verify_live_airsim.py](scripts/verify_live_airsim.py)
+2. **Live AirSim Multi-Drone Perception Script:** [scripts/test_live_airsim_perception.py](scripts/test_live_airsim_perception.py)
+3. **Multi-Drone Benchmark Suite:** [scripts/benchmark_multi_drone_fusion.py](scripts/benchmark_multi_drone_fusion.py)
+4. **Multi-Drone Fusion Integration Tests:** [tests/test_multi_drone_perception_fusion.py](tests/test_multi_drone_perception_fusion.py)
+5. **AirSim Live Probe Artifact:** [ml/reports/live_airsim_probe.json](ml/reports/live_airsim_probe.json)
+6. **AirSim Live Execution Artifact:** [ml/reports/live_airsim_execution.json](ml/reports/live_airsim_execution.json)
+7. **Multi-Drone Fusion Benchmark Data:** [ml/reports/multi_drone_fusion_benchmark.json](ml/reports/multi_drone_fusion_benchmark.json)
+8. **Engineering Report:** [ml/reports/airsim_multi_drone_validation.md](ml/reports/airsim_multi_drone_validation.md)

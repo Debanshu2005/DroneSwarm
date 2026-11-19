@@ -3,7 +3,7 @@
 **Repository:** `DroneSwarm` / `PhoneOS_Swarm`  
 **Branch:** `garbage-detection`  
 **Document ID:** `peer_exclusion_geometry_audit.md`  
-**Associated Results File:** [peer_exclusion_geometry_results.json](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/peer_exclusion_geometry_results.json)  
+**Associated Results File:** [peer_exclusion_geometry_results.json](ml/reports/peer_exclusion_diagnostics/peer_exclusion_geometry_results.json)  
 **Investigation Date:** 2026-11-16  
 
 ---

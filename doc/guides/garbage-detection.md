@@ -63,17 +63,17 @@ Evaluated on the untouched official test split at resolution $1280 \times 1280$:
 
 ## 3. Empirical Confidence Threshold Trade-Offs
 
-The confidence threshold trade-off was evaluated systematically on the **validation split** (116 images, 616 instances) using `ml/uavvaste/evaluate_thresholds.py`:
+The confidence threshold trade-off was evaluated systematically on the **validation split** (116 images, 616 instances) using `ml/uavvaste/evaluate_thresholds.py` (measured at high-resolution `imgsz = 1280`):
 
 | Confidence | Precision | Recall | F1 Score | Est. TP | Est. FP | Est. FN | FP Reduction |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | 0.25 | 88.37% | 76.95% | 0.8227 | 474 | 62 | 142 | Base |
 | 0.30 | 88.37% | 76.95% | 0.8227 | 474 | 62 | 142 | 0.0% |
-| **0.35 (Default)** | **88.07%** | **77.89%** | **0.8267** | **480** | **65** | **136** | **Reference** |
+| **0.35 (Exploration)** | **88.07%** | **77.89%** | **0.8267** | **480** | **65** | **136** | **Reference** |
 | 0.40 | 88.56% | 76.62% | 0.8216 | 472 | 61 | 144 | -6.2% |
 | 0.45 | 90.25% | 75.16% | 0.8202 | 463 | 50 | 153 | -23.1% |
 | **0.50 (Recommended)** | **92.28%** | **73.70%** | **0.8195** | **454** | **38** | **162** | **-41.5%** |
-| **0.55 (High Prec)** | **93.99%** | **71.10%** | **0.8096** | **438** | **28** | **178** | **-56.9%** |
+| **0.55 (Production)** | **93.99%** | **71.10%** | **0.8096** | **438** | **28** | **178** | **-56.9%** |
 | 0.60 | 94.70% | 66.72% | 0.7829 | 411 | 23 | 205 | -64.6% |
 | 0.65 | 95.96% | 61.69% | 0.7510 | 380 | 16 | 236 | -75.4% |
 | 0.70 | 97.19% | 50.49% | 0.6645 | 311 | 9 | 305 | -86.2% |
@@ -130,7 +130,7 @@ enabled: false          # Keep disabled by default; set true to activate
 source: "airsim"        # "airsim" | "opencv" | "folder"
 weights: "models/garbage.pt"
 imgsz: 640              # 640 for edge/RPi5 efficiency, 1280 for max detail
-confidence: 0.35        # Starting confidence threshold (use 0.50 for high precision)
+confidence: 0.55        # Deployed production baseline (0.35 for exploration)
 iou: 0.5                # NMS IoU threshold
 device: null            # null for auto-detect (cuda:0 if available, else cpu)
 classes: null           # null for all classes, or ["rubbish"]
@@ -140,7 +140,7 @@ max_tilt_deg: 20.0      # Max roll/pitch tilt allowed for nadir projection
 max_range_m: 120.0      # Maximum valid ground projection distance
 ground_elevation_m: 0.0 # Elevation of target ground plane in meters
 merge_radius_m: 2.5     # Ground distance radius for temporal association
-peer_exclusion_radius_m: 2.0 # 3D ray-to-peer CPA exclusion cylinder radius (meters)
+peer_exclusion_radius_m: 4.0 # 3D ray-to-peer CPA exclusion cylinder radius (meters)
 max_telemetry_age_s: 2.0 # Maximum peer telemetry age before marking DEFERRED
 min_hits: 2             # Hits required to confirm a track (suppresses single-frame noise)
 update_interval_s: 10.0 # Throttle interval between track update broadcasts

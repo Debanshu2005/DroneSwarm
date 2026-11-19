@@ -3,8 +3,8 @@
 **Audit Date:** 2026-11-16  
 **Auditor:** Independent Forensic Reviewer (Antigravity Core Systems)  
 **Target Mission:** Phase 3 Live Four-Drone Collaborative Perception Validation  
-**Primary Mission Report:** [`ml/reports/live_airsim_collaborative_perception/phase3_live_four_drone_collaborative_perception_report.md`](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/live_airsim_collaborative_perception/phase3_live_four_drone_collaborative_perception_report.md)  
-**Evidence Directory:** [`ml/reports/live_airsim_collaborative_perception/`](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/live_airsim_collaborative_perception/)  
+**Primary Mission Report:** [`ml/reports/live_airsim_collaborative_perception/phase3_live_four_drone_collaborative_perception_report.md`](ml/reports/live_airsim_collaborative_perception/phase3_live_four_drone_collaborative_perception_report.md)  
+**Evidence Directory:** [`ml/reports/live_airsim_collaborative_perception/`](ml/reports/live_airsim_collaborative_perception/)  
 **Final Audit Verdict:** **PASS WITH QUALIFICATIONS**
 
 ---
@@ -179,8 +179,8 @@ The primary report stated that 189 outbox events were forwarded. The database sc
 
 - At initial mission startup ($T = 0$), the GCS browser connected to Relay port 8088. Because no global tracks existed yet in `gfs.db`, Relay responded with an initial snapshot containing `watermark = 0` and `active = []`.
 - During the flight loop, real-time WebSocket events were broadcast to the GCS.
-- At mission completion, [`scripts/verify_gcs_render.py`](file:///D:/CityGrid/my-project/PhoneOS_Swarm/scripts/verify_gcs_render.py) connected to the running Chrome instance over Chrome DevTools Protocol (CDP port 9222) and verified that the Leaflet DOM contained **exactly two** elements with class `.custom-garbage-marker`.
-- The live DOM screenshot [`ml/reports/live_airsim_collaborative_perception/gcs_map_verification.png`](file:///D:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/live_airsim_collaborative_perception/gcs_map_verification.png) (243,536 bytes) confirms both targets rendered with correct status and coordinates.
+- At mission completion, [`scripts/verify_gcs_render.py`](scripts/verify_gcs_render.py) connected to the running Chrome instance over Chrome DevTools Protocol (CDP port 9222) and verified that the Leaflet DOM contained **exactly two** elements with class `.custom-garbage-marker`.
+- The live DOM screenshot [`ml/reports/live_airsim_collaborative_perception/gcs_map_verification.png`](ml/reports/live_airsim_collaborative_perception/gcs_map_verification.png) (243,536 bytes) confirms both targets rendered with correct status and coordinates.
 
 ---
 

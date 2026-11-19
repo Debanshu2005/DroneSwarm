@@ -244,7 +244,7 @@ When a detection occurs along a camera ray that pierces an airborne peer drone's
 
 ## 9. Test Verification Results
 
-Five new dedicated tests were added to [tests/test_peer_exclusion_depth_ambiguity.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/tests/test_peer_exclusion_depth_ambiguity.py) to formally verify every aspect of this review:
+Five new dedicated tests were added to [tests/test_peer_exclusion_depth_ambiguity.py](tests/test_peer_exclusion_depth_ambiguity.py) to formally verify every aspect of this review:
 
 1. `test_exact_camera_ray_depth_ordering_scenario2`:  
    Formally verifies $s_{\text{cam}} (0) < s_{\text{fg}} (10) < s_{\text{peer}} (15) < s_{\text{ground}} (20)$ and confirms that peer drone cannot physically occlude foreground garbage.

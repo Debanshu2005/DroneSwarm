@@ -1,7 +1,7 @@
 {
   "generated_at": "2026-11-16T18:33:56Z",
-  "output_directory": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\ml\\reports\\peer_exclusion_diagnostics",
-  "events_log": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\ml\\reports\\peer_exclusion_diagnostics\\events.jsonl",
+  "output_directory": "ml/reports/peer_exclusion_diagnostics",
+  "events_log": "ml/reports/peer_exclusion_diagnostics/events.jsonl",
   "metrics": {
     "total_raw_detections": 14,
     "accepted_detections": 2,

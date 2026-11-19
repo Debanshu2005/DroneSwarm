@@ -487,7 +487,7 @@ During the audit, six engineering defects were discovered and remediated:
 | Defect ID | Component | Defect Description | Root Cause | Remediation Applied |
 |---|---|---|---|---|
 | **DEF-01** | `ml/uavvaste` | Windows shared memory crash (Error 1455) & CUDA OOM during batch evaluation | Ultralytics default validation batch size and multi-process workers exceeded Windows paging file | Modified validation invocation to `batch=2, workers=0` with explicit `torch.cuda.empty_cache()` |
-| **DEF-02** | `pytest.ini` | Test runner collected parent directory `D:\CityGrid` causing 13 collection errors | Missing repository-level pytest root configuration | Created root `pytest.ini` with strict `testpaths` (`DroneOS/tests`, `tests`, `ml/tests`) |
+| **DEF-02** | `pytest.ini` | Test runner collected parent directory causing 13 collection errors | Missing repository-level pytest root configuration | Created root `pytest.ini` with strict `testpaths` (`DroneOS/tests`, `tests`, `ml/tests`) |
 | **DEF-03** | `scripts` | Pytest namespace collision on `fix_test.py` | Duplicate module name between root and scripts | Renamed `scripts/fix_test.py` to `scripts/fix_collision_test.py` |
 | **DEF-04** | `detector.py` | Lack of defensive checks for inverted coordinates and NaN values | Direct trust of external inference bounding box arrays | Added NaN/Inf rejection, coordinate sorting `(min, max)`, boundary clipping, and zero-area rejection |
 | **DEF-05** | `test_stage_b` | SyntaxError due to malformed `@pytest.mark.asyncio async def` | Duplicate test definition with invalid decorator syntax | Corrected function definition and decorator order in `test_stage_b.py` |

@@ -34,10 +34,10 @@ To maintain strict scientific and forensic validity, the testing results are cat
 
 | Layer | Environment | Scope | Status | Result Artifacts |
 | :--- | :--- | :--- | :--- | :--- |
-| **1. Automated Suite** | Pytest unit/regression | Ray geometry, vector transformations, mathematical invariants | **PASS** (222 / 222 passed) | [test_peer_exclusion_3d_comprehensive.py](file:///d:/CityGrid/my-project/PhoneOS_Swarm/tests/test_peer_exclusion_3d_comprehensive.py) |
-| **2. Headless Simulation** | Synthetic telemetry & mock frames | Multi-drone formation sweeps, edge cases, telemetry dropouts | **PASS** (11 / 11 scenarios) | [peer_exclusion_test_results.md](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/peer_exclusion_test_results.md) |
-| **3. Live AirSim Visual** | `UE4Editor` (PID 32296) RPC `127.0.0.1:41451` | Live nadir camera acquisition from `bottom_center`, physical drone meshes, real scenery | **PASS** (12 / 12 scenarios) | [live_airsim_peer_exclusion_metrics.json](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/live_airsim_peer_exclusion_metrics.json) |
-| **4. PhoneOS Integration** | Live Relay WebSocket `ws://127.0.0.1:8088` | End-to-end packet delivery from GFS through Relay to Mobile GCS | **PASS** (0 phantoms, 2 confirmed) | [live_relay_acks.db](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/live_relay_acks.db) |
+| **1. Automated Suite** | Pytest unit/regression | Ray geometry, vector transformations, mathematical invariants | **PASS** (222 / 222 passed) | [test_peer_exclusion_3d_comprehensive.py](tests/test_peer_exclusion_3d_comprehensive.py) |
+| **2. Headless Simulation** | Synthetic telemetry & mock frames | Multi-drone formation sweeps, edge cases, telemetry dropouts | **PASS** (11 / 11 scenarios) | [peer_exclusion_test_results.md](ml/reports/peer_exclusion_diagnostics/peer_exclusion_test_results.md) |
+| **3. Live AirSim Visual** | `UE4Editor` (PID 32296) RPC `127.0.0.1:41451` | Live nadir camera acquisition from `bottom_center`, physical drone meshes, real scenery | **PASS** (12 / 12 scenarios) | [live_airsim_peer_exclusion_metrics.json](ml/reports/peer_exclusion_diagnostics/live_airsim_peer_exclusion_metrics.json) |
+| **4. PhoneOS Integration** | Live Relay WebSocket `ws://127.0.0.1:8088` | End-to-end packet delivery from GFS through Relay to Mobile GCS | **PASS** (0 phantoms, 2 confirmed) | [live_relay_acks.db](ml/reports/peer_exclusion_diagnostics/live_relay_acks.db) |
 
 ---
 
@@ -75,14 +75,14 @@ For every detected bounding box center $(u, v)$:
 - **Target 1:** NED $(19.13, 4.42, 0.0)$, GPS $(47.641640, -122.140106)$
 - **Target 2:** NED $(16.33, 9.71, 0.0)$, GPS $(47.641615, -122.140036)$
 - **Screenshots Captured:**
-  - [live_airsim_scenario2_target1.png](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/live_airsim_scenario2_target1.png)
-  - [live_airsim_scenario2_target2.png](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/live_airsim_scenario2_target2.png)
+  - [live_airsim_scenario2_target1.png](ml/reports/peer_exclusion_diagnostics/live_airsim_scenario2_target1.png)
+  - [live_airsim_scenario2_target2.png](ml/reports/peer_exclusion_diagnostics/live_airsim_scenario2_target2.png)
 - **GFS Fusion Count:** Exactly 2 confirmed global objects (`G-7bfd38df` and `G-2cfc8b87`).
 - **Result:** **PASS**.
 
 ### Scenario 3: Swarm Formation Maneuvering
 - **Maneuver:** 4-drone dynamic `V` formation at spacing $12.0\text{ m}$.
-- **Screenshot Captured:** [live_airsim_scenario3_formation.png](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/live_airsim_scenario3_formation.png)
+- **Screenshot Captured:** [live_airsim_scenario3_formation.png](ml/reports/peer_exclusion_diagnostics/live_airsim_scenario3_formation.png)
 - **Result:** **PASS**.
 
 ### Scenario 4: Direct Vertical Overlap (Drone 1 at 15 m over Drone 2 at 5 m)
@@ -90,7 +90,7 @@ For every detected bounding box center $(u, v)$:
 - **Evaluated Geometry:** Forward depth $s^* = 10.00\text{ m}$, CPA $d_\perp = 0.000\text{ m} < 2.00\text{ m}$.
 - **Decision:** `REJECTED` (`REJECTED_PEER_EXCLUSION_MATCH_3D`).
 - **GFS Target Count:** Strictly 2 (0 phantom objects created).
-- **Screenshot Captured:** [live_airsim_scenario4_vertical_d1_over_d2.png](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/live_airsim_scenario4_vertical_d1_over_d2.png)
+- **Screenshot Captured:** [live_airsim_scenario4_vertical_d1_over_d2.png](ml/reports/peer_exclusion_diagnostics/live_airsim_scenario4_vertical_d1_over_d2.png)
 - **Result:** **PASS**.
 
 ### Scenario 5: Reverse Vertical Overlap (Drone 2 at 15 m over Drone 1 at 5 m)
@@ -98,7 +98,7 @@ For every detected bounding box center $(u, v)$:
 - **Evaluated Geometry:** Forward depth $s^* = 10.00\text{ m}$, CPA $d_\perp = 0.000\text{ m} < 2.00\text{ m}$.
 - **Decision:** `REJECTED` (`REJECTED_PEER_EXCLUSION_MATCH_3D`).
 - **GFS Target Count:** Strictly 2.
-- **Screenshot Captured:** [live_airsim_scenario5_vertical_d2_over_d1.png](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/live_airsim_scenario5_vertical_d2_over_d1.png)
+- **Screenshot Captured:** [live_airsim_scenario5_vertical_d2_over_d1.png](ml/reports/peer_exclusion_diagnostics/live_airsim_scenario5_vertical_d2_over_d1.png)
 - **Result:** **PASS**.
 
 ### Scenario 6: Horizontal & Vertical Separation Sweep
@@ -123,7 +123,7 @@ For every detected bounding box center $(u, v)$:
 ### Scenario 7: Dynamic Trajectory Crossing Flight Test
 - **Trajectory:** Drone 3 moving $+X$ ($2\to 18\text{ m}$) at $Z = -10\text{ m}$; Drone 4 moving $-X$ ($18\to 2\text{ m}$) at $Z = -15\text{ m}$.
 - **Result:** **PASS**. In-flight crossing intercepted and rejected with 0 phantom targets.
-- **Screenshot Captured:** [live_airsim_scenario7_crossing.png](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/live_airsim_scenario7_crossing.png)
+- **Screenshot Captured:** [live_airsim_scenario7_crossing.png](ml/reports/peer_exclusion_diagnostics/live_airsim_scenario7_crossing.png)
 
 ### Scenario 8: Standby & Disarmed Peer Handling
 - **Configuration:** Drone 3 disarmed on ground ($Z = 0.0\text{ m}$); Drone 1 observing from $Z = -10.0\text{ m}$.
@@ -141,7 +141,7 @@ For every detected bounding box center $(u, v)$:
 - **Configuration:** Target 1 at $(19.13, 4.42, 0.0)$. Drone 1 observing from $(19.13, 4.42, -10.0)$. Drone 2 stationed at $(19.13, 7.92, -5.0)$ ($3.5\text{ m}$ horizontal separation).
 - **Evaluation:** Perpendicular CPA $d_\perp = 3.50\text{ m} > 2.00\text{ m}$ exclusion radius.
 - **Decision:** **`ACCEPTED`** (`ACCEPTED_NO_PEER_MATCH`).
-- **Screenshot Captured:** [live_airsim_scenario10_target_near_peer.png](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/live_airsim_scenario10_target_near_peer.png)
+- **Screenshot Captured:** [live_airsim_scenario10_target_near_peer.png](ml/reports/peer_exclusion_diagnostics/live_airsim_scenario10_target_near_peer.png)
 - **Result:** **PASS**. Genuine target within 3.5 m of a peer drone remains completely detectable.
 
 ### Scenario 11: PhoneOS / GCS Live Integration Verification
@@ -171,7 +171,7 @@ For every detected bounding box center $(u, v)$:
 
 ## 5. Quantitative Diagnostic Metrics Summary
 
-From [live_airsim_peer_exclusion_metrics.json](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/live_airsim_peer_exclusion_metrics.json) and [live_airsim_peer_exclusion_events.jsonl](file:///d:/CityGrid/my-project/PhoneOS_Swarm/ml/reports/peer_exclusion_diagnostics/live_airsim_peer_exclusion_events.jsonl):
+From [live_airsim_peer_exclusion_metrics.json](ml/reports/peer_exclusion_diagnostics/live_airsim_peer_exclusion_metrics.json) and [live_airsim_peer_exclusion_events.jsonl](ml/reports/peer_exclusion_diagnostics/live_airsim_peer_exclusion_events.jsonl):
 
 - **Total Diagnostic Events Logged:** 13,523 events
 - **Total Raw Detections:** 24

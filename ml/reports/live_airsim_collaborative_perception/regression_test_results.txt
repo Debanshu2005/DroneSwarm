@@ -5,12 +5,12 @@
 ============================== warnings summary ===============================
 tests/test_single_drone_airsim_validation.py::test_truthful_offline_reporting_contract
 tests/test_single_drone_airsim_validation.py::test_truthful_offline_reporting_contract
-  D:\CityGrid\my-project\PhoneOS_Swarm\.venv-gpu\Lib\site-packages\msgpack\fallback.py:717: PendingDeprecationWarning: encoding is deprecated, Use raw=False instead.
+  .venv-gpu/Lib/site-packages/msgpack/fallback.py:717: PendingDeprecationWarning: encoding is deprecated, Use raw=False instead.
     warnings.warn(
 
 tests/test_single_drone_airsim_validation.py::test_truthful_offline_reporting_contract
 tests/test_single_drone_airsim_validation.py::test_truthful_offline_reporting_contract
-  D:\CityGrid\my-project\PhoneOS_Swarm\.venv-gpu\Lib\site-packages\msgpack\fallback.py:220: PendingDeprecationWarning: encoding is deprecated, Use raw=False instead.
+  .venv-gpu/Lib/site-packages/msgpack/fallback.py:220: PendingDeprecationWarning: encoding is deprecated, Use raw=False instead.
     warnings.warn(
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html

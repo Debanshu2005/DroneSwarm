@@ -74,6 +74,6 @@
   "gcs_browser": {
     "connected": true,
     "rendered_markers_count": 2,
-    "screenshot_path": "D:\\CityGrid\\my-project\\PhoneOS_Swarm\\ml\\reports\\live_airsim_collaborative_perception\\gcs_map_verification.png"
+    "screenshot_path": "ml/reports/live_airsim_collaborative_perception/gcs_map_verification.png"
   }
 }
