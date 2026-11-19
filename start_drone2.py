@@ -67,6 +67,15 @@ def wait_for_relay_ready(relay_proc, host: str, port: int, timeout: float = 5.0)
 
 
 def main():
+    if "--perception" in sys.argv:
+        os.environ["DRONEOS_PERCEPTION"] = "1"
+        sys.argv.remove("--perception")
+    elif "--no-perception" in sys.argv:
+        os.environ["DRONEOS_PERCEPTION"] = "0"
+        sys.argv.remove("--no-perception")
+    elif "DRONEOS_PERCEPTION" not in os.environ:
+        os.environ["DRONEOS_PERCEPTION"] = "1"
+
     if "DRONEOS_PROFILE" not in os.environ and sys.platform.startswith("win"):
         os.environ["DRONEOS_PROFILE"] = "test"
     config_dir = Path(__file__).resolve().parent / "DroneOS1" / "configs"

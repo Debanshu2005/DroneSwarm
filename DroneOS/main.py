@@ -152,6 +152,13 @@ class DroneOSApp:
         env_perc = os.environ.get("DRONEOS_PERCEPTION")
         if env_perc is not None:
             self.perception_cfg.enabled = env_perc.strip().lower() in ("1", "true", "yes")
+
+        # Perception Preflight Check
+        repo_root = Path(__file__).resolve().parent.parent
+        from DroneOS.perception.preflight import run_perception_preflight, PerceptionStatus
+        st, rsn = run_perception_preflight(self.perception_cfg, repo_root)
+        self._perception_preflight_status = st
+        self._perception_preflight_reason = rsn
         
         # Configuration Validation
         from DroneOS.shared.config.models import AppConfig
@@ -359,7 +366,8 @@ class DroneOSApp:
             self.network,
             self.flight_controller,
             self.swarm_manager,
-            self.mission_manager
+            self.mission_manager,
+            perception_status_fn=self.get_perception_status,
         )
         # Inject SwarmMembership into FlightManager for formation logic
         self.flight_manager.set_swarm_manager(self.swarm_manager)
@@ -391,6 +399,27 @@ class DroneOSApp:
 
         # Register network callbacks
         self.network.register_callback(self._on_message_received)
+
+    def get_perception_status(self):
+        """Return current perception status (OK / DEGRADED / DISABLED + reason)."""
+        from DroneOS.perception.preflight import PerceptionStatus
+        if not getattr(self, "perception_cfg", None) or not self.perception_cfg.enabled:
+            return PerceptionStatus("DISABLED", "perception disabled in configuration")
+
+        pipeline = getattr(self, "perception_pipeline", None)
+        if pipeline is not None:
+            detector = getattr(pipeline, "detector", None)
+            if detector is not None and hasattr(detector, "get_status"):
+                st, rsn = detector.get_status()
+                return PerceptionStatus(st, rsn)
+            if detector is not None and getattr(detector, "_available", False):
+                return PerceptionStatus("OK", "")
+            if getattr(pipeline, "last_rejection_reason", None) == "DETECTOR_NOT_LOADED":
+                return PerceptionStatus("DEGRADED", "detector not loaded")
+            if getattr(pipeline, "_disabled_by_error", False):
+                return PerceptionStatus("DEGRADED", getattr(pipeline, "last_rejection_reason", "pipeline error") or "pipeline error")
+
+        return PerceptionStatus(self._perception_preflight_status, self._perception_preflight_reason)
 
     def _dispatch_task(self, coro):
         import asyncio

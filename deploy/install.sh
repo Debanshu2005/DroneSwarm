@@ -55,6 +55,16 @@ echo ""
 echo "Configuring hardware device permissions (dialout, video)..."
 sudo usermod -a -G dialout,video "$CURRENT_USER" || true
 
+# Install dependencies if Python virtual environment exists
+echo "Installing and updating Python dependencies..."
+if [ -f "$WORK_DIR/requirements.txt" ]; then
+    echo "Installing requirements from $WORK_DIR/requirements.txt..."
+    "$VENV_PYTHON" -m pip install --upgrade -r "$WORK_DIR/requirements.txt" || echo "Warning: pip install encountered non-fatal issues."
+elif [ -f "$WORK_DIR/DroneOS/requirements.txt" ]; then
+    echo "Installing requirements from $WORK_DIR/DroneOS/requirements.txt..."
+    "$VENV_PYTHON" -m pip install --upgrade -r "$WORK_DIR/DroneOS/requirements.txt" || echo "Warning: pip install encountered non-fatal issues."
+fi
+
 # Generate service file from template
 echo "Generating systemd service from template..."
 sed -e "s|__DRONE_NUM__|$DRONE_NUM|g" \

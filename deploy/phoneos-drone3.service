@@ -8,6 +8,7 @@ Type=simple
 User=pi4
 WorkingDirectory=/home/pi4/DroneSwarm
 Environment="PYTHONPATH=/home/pi4/DroneSwarm"
+Environment="DRONEOS_PERCEPTION=1"
 
 # Resource constraints for Pi 3B (1GB RAM)
 CPUQuota=80%

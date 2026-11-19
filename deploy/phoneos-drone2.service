@@ -8,6 +8,7 @@ Type=simple
 User=pi2
 WorkingDirectory=/home/pi2/Projects/PhoneOS
 Environment="PYTHONPATH=/home/pi2/Projects/PhoneOS"
+Environment="DRONEOS_PERCEPTION=1"
 
 # Resource constraints for Pi 3B (1GB RAM)
 CPUQuota=80%

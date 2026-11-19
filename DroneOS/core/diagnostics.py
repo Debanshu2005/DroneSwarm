@@ -40,24 +40,30 @@ class RuntimeDiagnostics:
                 temp_c = float(f.read().strip()) / 1000.0
         except Exception as e:
             logger.debug(f"Failed to read Pi temperature (likely not on Pi hardware): {e}")
+        try:
+            tasks_count = len(asyncio.all_tasks())
+        except RuntimeError:
+            tasks_count = 0
+
         return {
             "cpu_percent": psutil.cpu_percent(interval=None),
             "memory_mb": process.memory_info().rss / (1024 * 1024),
-            "async_tasks": len(asyncio.all_tasks()),
+            "async_tasks": tasks_count,
             "threads": process.num_threads(),
             "temperature_c": temp_c
         }
 
 class SystemHealthReporter:
     """Aggregates sub-reporters into a unified diagnostic status."""
-    def __init__(self, network, flight_controller, swarm_manager, mission_manager):
+    def __init__(self, network, flight_controller, swarm_manager, mission_manager, perception_status_fn=None):
         self.network = network
         self.fc = flight_controller
         self.swarm = swarm_manager
         self.mission = mission_manager
+        self.perception_status_fn = perception_status_fn
 
     def get_full_report(self) -> Dict[str, Any]:
-        return {
+        report = {
             "system": RuntimeDiagnostics.get_system_metrics(),
             "network": {
                 "active_tasks": len(self.network._active_tasks) if hasattr(self.network, "_active_tasks") else 0,
@@ -74,3 +80,10 @@ class SystemHealthReporter:
                 "status": self.mission.status.state if hasattr(self.mission, "status") else "UNKNOWN"
             }
         }
+        if self.perception_status_fn is not None:
+            try:
+                report["perception_status"] = self.perception_status_fn()
+            except Exception as e:
+                logger.error(f"Error reading perception status: {e}")
+                report["perception_status"] = {"status": "DEGRADED", "reason": f"status check error: {e}"}
+        return report

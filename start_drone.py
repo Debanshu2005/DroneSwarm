@@ -13,6 +13,15 @@ from DroneOS2.shared.config.loader import load_yaml_config
 from DroneOS2.shared.config.models import DroneConfig, FlightConfig
 
 def main():
+    if "--perception" in sys.argv:
+        os.environ["DRONEOS_PERCEPTION"] = "1"
+        sys.argv.remove("--perception")
+    elif "--no-perception" in sys.argv:
+        os.environ["DRONEOS_PERCEPTION"] = "0"
+        sys.argv.remove("--no-perception")
+    elif "DRONEOS_PERCEPTION" not in os.environ:
+        os.environ["DRONEOS_PERCEPTION"] = "1"
+
     project_root = Path(__file__).resolve().parent
     config_dir = Path(__file__).resolve().parent / "DroneOS2" / "configs"
     drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
