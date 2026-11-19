@@ -127,6 +127,8 @@ def simulate_multi_frame_evaluation(
                 update_interval_s=10.0,
                 max_tracks=2000,
                 unconfirmed_ttl_s=30.0,
+                min_temporal_separation_s=2.0,
+                min_drone_displacement_m=1.5,
             )
 
             # Generate true ground targets for this sequence
@@ -156,6 +158,10 @@ def simulate_multi_frame_evaluation(
 
             for frame_idx in range(frames_per_seq):
                 current_time = seq_time_start + (frame_idx / fps)
+                # Drone moves forward along transect at 3.0 m/s
+                drone_dn = frame_idx * (3.0 / fps)
+                sim_drone_lat = base_lat + (drone_dn / 111139.0)
+                sim_drone_lon = base_lon
                 frame_detections: List[GeoreferencedDetection] = []
 
                 # 1. Check which GT targets are within field of view and detected
@@ -176,6 +182,8 @@ def simulate_multi_frame_evaluation(
                                     lat=meas_lat,
                                     lon=meas_lon,
                                     altitude_agl=10.0,
+                                    drone_lat=sim_drone_lat,
+                                    drone_lon=sim_drone_lon,
                                 )
                             )
 
@@ -196,6 +204,8 @@ def simulate_multi_frame_evaluation(
                             lat=fp_lat,
                             lon=fp_lon,
                             altitude_agl=10.0,
+                            drone_lat=sim_drone_lat,
+                            drone_lon=sim_drone_lon,
                         )
                     )
 

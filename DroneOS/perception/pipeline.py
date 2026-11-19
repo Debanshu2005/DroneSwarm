@@ -3,7 +3,7 @@
 import asyncio
 import math
 import time
-from typing import List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 
 from DroneOS.perception.aggregator import GeoreferencedDetection, TrackAggregator
 from DroneOS.perception.detector import GarbageDetector
@@ -57,6 +57,8 @@ class PerceptionPipeline:
             min_hits=getattr(config, "min_hits", 2),
             update_interval_s=getattr(config, "update_interval_s", 10.0),
             max_tracks=getattr(config, "max_tracks", 2000),
+            min_temporal_separation_s=getattr(config, "min_temporal_separation_s", 2.0),
+            min_drone_displacement_m=getattr(config, "min_drone_displacement_m", 1.5),
         )
 
         self._running = False
@@ -65,6 +67,7 @@ class PerceptionPipeline:
         self._disabled_by_error = False
         self.last_rejection_reason: Optional[str] = None
         self.last_step_stats: dict = {}
+        self._deferred_buffer: List[Dict[str, Any]] = []
 
     async def start(self) -> None:
         """Start perception loop as an isolated asyncio task."""
@@ -141,9 +144,8 @@ class PerceptionPipeline:
             self.last_rejection_reason = "DETECTOR_NOT_LOADED"
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
             if not getattr(self, "_load_failed_logged", False):
-                logger.error("Perception detector failed to load (missing weights or ultralytics); stopping perception loop.")
+                logger.error("Perception detector not loaded; retrying with backoff.")
                 self._load_failed_logged = True
-            self._running = False
             return
 
         # 2. Early telemetry gating BEFORE acquiring a frame
@@ -273,9 +275,16 @@ class PerceptionPipeline:
             return
 
         self.last_step_stats["raw_detections"] = len(detections) if detections else 0
-        if not detections:
+        now_curr = time.time()
+
+        # Re-evaluate previously deferred detections buffered from recent frames
+        recovered_from_buffer = self._process_deferred_buffer(now_curr)
+
+        if not detections and not recovered_from_buffer:
             self.last_rejection_reason = "ZERO_DETECTIONS"
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
+            # Fix ZERO_DETECTIONS path: aggregator still gets a prune/tick call with empty list
+            self.aggregator.update([], now=frame.timestamp)
             return
 
         self._frame_id += 1
@@ -284,9 +293,10 @@ class PerceptionPipeline:
 
         # 5. Geolocation
         geo_dets: List[GeoreferencedDetection] = []
-        now_curr = time.time()
+        if recovered_from_buffer:
+            geo_dets.extend(recovered_from_buffer)
 
-        for det_idx, det in enumerate(detections):
+        for det_idx, det in enumerate(detections or []):
             trace_id = f"{self.drone_id}-f{self._frame_id}-d{det_idx}-{int(now_curr*1000)}"
             x1, y1, x2, y2 = det.bbox_xyxy
             bbox_list = [round(float(c), 2) for c in (x1, y1, x2, y2)]
@@ -361,108 +371,25 @@ class PerceptionPipeline:
                 yaw_deg=yaw,
             )
 
-            # Peer Drone Exclusion Filter (3D Ray-to-Volume) Diagnostics & Evaluation:
-            registry_contents: List[str] = []
-            peers_eval: List[Dict[str, Any]] = []
-            is_peer = False
-            matched_peer_id = None
-            matched_dist = None
-            exclusion_reason = "ACCEPTED_GENUINE_TARGET"
-            decision = "ACCEPTED"
-            exclusion_radius_3d = min(float(self.peer_exclusion_radius_m), 2.5)  # 2.0m-2.5m physical bounding volume
-
-            unpositioned_or_stale_peers: List[str] = []
-
-            if self.swarm_manager and hasattr(self.swarm_manager, "registry"):
-                registry_contents = list(self.swarm_manager.registry.peers.keys())
-                for peer in self.swarm_manager.registry.peers.values():
-                    p_id = getattr(peer, "drone_id", "unknown")
-                    p_active = getattr(peer, "is_active", True)
-                    p_lat = getattr(peer, "lat", None)
-                    p_lon = getattr(peer, "lon", None)
-                    p_alt = getattr(peer, "alt", 0.0) or 0.0
-                    last_pos_time = getattr(peer, "last_position_time", None)
-                    pos_age = (now_curr - last_pos_time) if last_pos_time is not None else None
-                    max_age = float(getattr(self.config, "max_telemetry_age_s", 2.0))
-                    is_stale = (pos_age is not None and pos_age > max_age)
-                    has_pos = (p_lat is not None and p_lon is not None)
-
-                    if not has_pos or is_stale:
-                        unpositioned_or_stale_peers.append(p_id)
-
-                    dist_3d_perp = None
-                    s_depth = None
-                    eligible = has_pos and not is_stale
-
-                    if has_pos and ray_ned is not None:
-                        # Vector from observing drone to peer in NED
-                        p_dn, p_de = lat_lon_to_meters(p_lat, p_lon, drone_lat, drone_lon)
-                        p_dd = -(p_alt - alt)  # Down is positive in NED
-                        s_depth, dist_3d_perp = compute_ray_to_point_cpa(ray_ned, (p_dn, p_de, p_dd))
-
-                    peer_summary = {
-                        "peer_id": p_id,
-                        "is_active": p_active,
-                        "lat": p_lat,
-                        "lon": p_lon,
-                        "alt": p_alt,
-                        "has_position": has_pos,
-                        "last_position_time": last_pos_time,
-                        "position_age_s": round(pos_age, 3) if pos_age is not None else None,
-                        "is_stale": is_stale,
-                        "distance_m": round(dist_3d_perp, 3) if dist_3d_perp is not None else None,
-                        "depth_s_m": round(s_depth, 3) if s_depth is not None else None,
-                        "eligible": eligible,
-                    }
-                    peers_eval.append(peer_summary)
-
-                    if eligible and dist_3d_perp is not None:
-                        # Forward camera ray constraint: peer must be in front of the camera (s_depth > 0)
-                        if s_depth > 0.0:
-                            is_airborne = (p_alt > (self.config.ground_elevation_m + 1.0))
-                            if is_airborne:
-                                # Airborne peer: 3D ray closest approach inside physical exclusion volume
-                                if dist_3d_perp < exclusion_radius_3d:
-                                    is_peer = True
-                                    matched_peer_id = p_id
-                                    matched_dist = dist_3d_perp
-                                    exclusion_reason = (
-                                        f"REJECTED_PEER_EXCLUSION_MATCH_3D (peer={p_id}, "
-                                        f"d_perp={dist_3d_perp:.2f}m < {exclusion_radius_3d:.2f}m, "
-                                        f"depth={s_depth:.1f}m, alt={p_alt:.1f}m)"
-                                    )
-                                    decision = "REJECTED"
-                                    break
-                            else:
-                                # Landed peer on ground: check ground distance to avoid excluding nearby garbage
-                                dn_g, de_g = lat_lon_to_meters(glat, glon, p_lat, p_lon)
-                                d_ground = math.hypot(dn_g, de_g)
-                                if d_ground < exclusion_radius_3d:
-                                    is_peer = True
-                                    matched_peer_id = p_id
-                                    matched_dist = d_ground
-                                    exclusion_reason = (
-                                        f"REJECTED_LANDED_PEER_MATCH (peer={p_id}, "
-                                        f"dist_ground={d_ground:.2f}m < {exclusion_radius_3d:.2f}m)"
-                                    )
-                                    decision = "REJECTED"
-                                    break
-
-                if not is_peer:
-                    if unpositioned_or_stale_peers:
-                        # Stale or missing peer telemetry: do NOT silently confirm ambiguous targets
-                        # Mark as DEFERRED so it does not prematurely create a confirmed GFS global target
-                        decision = "DEFERRED"
-                        exclusion_reason = f"DEFERRED_UNCERTAIN_PEER_TELEMETRY (stale_or_missing={unpositioned_or_stale_peers})"
-                    elif not registry_contents:
-                        exclusion_reason = "ACCEPTED_REGISTRY_EMPTY"
-                        decision = "ACCEPTED"
-                    else:
-                        exclusion_reason = "ACCEPTED_NO_PEER_MATCH"
-                        decision = "ACCEPTED"
-            else:
-                exclusion_reason = "ACCEPTED_NO_SWARM_MANAGER"
-                decision = "ACCEPTED"
+            is_peer, decision, exclusion_reason, matched_peer_id, matched_dist, registry_contents, peers_eval = (
+                self._evaluate_peer_exclusion(
+                    glat=glat,
+                    glon=glon,
+                    agl=agl,
+                    u=u,
+                    v=v,
+                    w=w,
+                    h=h,
+                    roll=roll,
+                    pitch=pitch,
+                    yaw=yaw,
+                    drone_lat=drone_lat,
+                    drone_lon=drone_lon,
+                    alt=alt,
+                    now_curr=now_curr,
+                    ray_ned=ray_ned,
+                )
+            )
 
             if log_peer_exclusion_eval:
                 log_peer_exclusion_eval(
@@ -487,10 +414,28 @@ class PerceptionPipeline:
                 continue
 
             if decision == "DEFERRED":
+                buf_window = float(getattr(self.config, "deferred_buffer_window_s", 3.0))
                 logger.warning(
-                    "Deferring detection at (%.6f, %.6f): %s",
-                    glat, glon, exclusion_reason
+                    "Deferring detection at (%.6f, %.6f): %s (buffered for %.1fs window)",
+                    glat, glon, exclusion_reason, buf_window
                 )
+                self._deferred_buffer.append({
+                    "det": det,
+                    "glat": glat,
+                    "glon": glon,
+                    "agl": agl,
+                    "u": u,
+                    "v": v,
+                    "w": w,
+                    "h": h,
+                    "roll": roll,
+                    "pitch": pitch,
+                    "yaw": yaw,
+                    "drone_lat": drone_lat,
+                    "drone_lon": drone_lon,
+                    "alt": alt,
+                    "deadline": now_curr + buf_window,
+                })
                 continue
 
             geo_dets.append(
@@ -500,13 +445,20 @@ class PerceptionPipeline:
                     lat=glat,
                     lon=glon,
                     altitude_agl=agl,
+                    drone_lat=drone_lat,
+                    drone_lon=drone_lon,
                 )
             )
 
         self.last_step_stats["geo_detections"] = len(geo_dets)
         if not geo_dets:
-            self.last_rejection_reason = "GEOLOCATION_ALL_FAILED"
+            if any(item.get("deadline") for item in self._deferred_buffer):
+                self.last_rejection_reason = "DETECTIONS_DEFERRED"
+            else:
+                self.last_rejection_reason = "GEOLOCATION_ALL_FAILED"
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
+            # Tick aggregator with empty list so unconfirmed/stale tracks are pruned
+            self.aggregator.update([], now=frame.timestamp)
             return
 
         # 6. Aggregation
@@ -552,4 +504,209 @@ class PerceptionPipeline:
                 await self.network.broadcast_message(msg)
             except Exception as e:
                 logger.warning("Failed to broadcast detection message: %s", e)
+
+    def _evaluate_peer_exclusion(
+        self,
+        glat: float,
+        glon: float,
+        agl: float,
+        u: float,
+        v: float,
+        w: int,
+        h: int,
+        roll: float,
+        pitch: float,
+        yaw: float,
+        drone_lat: float,
+        drone_lon: float,
+        alt: float,
+        now_curr: float,
+        ray_ned: Optional[Tuple[float, float, float]] = None,
+    ) -> Tuple[bool, str, str, Optional[str], Optional[float], List[str], List[Dict[str, Any]]]:
+        """
+        Evaluate candidate ground detection against active peer drones.
+        Enforces configurable 3D exclusion volume, ignores inactive/dead peers,
+        and uses separate peer_position_max_age_s for staleness gating.
+        """
+        cam_cfg = self.config.camera
+        if ray_ned is None:
+            ray_ned = pixel_to_ray_ned(
+                u=u,
+                v=v,
+                img_w=w,
+                img_h=h,
+                hfov_deg=cam_cfg.hfov_deg,
+                mount_pitch_deg=cam_cfg.mount_pitch_deg,
+                roll_deg=roll,
+                pitch_deg=pitch,
+                yaw_deg=yaw,
+            )
+
+        registry_contents: List[str] = []
+        peers_eval: List[Dict[str, Any]] = []
+        is_peer = False
+        matched_peer_id = None
+        matched_dist = None
+        exclusion_reason = "ACCEPTED_GENUINE_TARGET"
+        decision = "ACCEPTED"
+
+        max_3d_cap = getattr(self.config, "peer_exclusion_max_3d_radius_m", None)
+        if max_3d_cap is not None:
+            exclusion_radius_3d = min(float(self.peer_exclusion_radius_m), float(max_3d_cap))
+        else:
+            exclusion_radius_3d = float(self.peer_exclusion_radius_m)
+
+        unpositioned_or_stale_peers: List[str] = []
+
+        if self.swarm_manager and hasattr(self.swarm_manager, "registry"):
+            registry_contents = list(self.swarm_manager.registry.peers.keys())
+            for peer in self.swarm_manager.registry.peers.values():
+                p_id = getattr(peer, "drone_id", "unknown")
+                p_active = getattr(peer, "is_active", True)
+                # Requirement 7: Ignore peers with is_active == False
+                if not p_active:
+                    continue
+
+                p_lat = getattr(peer, "lat", None)
+                p_lon = getattr(peer, "lon", None)
+                p_alt = getattr(peer, "alt", 0.0) or 0.0
+                last_pos_time = getattr(
+                    peer,
+                    "last_position_time",
+                    getattr(peer, "last_pos", getattr(peer, "last_seen", getattr(peer, "timestamp", None)))
+                )
+                pos_age = (now_curr - last_pos_time) if last_pos_time is not None else None
+                max_age = float(getattr(self.config, "peer_position_max_age_s", 5.0))
+                has_pos = (p_lat is not None and p_lon is not None)
+                is_stale = (pos_age is not None and pos_age > max_age)
+
+                if not has_pos or is_stale:
+                    unpositioned_or_stale_peers.append(p_id)
+
+                dist_3d_perp = None
+                s_depth = None
+                eligible = has_pos and not is_stale
+
+                if has_pos and ray_ned is not None:
+                    p_dn, p_de = lat_lon_to_meters(p_lat, p_lon, drone_lat, drone_lon)
+                    p_dd = -(p_alt - alt)
+                    s_depth, dist_3d_perp = compute_ray_to_point_cpa(ray_ned, (p_dn, p_de, p_dd))
+
+                peer_summary = {
+                    "peer_id": p_id,
+                    "is_active": p_active,
+                    "lat": p_lat,
+                    "lon": p_lon,
+                    "alt": p_alt,
+                    "has_position": has_pos,
+                    "last_position_time": last_pos_time,
+                    "position_age_s": round(pos_age, 3) if pos_age is not None else None,
+                    "is_stale": is_stale,
+                    "distance_m": round(dist_3d_perp, 3) if dist_3d_perp is not None else None,
+                    "depth_s_m": round(s_depth, 3) if s_depth is not None else None,
+                    "eligible": eligible,
+                }
+                peers_eval.append(peer_summary)
+
+                if eligible and dist_3d_perp is not None:
+                    if s_depth > 0.0:
+                        is_airborne = (p_alt > (self.config.ground_elevation_m + 1.0))
+                        if is_airborne:
+                            if dist_3d_perp < exclusion_radius_3d:
+                                is_peer = True
+                                matched_peer_id = p_id
+                                matched_dist = dist_3d_perp
+                                exclusion_reason = (
+                                    f"REJECTED_PEER_EXCLUSION_MATCH_3D (peer={p_id}, "
+                                    f"d_perp={dist_3d_perp:.2f}m < {exclusion_radius_3d:.2f}m, "
+                                    f"depth={s_depth:.1f}m, alt={p_alt:.1f}m)"
+                                )
+                                decision = "REJECTED"
+                                break
+                        else:
+                            dn_g, de_g = lat_lon_to_meters(glat, glon, p_lat, p_lon)
+                            d_ground = math.hypot(dn_g, de_g)
+                            if d_ground < exclusion_radius_3d:
+                                is_peer = True
+                                matched_peer_id = p_id
+                                matched_dist = d_ground
+                                exclusion_reason = (
+                                    f"REJECTED_LANDED_PEER_MATCH (peer={p_id}, "
+                                    f"dist_ground={d_ground:.2f}m < {exclusion_radius_3d:.2f}m)"
+                                )
+                                decision = "REJECTED"
+                                break
+
+            if not is_peer:
+                if unpositioned_or_stale_peers:
+                    decision = "DEFERRED"
+                    exclusion_reason = f"DEFERRED_UNCERTAIN_PEER_TELEMETRY (stale_or_missing={unpositioned_or_stale_peers})"
+                elif not registry_contents:
+                    exclusion_reason = "ACCEPTED_REGISTRY_EMPTY"
+                    decision = "ACCEPTED"
+                else:
+                    exclusion_reason = "ACCEPTED_NO_PEER_MATCH"
+                    decision = "ACCEPTED"
+        else:
+            exclusion_reason = "ACCEPTED_NO_SWARM_MANAGER"
+            decision = "ACCEPTED"
+
+        return is_peer, decision, exclusion_reason, matched_peer_id, matched_dist, registry_contents, peers_eval
+
+    def _process_deferred_buffer(self, now_curr: float) -> List[GeoreferencedDetection]:
+        """
+        Re-evaluates buffered deferred detections against newly arrived peer positions.
+        Returns newly confirmed detections whose peer uncertainty cleared.
+        """
+        accepted: List[GeoreferencedDetection] = []
+        still_buffered: List[Dict[str, Any]] = []
+
+        for item in self._deferred_buffer:
+            if now_curr > item["deadline"]:
+                logger.debug(
+                    "Deferred detection at (%.6f, %.6f) buffer window expired without peer telemetry; dropping.",
+                    item["glat"], item["glon"],
+                )
+                continue
+
+            is_peer, decision, reason, _, _, _, _ = self._evaluate_peer_exclusion(
+                glat=item["glat"],
+                glon=item["glon"],
+                agl=item["agl"],
+                u=item["u"],
+                v=item["v"],
+                w=item["w"],
+                h=item["h"],
+                roll=item["roll"],
+                pitch=item["pitch"],
+                yaw=item["yaw"],
+                drone_lat=item["drone_lat"],
+                drone_lon=item["drone_lon"],
+                alt=item["alt"],
+                now_curr=now_curr,
+            )
+
+            if is_peer:
+                logger.info("Deferred detection matches peer %s upon telemetry update; excluding.", reason)
+            elif decision == "ACCEPTED":
+                logger.info(
+                    "Deferred detection at (%.6f, %.6f) confirmed after peer telemetry update.",
+                    item["glat"], item["glon"],
+                )
+                accepted.append(
+                    GeoreferencedDetection(
+                        label=item["det"].label,
+                        confidence=item["det"].confidence,
+                        lat=item["glat"],
+                        lon=item["glon"],
+                        altitude_agl=item["agl"],
+                        drone_lat=item["drone_lat"],
+                        drone_lon=item["drone_lon"],
+                    )
+                )
+            else:
+                still_buffered.append(item)
+
+        self._deferred_buffer = still_buffered
+        return accepted
 

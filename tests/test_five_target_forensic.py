@@ -264,8 +264,8 @@ def test_track_aggregator_min_hits_gating():
     assert len(aggregator.tracks) == 1
     assert list(aggregator.tracks.values())[0].hits == 1
 
-    # Frame 2: Hit count = 2 -> Should EMIT confirmed track
-    emitted_2 = aggregator.update([det], now=1001.0)
+    # Frame 2: Hit count = 2 -> Should EMIT confirmed track (>= 2.0s temporal separation)
+    emitted_2 = aggregator.update([det], now=1002.0)
     assert len(emitted_2) == 1, "Second frame detection (hit=2) must emit a confirmed track"
     assert emitted_2[0].confidence == 0.62
     assert emitted_2[0].id == "drone1-g0001"

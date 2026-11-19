@@ -16,14 +16,14 @@ def test_aggregator_new_and_update_emission():
 
     t0 = 1000.0
     # Frame 1: first sighting
-    det1 = GeoreferencedDetection(label="rubbish", confidence=0.8, lat=22.314000, lon=87.310000)
+    det1 = GeoreferencedDetection(label="rubbish", confidence=0.8, lat=22.314000, lon=87.310000, drone_lat=22.314, drone_lon=87.310)
     items1 = agg.update([det1], now=t0)
     assert len(items1) == 0  # min_hits is 2, not yet confirmed
 
-    # Frame 2: second sighting within 1m
+    # Frame 2: second sighting after min_temporal_separation_s (2.0s)
     # Confidence-weighted mean: (0.8*lat1 + 0.6*lat2) / (0.8 + 0.6)
-    det2 = GeoreferencedDetection(label="rubbish", confidence=0.6, lat=22.314008, lon=87.310008)
-    items2 = agg.update([det2], now=t0 + 1.0)
+    det2 = GeoreferencedDetection(label="rubbish", confidence=0.6, lat=22.314008, lon=87.310008, drone_lat=22.314, drone_lon=87.310)
+    items2 = agg.update([det2], now=t0 + 2.0)
     assert len(items2) == 1
     new_item = items2[0]
     assert new_item.status == "new"
@@ -34,13 +34,13 @@ def test_aggregator_new_and_update_emission():
     assert pytest.approx(new_item.lat, abs=1e-6) == expected_lat
 
     # Frame 3 (only 2s later): sighting 3, but update_interval_s (10s) hasn't passed
-    det3 = GeoreferencedDetection(label="rubbish", confidence=0.9, lat=22.314005, lon=87.310005)
-    items3 = agg.update([det3], now=t0 + 3.0)
+    det3 = GeoreferencedDetection(label="rubbish", confidence=0.9, lat=22.314005, lon=87.310005, drone_lat=22.314, drone_lon=87.310)
+    items3 = agg.update([det3], now=t0 + 4.0)
     assert len(items3) == 0  # throttled
 
     # Frame 4 (12s later): sighting 4, update_interval_s has passed -> emit update
-    det4 = GeoreferencedDetection(label="rubbish", confidence=0.7, lat=22.314004, lon=87.310004)
-    items4 = agg.update([det4], now=t0 + 15.0)
+    det4 = GeoreferencedDetection(label="rubbish", confidence=0.7, lat=22.314004, lon=87.310004, drone_lat=22.314, drone_lon=87.310)
+    items4 = agg.update([det4], now=t0 + 16.0)
     assert len(items4) == 1
     upd_item = items4[0]
     assert upd_item.status == "update"
@@ -103,10 +103,51 @@ def test_aggregator_repeated_frame_timestamp_rejection():
     assert len(res2) == 0
     assert track.hits == 1  # Must not increment hits
 
-    # Genuine subsequent frame at t0 + 1.0
-    res3 = agg.update([det], now=t0 + 1.0)
+    # Genuine subsequent frame at t0 + 2.0 (respecting min_temporal_separation_s)
+    res3 = agg.update([det], now=t0 + 2.0)
     assert len(res3) == 1
     assert track.hits == 2
     assert res3[0].status == "new"
+
+
+def test_stationary_drone_cannot_self_confirm_in_consecutive_frames():
+    """A stationary drone cannot self-confirm in two consecutive frames if dt < min_temporal_separation_s."""
+    agg = TrackAggregator(drone_id="drone1", min_hits=2, min_temporal_separation_s=2.0, min_drone_displacement_m=1.5)
+    t0 = 100.0
+    det1 = GeoreferencedDetection(label="rubbish", confidence=0.8, lat=22.314, lon=87.310, drone_lat=22.314, drone_lon=87.310)
+    res1 = agg.update([det1], now=t0)
+    assert len(res1) == 0
+
+    # Frame 2 arriving 1.0s later with zero drone movement (stationary)
+    det2 = GeoreferencedDetection(label="rubbish", confidence=0.8, lat=22.314, lon=87.310, drone_lat=22.314, drone_lon=87.310)
+    res2 = agg.update([det2], now=t0 + 1.0)
+    assert len(res2) == 0, "Stationary drone must NOT self-confirm in consecutive frames"
+    track = list(agg.tracks.values())[0]
+    assert track.hits == 1, "Hits must not increment when stationary and dt < min_temporal_separation_s"
+    assert not track.confirmed
+
+    # Frame 3 arriving after min_temporal_separation_s (>= 2.0s from frame 1)
+    res3 = agg.update([det2], now=t0 + 2.0)
+    assert len(res3) == 1, "Should confirm once temporal separation threshold is satisfied"
+    assert track.hits == 2
+    assert track.confirmed is True
+
+
+def test_moving_drone_confirms_via_spatial_displacement():
+    """A moving drone (>= min_drone_displacement_m) can confirm without waiting for temporal separation."""
+    agg = TrackAggregator(drone_id="drone1", min_hits=2, min_temporal_separation_s=2.0, min_drone_displacement_m=1.5)
+    t0 = 100.0
+    # Drone at origin
+    det1 = GeoreferencedDetection(label="rubbish", confidence=0.8, lat=22.314000, lon=87.310000, drone_lat=22.314000, drone_lon=87.310000)
+    agg.update([det1], now=t0)
+
+    # Frame 2 only 0.5s later (dt=0.5 < 2.0), but drone has moved ~3 meters north (~0.000027 deg lat)
+    det2 = GeoreferencedDetection(label="rubbish", confidence=0.85, lat=22.314001, lon=87.310000, drone_lat=22.314027, drone_lon=87.310000)
+    res2 = agg.update([det2], now=t0 + 0.5)
+    assert len(res2) == 1, "Moving drone with >= 1.5m displacement must confirm on second hit"
+    track = list(agg.tracks.values())[0]
+    assert track.hits == 2
+    assert track.confirmed is True
+
 
 

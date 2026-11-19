@@ -26,16 +26,21 @@ class AggregatedTrack:
     last_emitted_hits: int = 0
     confirmed: bool = False
     altitude_agl: Optional[float] = None
+    last_hit_time: float = 0.0
+    last_drone_lat: Optional[float] = None
+    last_drone_lon: Optional[float] = None
 
 
 @dataclass
 class GeoreferencedDetection:
-    """Detection with ground coordinates."""
+    """Detection with ground coordinates and optional drone position."""
     label: str
     confidence: float
     lat: float
     lon: float
     altitude_agl: Optional[float] = None
+    drone_lat: Optional[float] = None
+    drone_lon: Optional[float] = None
 
 
 @dataclass
@@ -56,6 +61,8 @@ class TrackAggregator:
     Fuses per-frame detections of static ground objects into persistent markers.
     Uses greedy matching by confidence within merge_radius_m and running
     confidence-weighted position averaging.
+    Enforces strengthened temporal confirmation requiring observations separated by
+    >= min_temporal_separation_s OR >= min_drone_displacement_m.
     """
 
     def __init__(
@@ -66,6 +73,8 @@ class TrackAggregator:
         update_interval_s: float = 10.0,
         max_tracks: int = 2000,
         unconfirmed_ttl_s: float = 30.0,
+        min_temporal_separation_s: float = 2.0,
+        min_drone_displacement_m: float = 1.5,
     ):
         self.drone_id = drone_id
         self.merge_radius_m = merge_radius_m
@@ -73,6 +82,8 @@ class TrackAggregator:
         self.update_interval_s = update_interval_s
         self.max_tracks = max_tracks
         self.unconfirmed_ttl_s = unconfirmed_ttl_s
+        self.min_temporal_separation_s = min_temporal_separation_s
+        self.min_drone_displacement_m = min_drone_displacement_m
 
         self._seq = 0
         self.tracks: Dict[str, AggregatedTrack] = {}
@@ -112,10 +123,29 @@ class TrackAggregator:
                 # Match to existing track
                 matched_track_ids.add(best_track_id)
                 track = self.tracks[best_track_id]
-                # Increment hits only if time has advanced from previous observation
-                # (prevents duplicate frame counting from video pause / repeated frames)
-                if now > track.last_seen:
+
+                # Check observation distinctness for hit accumulation:
+                # Requires either >= min_temporal_separation_s OR >= min_drone_displacement_m
+                dt = now - track.last_hit_time
+                disp_m = 0.0
+                if (
+                    det.drone_lat is not None
+                    and det.drone_lon is not None
+                    and track.last_drone_lat is not None
+                    and track.last_drone_lon is not None
+                ):
+                    d_dn, d_de = lat_lon_to_meters(det.drone_lat, det.drone_lon, track.last_drone_lat, track.last_drone_lon)
+                    disp_m = math.hypot(d_dn, d_de)
+
+                is_distinct = (dt >= self.min_temporal_separation_s) or (disp_m >= self.min_drone_displacement_m)
+
+                if is_distinct:
                     track.hits += 1
+                    track.last_hit_time = now
+                    if det.drone_lat is not None and det.drone_lon is not None:
+                        track.last_drone_lat = det.drone_lat
+                        track.last_drone_lon = det.drone_lon
+
                 track.max_confidence = max(track.max_confidence, det.confidence)
                 track.sum_conf += det.confidence
                 track.sum_conf_lat += det.confidence * det.lat
@@ -141,6 +171,9 @@ class TrackAggregator:
                     sum_conf_lon=det.confidence * det.lon,
                     first_seen=now,
                     last_seen=now,
+                    last_hit_time=now,
+                    last_drone_lat=det.drone_lat,
+                    last_drone_lon=det.drone_lon,
                     last_emitted_time=0.0,
                     last_emitted_hits=0,
                     confirmed=False,
@@ -204,4 +237,3 @@ class TrackAggregator:
                 del self.tracks[tid]
 
         return emitted_items
-

@@ -246,7 +246,7 @@ async def test_pipeline_direct_run_loop_task():
 
 @pytest.mark.asyncio
 async def test_pipeline_detector_load_failure_stops_loop():
-    """If detector.load() returns False, pipeline logs error and stops loop without capturing frames."""
+    """If detector.load() returns False, pipeline logs error and keeps loop running in DEGRADED state without capturing frames."""
     frame_src = AsyncMock()
     detector = FakeDetector()
     detector.load = MagicMock(return_value=False)
@@ -260,11 +260,20 @@ async def test_pipeline_detector_load_failure_stops_loop():
     task = asyncio.create_task(pipeline.run_loop())
     await asyncio.sleep(0.1)
 
-    assert pipeline._running is False
-    assert task.done()
-    assert task.exception() is None
+    # Resilient loop keeps running (no permanent shutdown on DETECTOR_NOT_LOADED)
+    assert pipeline._running is True
+    assert not task.done()
+    assert pipeline.last_rejection_reason == "DETECTOR_NOT_LOADED"
     frame_src.get_frame.assert_not_called()
     network.broadcast_message.assert_not_called()
+
+    await pipeline.stop()
+    if not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 @pytest.mark.asyncio

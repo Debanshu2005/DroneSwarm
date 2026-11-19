@@ -275,9 +275,9 @@ def run_forensic_investigation():
     for d_id, geo_list in georeferenced_by_drone.items():
         step1_emitted[d_id] = aggregators[d_id].update(geo_list, now=1000.0)
 
-    # Step 2: Second observation (hits = 2) -> confirms tracks and emits "new"
+    # Step 2: Second observation (hits = 2, temporal gap >= 2.0s) -> confirms tracks and emits "new"
     for d_id, geo_list in georeferenced_by_drone.items():
-        emitted_by_drone[d_id] = aggregators[d_id].update(geo_list, now=1001.0)
+        emitted_by_drone[d_id] = aggregators[d_id].update(geo_list, now=1002.5)
 
     print(f"Aggregator Step 1 (hits=1) total emitted items: {sum(len(v) for v in step1_emitted.values())} (Guards noise!)")
     print(f"Aggregator Step 2 (hits=2) total emitted items: {sum(len(v) for v in emitted_by_drone.values())}")

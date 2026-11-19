@@ -127,6 +127,11 @@ class PerceptionConfig(BaseModel):
     ground_elevation_m: float = 0.0
     merge_radius_m: float = 2.5
     peer_exclusion_radius_m: float = 4.0
+    peer_exclusion_max_3d_radius_m: Optional[float] = None
+    peer_position_max_age_s: float = 5.0
+    deferred_buffer_window_s: float = 3.0
+    min_temporal_separation_s: float = 2.0
+    min_drone_displacement_m: float = 1.5
     min_hits: int = 2
     update_interval_s: float = 10.0
     max_tracks: int = 2000

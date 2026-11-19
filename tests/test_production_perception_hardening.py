@@ -38,8 +38,8 @@ async def test_two_frame_confirmation_requires_distinct_timestamps():
     assert track.hits == 1, "Hits must remain 1 when timestamp does not advance"
     assert not track.confirmed, "Track must remain unconfirmed"
 
-    # Frame 2 at advanced timestamp t=11.0
-    items2 = agg.update([det], now=11.0)
+    # Frame 2 at advanced timestamp t=12.0 (>= 2.0s temporal separation)
+    items2 = agg.update([det], now=12.0)
     assert len(items2) == 1, "Track must be confirmed and emitted on hit 2 at distinct timestamp"
     assert items2[0].status == "new"
     assert items2[0].hits == 2
@@ -53,12 +53,12 @@ def test_unconfirmed_detections_never_emitted_by_aggregator():
 
     # Hits 1 and 2
     res1 = agg.update([det], now=1.0)
-    res2 = agg.update([det], now=2.0)
+    res2 = agg.update([det], now=3.0)
     assert len(res1) == 0
     assert len(res2) == 0
 
     # Hit 3 reaches min_hits=3
-    res3 = agg.update([det], now=3.0)
+    res3 = agg.update([det], now=5.0)
     assert len(res3) == 1
     assert res3[0].status == "new"
 
@@ -218,9 +218,9 @@ async def test_pipeline_does_not_broadcast_unconfirmed_tracks():
     await pipeline._step()
     assert mock_net.broadcast_message.call_count == 0, "Pipeline must NOT broadcast on duplicate timestamp"
 
-    # Step 3: Advance timestamp to 101.0 -> Hit 2 reached -> BROADCAST triggered
-    mock_frame.timestamp = 101.0
-    mock_telem.timestamp = 101.0
+    # Step 3: Advance timestamp to 102.5 (>= 2.0s separation for stationary drone) -> Hit 2 reached -> BROADCAST triggered
+    mock_frame.timestamp = 102.5
+    mock_telem.timestamp = 102.5
     await pipeline._step()
     assert mock_net.broadcast_message.call_count == 1, "Pipeline MUST broadcast on hit 2"
 
