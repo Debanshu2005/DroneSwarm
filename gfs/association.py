@@ -168,6 +168,22 @@ def associate_drone_tracklets_to_globals(
             if bound_global_id is not None and bound_global_id != glob.global_id:
                 continue
 
+            # Drone exclusivity: A global object already containing an estimate from this drone
+            # with a DIFFERENT local_track_id CANNOT be merged with this tracklet.
+            existing_est = glob.source_estimates.get(trk.drone_id)
+            if existing_est is not None and existing_est.local_track_id != trk.local_track_id:
+                continue
+
+            # Identity exclusivity: check if another track from this drone session is already bound to this global
+            has_conflicting_drone_track = False
+            for (h_d_id, h_sess, h_gen, h_trk_id), h_g_id in identity_history.items():
+                if h_g_id == glob.global_id and h_d_id == trk.drone_id:
+                    if h_sess == trk.drone_session_id and h_gen == trk.session_generation and h_trk_id != trk.local_track_id:
+                        has_conflicting_drone_track = True
+                        break
+            if has_conflicting_drone_track:
+                continue
+
             # Class compatibility
             if trk.label != glob.label:
                 continue

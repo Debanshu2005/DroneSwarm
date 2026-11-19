@@ -82,6 +82,7 @@ export const DroneProvider = ({ children }) => {
     return loadPersistedTombstones(typeof window !== 'undefined' ? window.localStorage : null);
   })());
   const isSnapshotPendingRef = useRef(false);
+  const currentSnapshotRequestIdRef = useRef(null);
   const eventBufferRef = useRef([]);
   const snapshotWatermarkRef = useRef(0);
   const snapshotRevisionRef = useRef(0);
@@ -251,9 +252,9 @@ export const DroneProvider = ({ children }) => {
         window.location.hostname.startsWith('10.')
       );
       if (isDefaultPiUrl && isLocalHost) {
-        // Running locally against sim/dev: auto-connect to GFS service (8088) and 4 drone relays (8081-8084)
+        // Running locally against sim/dev: auto-connect to 4 drone relays (8081-8084)
         // and enable test/sim mode so the header shows SIMULATION/SITL correctly
-        [8088, 8081, 8082, 8083, 8084].forEach(port => manager.addConnection('127.0.0.1', port));
+        [8081, 8082, 8083, 8084].forEach(port => manager.addConnection('127.0.0.1', port));
         setTestMode(true);
       } else {
         const [ip, portStr] = wsUrl.replace('ws://', '').split(':');
@@ -276,11 +277,19 @@ export const DroneProvider = ({ children }) => {
       setIsConnected(nextStatus);
       setConnectionError(hasAuthFailure ? (detail.reason || detail.error || "Relay authentication failed") : "");
       if (status === "CONNECTED") {
-        isSnapshotPendingRef.current = true;
-        eventBufferRef.current = [];
-        try {
-          manager.send({ type: "gfs_snapshot_request", timestamp: Date.now() });
-        } catch (_) { }
+        if (!isSnapshotPendingRef.current) {
+          isSnapshotPendingRef.current = true;
+          const reqId = `snap-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+          currentSnapshotRequestIdRef.current = reqId;
+          const targetUrl = manager.connections['ws://127.0.0.1:8081']?.connected ? 'ws://127.0.0.1:8081' : url;
+          try {
+            manager.sendTo(targetUrl, {
+              type: "gfs_snapshot_request",
+              request_id: reqId,
+              timestamp: Date.now()
+            });
+          } catch (_) { }
+        }
       }
       addLog(
         `Connection ${url}: ${status}${detail.reason ? ` (${detail.reason})` : ""}`,
@@ -322,7 +331,11 @@ export const DroneProvider = ({ children }) => {
           // Relays and reconnecting WebSockets can deliver an older UDP
           // datagram after a newer one. Never let that move a drone backwards
           // on the map or refresh its telemetry liveness.
-          const incomingTimestamp = Number(msg.telemetry?.timestamp ?? msg.timestamp);
+          const incomingRaw = msg.telemetry?.timestamp ?? msg.timestamp;
+          let incomingTimestamp = Number(incomingRaw);
+          if (Number.isFinite(incomingTimestamp) && incomingTimestamp < 1e11) {
+            incomingTimestamp = incomingTimestamp * 1000;
+          }
           const currentTimestamp = Number(existing.telemetryTimestamp);
           if (Number.isFinite(incomingTimestamp) && Number.isFinite(currentTimestamp) && incomingTimestamp < currentTimestamp) {
             console.debug("Ignoring out-of-order telemetry", {
@@ -358,6 +371,7 @@ export const DroneProvider = ({ children }) => {
             [msg.sender_id]: {
               ...existing,
               id: msg.sender_id,
+              status: "CONNECTED",
               telemetry: sanitizedTelemetry,
               telemetryTimestamp: Number.isFinite(incomingTimestamp) ? incomingTimestamp : existing.telemetryTimestamp,
               lastSeen: now,
@@ -575,6 +589,13 @@ export const DroneProvider = ({ children }) => {
 
     manager.subscribe("gfs_snapshot_response", (msg) => {
       if (!msg) return;
+      if (currentSnapshotRequestIdRef.current && msg.request_id && msg.request_id !== currentSnapshotRequestIdRef.current) {
+        console.debug("Ignoring mismatched snapshot response", msg.request_id, "expected", currentSnapshotRequestIdRef.current);
+        return;
+      }
+      currentSnapshotRequestIdRef.current = null;
+      isSnapshotPendingRef.current = false;
+
       const incomingRev = Number(msg.snapshot_revision || 0);
       if (incomingRev > 0 && incomingRev < snapshotRevisionRef.current) {
         console.warn("Ignoring stale snapshot response with revision", incomingRev, "expected >=", snapshotRevisionRef.current);

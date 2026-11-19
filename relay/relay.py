@@ -45,7 +45,7 @@ def init_relay_ack_db(db_path: str):
         con.close()
 
 class UdpWebsocketRelay:
-    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14551, udp_target_port=14550, udp_broadcast_addr="255.255.255.255", udp_target_host=None, gs_heartbeat_interval=1.0, udp_target_endpoints=None, gfs_ack_host="127.0.0.1", gfs_ack_port=41459, relay_ack_db="data/relay_acks.db", gfs_db_path="data/gfs.db", allow_duplicate_ips=False):
+    def __init__(self, ws_host="0.0.0.0", ws_port=8080, udp_bind_host="0.0.0.0", udp_bind_port=14551, udp_target_port=14550, udp_broadcast_addr="255.255.255.255", udp_target_host=None, gs_heartbeat_interval=1.0, udp_target_endpoints=None, gfs_ack_host="127.0.0.1", gfs_ack_port=41459, relay_ack_db="data/relay_acks.db", gfs_db_path="data/gfs.db", allow_duplicate_ips=True, ws_send_timeout=3.0):
         self.ws_host = ws_host
         self.ws_port = ws_port
         self.udp_bind_host = udp_bind_host
@@ -66,6 +66,7 @@ class UdpWebsocketRelay:
         self.net_secret = os.getenv("DRONE_NET_SECRET")
         self.trace_network = os.getenv("DRONEOS_DIAGNOSTIC_TRACE", "").lower() in {"1", "true", "yes", "on"}
         self.allow_duplicate_ips = allow_duplicate_ips
+        self.ws_send_timeout = ws_send_timeout
 
         self.clients = set()
         self.known_endpoints = {} # Target ID to address tuple
@@ -209,7 +210,7 @@ class UdpWebsocketRelay:
                 # share one Windows host.
                 clients = tuple(self.clients)
                 results = await asyncio.gather(
-                    *(asyncio.wait_for(ws.send(msg_str), timeout=1.0) for ws in clients),
+                    *(asyncio.wait_for(ws.send(msg_str), timeout=self.ws_send_timeout) for ws in clients),
                     return_exceptions=True,
                 )
                 for ws, result in zip(clients, results):
@@ -249,8 +250,8 @@ class UdpWebsocketRelay:
             async for message in websocket:
                 if isinstance(message, str):
                     await self.forward_ws_to_udp(message, websocket=websocket)
-        except websockets.exceptions.ConnectionClosed:
-            logger.info(f"WebSocket client disconnected: {websocket.remote_address}")
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.info(f"WebSocket client disconnected: {websocket.remote_address} (code={e.code}, reason={e.reason})")
         except Exception as e:
             logger.error(f"WebSocket error: {e}")
         finally:
@@ -397,6 +398,7 @@ class UdpWebsocketRelay:
     async def _handle_gfs_snapshot_request(self, websocket, msg_dict: dict):
         """Authoritative GFS snapshot recovery for GCS clients (Contract B)."""
         now_ms = int(time.time() * 1000)
+        request_id = msg_dict.get("request_id") if isinstance(msg_dict, dict) else None
         objects = []
         tombstones = {}
         watermark_event_id = 0
@@ -470,6 +472,7 @@ class UdpWebsocketRelay:
         response = {
             "type": "gfs_snapshot_response",
             "msg_type": "gfs_snapshot_response",
+            "request_id": request_id,
             "snapshot_revision": snapshot_revision,
             "watermark_event_id": watermark_event_id,
             "timestamp_ms": now_ms,
@@ -630,6 +633,9 @@ if __name__ == "__main__":
     parser.add_argument("--udp-target-host", type=str, default=None, help="Optional unicast host for DroneOS (used by simulation)")
     parser.add_argument("--udp-target", action="append", type=parse_udp_target_endpoint, default=[], metavar="DRONE=HOST:PORT", help="Static targeted UDP route (repeatable; used by simulation)")
     parser.add_argument("--gs-heartbeat-interval", type=float, default=1.0, help="Seconds between relay ground-station heartbeats while a WebSocket client is connected")
+    parser.add_argument("--allow-duplicate-ips", action="store_true", default=True, help="Allow multiple WebSocket connections from the same IP")
+    parser.add_argument("--disallow-duplicate-ips", action="store_false", dest="allow_duplicate_ips", help="Disallow multiple WebSocket connections from the same IP")
+    parser.add_argument("--ws-send-timeout", type=float, default=3.0, help="Per-client WebSocket send timeout in seconds")
     args = parser.parse_args()
 
     relay = UdpWebsocketRelay(
@@ -640,7 +646,9 @@ if __name__ == "__main__":
         udp_target_port=args.udp_target_port,
         udp_target_host=args.udp_target_host,
         gs_heartbeat_interval=args.gs_heartbeat_interval,
-        udp_target_endpoints=dict(args.udp_target)
+        udp_target_endpoints=dict(args.udp_target),
+        allow_duplicate_ips=args.allow_duplicate_ips,
+        ws_send_timeout=args.ws_send_timeout
     )
     try:
         asyncio.run(relay.start())

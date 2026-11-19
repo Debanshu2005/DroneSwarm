@@ -3,9 +3,9 @@ export function evaluateDroneHealth(drone) {
     
     // Evaluate if we are LIVE, STALE or OFFLINE
     const now = Date.now();
-    const lastSeen = drone.lastSeen || 0;
+    const lastSeen = Math.max(drone.lastTelemetry || 0, drone.lastHeartbeat || 0, drone.lastSeen || 0);
     const isStale = (now - lastSeen) > 4000;
-    const isOffline = drone.status === 'OFFLINE' || (now - lastSeen) > 8000;
+    const isOffline = (now - lastSeen) > 8000;
     
     if (isOffline) return 'UNKNOWN';
 
@@ -32,8 +32,8 @@ export function evaluatePreflightChecklist(drone) {
     if (!drone) return {};
     
     const now = Date.now();
-    const lastSeen = drone.lastSeen || 0;
-    const isOffline = drone.status === 'OFFLINE' || (now - lastSeen) > 8000;
+    const lastSeen = Math.max(drone.lastTelemetry || 0, drone.lastHeartbeat || 0, drone.lastSeen || 0);
+    const isOffline = (now - lastSeen) > 8000;
     
     const t = drone.telemetry || {};
     
@@ -54,11 +54,14 @@ export function evaluatePreflightChecklist(drone) {
 export function evaluateTelemetryFreshness(drone) {
     if (!drone) return 'OFFLINE';
     const now = Date.now();
-    // Heartbeats prove the connection is open, but only telemetry proves that
-    // the position displayed to the operator is current.
-    const lastSeen = drone.lastTelemetry || drone.lastSeen || 0;
+    // A drone is actively communicating if either telemetry or heartbeat has arrived recently.
+    const lastActive = Math.max(
+        drone.lastTelemetry || 0,
+        drone.lastHeartbeat || 0,
+        drone.lastSeen || 0
+    );
     
-    if (drone.status === 'OFFLINE' || (now - lastSeen) > 8000) return 'OFFLINE';
-    if ((now - lastSeen) > 4000) return 'STALE';
+    if (lastActive === 0 || (now - lastActive) > 8000) return 'OFFLINE';
+    if ((now - lastActive) > 4000) return 'STALE';
     return 'LIVE';
 }

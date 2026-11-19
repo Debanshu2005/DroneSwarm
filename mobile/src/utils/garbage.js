@@ -146,7 +146,14 @@ export function mergeDetections(
       if (isRetired) {
         incomingLifecycle = LifecycleState.RETIRED;
       } else if (rawItem.global_id || itemId.startsWith('G-')) {
-        incomingLifecycle = LifecycleState.CONFIRMED;
+        // Fallback: If lifecycle_state is not explicitly provided on a global object, check corroboration
+        const hasMultiDrone = (Array.isArray(rawItem.source_drones) && rawItem.source_drones.length >= 2) || (rawItem.source_count && rawItem.source_count >= 2);
+        const hasHighConf = Number(rawItem.confidence) >= 0.70;
+        if (hasMultiDrone || hasHighConf) {
+          incomingLifecycle = LifecycleState.CONFIRMED;
+        } else {
+          incomingLifecycle = LifecycleState.PROVISIONAL;
+        }
       } else {
         incomingLifecycle = LifecycleState.PROVISIONAL;
       }
@@ -219,6 +226,16 @@ export function mergeDetections(
     if (!isGlobalObject) {
       for (const [key, existing] of Object.entries(nextById)) {
         if (dismissedSet.has(key)) continue;
+        // Two distinct local tracks from the SAME drone must NEVER be merged together by proximity.
+        // DroneOS TrackAggregator already performs local clustering. If two local tracks exist for the
+        // same drone, they represent physically distinct local targets.
+        if (!existing.id.startsWith('G-') && !existing.global_id) {
+          const isSameDrone = (existing.reportingDrone === droneId) ||
+            (Array.isArray(existing.seenBy) && existing.seenBy.includes(droneId) && existing.seenBy.length === 1);
+          if (isSameDrone && existing.id !== itemId) {
+            continue;
+          }
+        }
         const d = calculateDistance(rawItem.lat, rawItem.lon, existing.lat, existing.lon);
         if (d <= MULTI_DRONE_MERGE_RADIUS_M && d < minDistance) {
           minDistance = d;
@@ -439,7 +456,11 @@ export function reconcileSnapshot(
       continue;
     }
 
-    const incomingLifecycle = rawObj.lifecycle_state || LifecycleState.CONFIRMED;
+    const incomingLifecycle = rawObj.lifecycle_state || (
+      ((Array.isArray(rawObj.source_drones) && rawObj.source_drones.length >= 2) || Number(rawObj.confidence || 0) >= 0.70)
+        ? LifecycleState.CONFIRMED
+        : LifecycleState.PROVISIONAL
+    );
     next[id] = {
       id,
       label: rawObj.label || 'rubbish',

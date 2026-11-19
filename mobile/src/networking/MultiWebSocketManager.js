@@ -1,4 +1,4 @@
-import { WebSocketManager } from './WebSocketManager';
+import { WebSocketManager } from './WebSocketManager.js';
 
 export class MultiWebSocketManager {
     constructor(authToken = "") {
@@ -28,10 +28,15 @@ export class MultiWebSocketManager {
             parsed.pathname = "";
             parsed.search = "";
             parsed.hash = "";
-            return parsed.toString().replace(/\/$/, "");
+            let host = parsed.hostname;
+            if (host === "localhost") {
+                host = "127.0.0.1";
+            }
+            return `${parsed.protocol}//${host}:${parsed.port}`;
         } catch (e) {
-            const host = raw.replace(/^wss?:\/\//, "").split("/")[0].split(":")[0];
+            let host = raw.replace(/^wss?:\/\//, "").split("/")[0].split(":")[0];
             if (!host) return null;
+            if (host === "localhost") host = "127.0.0.1";
             return `ws://${host}:${port || 8080}`;
         }
     }
@@ -101,6 +106,8 @@ export class MultiWebSocketManager {
             const saved = JSON.parse(raw);
             if (Array.isArray(saved)) {
                 saved.forEach(url => {
+                    // Deprecated: GFS daemon is headless UDP on 41458, not WS 8088
+                    if (typeof url === 'string' && (url.includes(':8088') || url.endsWith('/8088'))) return;
                     this.addConnection(url);
                 });
             }
@@ -154,6 +161,20 @@ export class MultiWebSocketManager {
             }
         });
         return sent;
+    }
+
+    sendTo(url, message) {
+        const normUrl = this.normalizeConnectionUrl(url);
+        const ws = (normUrl && this.connections[normUrl]) || this.connections[url];
+        if (ws && ws.connected) {
+            console.info("SEND_TO", {
+                target_url: ws.url,
+                type: message.type || message.msg_type,
+                timestamp: message.timestamp,
+            });
+            return ws.send(message);
+        }
+        return false;
     }
 
     disconnectAll() {

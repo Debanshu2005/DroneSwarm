@@ -96,10 +96,12 @@ def ingest_raw_packet(
         now_ms = int(time.time() * 1000)
 
     packet_id = packet_dict.get("packet_id") or f"pkt-{uuid.uuid4().hex}"
-    drone_id = packet_dict.get("drone_id")
+    drone_id = packet_dict.get("drone_id") or packet_dict.get("sender_id")
     drone_session_id = packet_dict.get("drone_session_id")
     session_generation = packet_dict.get("session_generation", 1)
-    raw_items = packet_dict.get("observations", [])
+    raw_items = packet_dict.get("observations")
+    if raw_items is None:
+        raw_items = packet_dict.get("detections", [])
 
     if not drone_id or not drone_session_id:
         raise IngestionError("Packet must contain drone_id and drone_session_id")
@@ -129,6 +131,27 @@ def ingest_raw_packet(
         item["drone_id"] = drone_id
         item["drone_session_id"] = drone_session_id
         item["session_generation"] = session_generation
+
+        # Schema normalization for direct drone broadcasts vs pipeline observations
+        if "local_track_id" not in item and "id" in item:
+            item["local_track_id"] = str(item["id"])
+        if "frame_id" not in item:
+            item["frame_id"] = int(packet_dict.get("frame_id", 1))
+        if "capture_timestamp_ms" not in item:
+            raw_ts = item.get("timestamp") or packet_dict.get("timestamp", now_ms)
+            item["capture_timestamp_ms"] = int(raw_ts * 1000) if (1e8 < raw_ts < 1e11) else int(raw_ts)
+        else:
+            raw_ts = item["capture_timestamp_ms"]
+            if 1e8 < raw_ts < 1e11:
+                item["capture_timestamp_ms"] = int(raw_ts * 1000)
+        if "cov_xx" not in item:
+            item["cov_xx"] = 0.25
+        if "cov_yy" not in item:
+            item["cov_yy"] = 0.25
+        if "cov_xy" not in item:
+            item["cov_xy"] = 0.0
+        if "alt" not in item:
+            item["alt"] = float(item.get("altitude_agl", 0.0) or 0.0)
 
         try:
             obs_id = construct_canonical_obs_id(

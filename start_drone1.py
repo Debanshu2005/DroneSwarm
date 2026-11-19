@@ -131,7 +131,8 @@ def main():
                       "--udp-target", "drone1=127.0.0.1:14550",
                       "--udp-target", "drone2=127.0.0.1:14551",
                       "--udp-target", "drone3=127.0.0.1:14552",
-                      "--udp-target", "drone4=127.0.0.1:14553"]
+                      "--udp-target", "drone4=127.0.0.1:14553",
+                      "--allow-duplicate-ips"]
     relay_proc = subprocess.Popen(
         [sys.executable, str(relay_script)] + relay_args,
         stdout=None if os.environ.get("DRONEOS_DIAGNOSTIC_TRACE") else subprocess.DEVNULL,
