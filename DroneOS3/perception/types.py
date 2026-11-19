@@ -1,7 +1,7 @@
 """Perception data types and structure definitions."""
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from typing import Any, Tuple
 
 
 @dataclass

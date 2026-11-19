@@ -256,14 +256,18 @@ async def run_phase2_1_live_validation(
     target_ground_z = 0.0
 
     # Optimal lighting-compensated texture to ensure strong contrast under UE4 directional sunlight
-    tex_path = REPO_ROOT / "ml" / "data" / "optimal_airsim_target.png"
+    tex_path = REPO_ROOT / "assets" / "perception" / "optimal_airsim_target.png"
+    if not tex_path.exists():
+        tex_path = REPO_ROOT / "ml" / "data" / "optimal_airsim_target.png"
     if not tex_path.exists():
         base_tex = cv2.imread(str(REPO_ROOT / "ml" / "data" / "texture_candidate_2.png"))
         if base_tex is not None:
             tex_adj = np.clip(base_tex.astype(float) * 0.70, 0, 255).astype(np.uint8)
             cv2.imwrite(str(tex_path), tex_adj)
         else:
-            tex_path = REPO_ROOT / "ml" / "data" / "sample_target_garbage.png"
+            tex_path = REPO_ROOT / "assets" / "perception" / "sample_target_garbage.png"
+            if not tex_path.exists():
+                tex_path = REPO_ROOT / "ml" / "data" / "sample_target_garbage.png"
 
     target_ok, target_meta = await setup_scene_target(
         client=client,

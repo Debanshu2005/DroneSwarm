@@ -44,6 +44,10 @@ class StrictState:
         self.ready = True; self.ready_message = ""; self.can_arm = True
 
 class FakeAirSimConcurrency:
+    class LandedState:
+        Landed = 0
+        Flying = 1
+
     class YawMode:
         def __init__(self, is_rate, yaw_or_rate):
             pass
@@ -66,7 +70,16 @@ class FakeAirSimConcurrency:
             self._state = StrictState()
             self.getMultirotorState = MagicMock(return_value=self._state)
 
+_saved_airsim = sys.modules.get('airsim')
 sys.modules['airsim'] = FakeAirSimConcurrency
+
+@pytest.fixture(autouse=True, scope="module")
+def _cleanup_airsim_module():
+    yield
+    if _saved_airsim is not None:
+        sys.modules['airsim'] = _saved_airsim
+    else:
+        sys.modules.pop('airsim', None)
 
 from DroneOS.adapters.airsim_adapter import AirSimFlightController
 from DroneOS.shared.config.models import FlightConfig

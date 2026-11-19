@@ -58,8 +58,8 @@ def test_aggregator_duplicate_timestamp_rejection():
     assert len(emitted2) == 0
     assert aggregator.tracks[track_id].hits == 1  # Hits must NOT increment!
 
-    # Frame 2 at t = 101.0 (timestamp advances)
-    emitted3 = aggregator.update([det], now=101.0)
+    # Frame 2 at t = 102.5 (timestamp advances >= min_temporal_separation_s)
+    emitted3 = aggregator.update([det], now=102.5)
     assert len(emitted3) == 1  # Confirmed!
     assert emitted3[0].status == "new"
     assert aggregator.tracks[track_id].hits == 2

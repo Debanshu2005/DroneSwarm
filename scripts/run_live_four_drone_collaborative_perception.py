@@ -335,7 +335,9 @@ async def run_collaborative_perception_mission(duration_seconds: float = 65.0) -
 
     # 2. Spawn and texture physical ground targets
     print("\n[Stage 2/9] Introducing physical 3D garbage targets into AirSim...")
-    tex_path = REPO_ROOT / "ml" / "data" / "optimal_airsim_target.png"
+    tex_path = REPO_ROOT / "assets" / "perception" / "optimal_airsim_target.png"
+    if not tex_path.exists():
+        tex_path = REPO_ROOT / "ml" / "data" / "optimal_airsim_target.png"
     tex_abs = tex_path.resolve().as_posix()
 
     target_defs = [

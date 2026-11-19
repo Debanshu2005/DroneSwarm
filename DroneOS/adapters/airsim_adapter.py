@@ -615,7 +615,9 @@ class AirSimFlightController(IFlightController):
                 self._telemetry.is_armable = getattr(state, 'can_arm', True)
                 self._telemetry.health_all_ok = True
                 
-                if self._awaiting_disarm and (state.landed_state == 1 or (state.kinematics_estimated.position.z_val > -0.5 and math.hypot(state.kinematics_estimated.linear_velocity.x_val, state.kinematics_estimated.linear_velocity.y_val) < 0.2)):
+                landed_target = getattr(getattr(airsim, "LandedState", None), "Landed", 0)
+                is_landed = (getattr(state, 'landed_state', None) == landed_target) or (getattr(state, 'landed_state', None) == 0)
+                if self._awaiting_disarm and (is_landed or (state.kinematics_estimated.position.z_val > -0.5 and math.hypot(state.kinematics_estimated.linear_velocity.x_val, state.kinematics_estimated.linear_velocity.y_val) < 0.2)):
                     self._armed = False
                     self._awaiting_disarm = False
                     if self._mode in ("LAND", "RTL"):

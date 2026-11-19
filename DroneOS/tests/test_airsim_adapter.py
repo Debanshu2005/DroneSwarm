@@ -18,10 +18,16 @@ class FakeFuture:
 
 class StrictVector3r:
     __slots__ = ['x_val', 'y_val', 'z_val']
-    def __init__(self):
-        self.x_val = 0.0
-        self.y_val = 0.0
-        self.z_val = 0.0
+    def __init__(self, x_val=0.0, y_val=0.0, z_val=0.0):
+        self.x_val = x_val
+        self.y_val = y_val
+        self.z_val = z_val
+
+class StrictPose:
+    __slots__ = ['position_val', 'orientation_val']
+    def __init__(self, position_val=None, orientation_val=None):
+        self.position_val = position_val
+        self.orientation_val = orientation_val
 
 class StrictKinematics:
     __slots__ = ['position', 'linear_velocity', 'orientation']
@@ -60,6 +66,17 @@ class StrictGpsData:
         self.gnss = Gnss()
 
 class FakeAirSim:
+    Vector3r = StrictVector3r
+    Pose = StrictPose
+
+    class LandedState:
+        Landed = 0
+        Flying = 1
+
+    @staticmethod
+    def to_quaternion(pitch, roll, yaw):
+        return (0.0, 0.0, 0.0, 1.0)
+
     class YawMode:
         def __init__(self, is_rate, yaw_or_rate):
             self.is_rate = is_rate
@@ -109,7 +126,17 @@ class FakeAirSim:
             self._state.kinematics_estimated.linear_velocity.z_val = 0.5
             self.getMultirotorState = MagicMock(return_value=self._state)
 
+_saved_airsim = sys.modules.get('airsim')
 sys.modules['airsim'] = FakeAirSim
+
+@pytest.fixture(scope="module", autouse=True)
+def restore_airsim_module():
+    sys.modules['airsim'] = FakeAirSim
+    yield
+    if _saved_airsim is not None:
+        sys.modules['airsim'] = _saved_airsim
+    else:
+        sys.modules.pop('airsim', None)
 
 from DroneOS.adapters.airsim_adapter import AirSimFlightController
 from DroneOS.adapters.factory import AdapterFactory

@@ -26,10 +26,8 @@ import csv
 import json
 import math
 from pathlib import Path
-import re
 import sys
-import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 import matplotlib
 matplotlib.use("Agg")
@@ -42,8 +40,6 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from DroneOS.perception.aggregator import (
-    AggregatedTrack,
-    AggregatorItem,
     GeoreferencedDetection,
     TrackAggregator,
 )

@@ -9,10 +9,8 @@ Categorizes and renders:
 Saves visual crops and analysis to ml/reports/visual_errors/
 """
 
-import json
 from pathlib import Path
 import cv2
-import numpy as np
 import torch
 from ultralytics import YOLO
 

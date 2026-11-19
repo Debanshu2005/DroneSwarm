@@ -16,7 +16,6 @@ from gfs.models import (
     GlobalObject,
     SourceEstimate,
     LifecycleState,
-    wgs84_to_enu,
     enu_to_wgs84
 )
 from gfs.config import GFSConfig

@@ -4,7 +4,7 @@ SQLite database engine, connection pooling, and schema migrations for the Global
 
 import sqlite3
 from pathlib import Path
-from typing import Optional, Generator
+from typing import Generator
 from contextlib import contextmanager
 
 

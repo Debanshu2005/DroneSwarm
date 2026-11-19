@@ -8,7 +8,7 @@ from DroneOS1.shared.utils.logger import setup_logger
 from DroneOS1.shared.communication.serializers import JsonSerializer
 from DroneOS1.shared.communication.network_node import UdpNetworkAdapter
 from DroneOS1.shared.protocol.messages import (
-    BaseMessage, MessageType, CommandAction
+    BaseMessage, MessageType, CommandAction, DroneJoinMessage
 )
 
 from DroneOS1.adapters.factory import AdapterFactory
@@ -31,7 +31,6 @@ from DroneOS1.shared.config.loader import load_yaml_config
 from DroneOS1.shared.config.models import DroneConfig, NetworkConfig, FlightConfig
 
 def self_status_provider_fn(state_store):
-    import time
     try:
         t = getattr(state_store, 'local_telemetry', None)
         if not t: return {"battery_level": 0.0, "gps_valid": False, "position_age": None, "lat": None, "lon": None, "alt": None}
@@ -155,7 +154,7 @@ class DroneOSApp:
 
         # Perception Preflight Check
         repo_root = Path(__file__).resolve().parent.parent
-        from DroneOS1.perception.preflight import run_perception_preflight, PerceptionStatus
+        from DroneOS1.perception.preflight import run_perception_preflight
         st, rsn = run_perception_preflight(self.perception_cfg, repo_root)
         self._perception_preflight_status = st
         self._perception_preflight_reason = rsn
@@ -324,7 +323,10 @@ class DroneOSApp:
                 elif src_type == "opencv":
                     frame_src = OpenCVFrameSource(device=cam_cfg.device)
                 elif src_type == "folder":
-                    img_dir = cam_cfg.image_dir or str(repo_root / "ml" / "data" / "demo_images")
+                    default_img_dir = repo_root / "assets" / "perception" / "demo_images"
+                    if not default_img_dir.exists():
+                        default_img_dir = repo_root / "ml" / "data" / "demo_images"
+                    img_dir = cam_cfg.image_dir or str(default_img_dir)
                     frame_src = ImageFolderSource(folder_path=img_dir)
                 else:
                     logger.warning("Unknown perception source '%s'; defaulting to AirSimFrameSource", src_type)
@@ -590,7 +592,6 @@ class DroneOSApp:
                 return
             
             # Fire and forget task to avoid blocking main receive loop
-            import asyncio
             self._dispatch_task(self._handle_param_request(msg))
 
         elif msg.msg_type == MessageType.TERMINAL_COMMAND:
@@ -737,8 +738,6 @@ class DroneOSApp:
         if getattr(self, 'perception_pipeline', None) and getattr(self, 'perception_cfg', None) and self.perception_cfg.enabled:
             self._dispatch_task(self.perception_pipeline.start())
         
-        from DroneOS1.shared.protocol.messages import DroneJoinMessage, DroneIdentityMessage
-        import time
         join_msg = DroneJoinMessage(
             sender_id=self.node_id,
             timestamp=time.time(),
@@ -755,11 +754,9 @@ class DroneOSApp:
         # drones that were not yet listening register each other.
         async def _delayed_rejoin() -> None:
             await asyncio.sleep(3.0)
-            from DroneOS1.shared.protocol.messages import DroneJoinMessage, DroneIdentityMessage
-            import time as _time
             rejoin_msg = DroneJoinMessage(
                 sender_id=self.node_id,
-                timestamp=_time.time(),
+                timestamp=time.time(),
                 drone_ip=self.network_cfg.host,
                 drone_port=self.network_cfg.port,
                 capabilities=self.swarm_manager.identity.capabilities

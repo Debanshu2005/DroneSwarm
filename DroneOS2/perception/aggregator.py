@@ -1,9 +1,9 @@
 """Track aggregator merging multi-frame detections into stable ground markers."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import math
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from DroneOS2.perception.geolocate import lat_lon_to_meters
 
@@ -29,6 +29,10 @@ class AggregatedTrack:
     last_hit_time: float = 0.0
     last_drone_lat: Optional[float] = None
     last_drone_lon: Optional[float] = None
+    distinct_hits: int = 1
+    last_distinct_hit_time: float = 0.0
+    last_distinct_drone_lat: Optional[float] = None
+    last_distinct_drone_lon: Optional[float] = None
 
 
 @dataclass
@@ -124,27 +128,35 @@ class TrackAggregator:
                 matched_track_ids.add(best_track_id)
                 track = self.tracks[best_track_id]
 
-                # Check observation distinctness for hit accumulation:
+                # Check observation distinctness for temporal confirmation (Requirement 8):
                 # Requires either >= min_temporal_separation_s OR >= min_drone_displacement_m
-                dt = now - track.last_hit_time
-                disp_m = 0.0
-                if (
-                    det.drone_lat is not None
-                    and det.drone_lon is not None
-                    and track.last_drone_lat is not None
-                    and track.last_drone_lon is not None
-                ):
-                    d_dn, d_de = lat_lon_to_meters(det.drone_lat, det.drone_lon, track.last_drone_lat, track.last_drone_lon)
-                    disp_m = math.hypot(d_dn, d_de)
+                if not track.confirmed:
+                    dt = now - track.last_distinct_hit_time
+                    disp_m = 0.0
+                    if (
+                        det.drone_lat is not None
+                        and det.drone_lon is not None
+                        and track.last_distinct_drone_lat is not None
+                        and track.last_distinct_drone_lon is not None
+                    ):
+                        d_dn, d_de = lat_lon_to_meters(det.drone_lat, det.drone_lon, track.last_distinct_drone_lat, track.last_distinct_drone_lon)
+                        disp_m = math.hypot(d_dn, d_de)
 
-                is_distinct = (dt >= self.min_temporal_separation_s) or (disp_m >= self.min_drone_displacement_m)
+                    if dt >= self.min_temporal_separation_s or disp_m >= self.min_drone_displacement_m:
+                        track.hits += 1
+                        track.distinct_hits += 1
+                        track.last_distinct_hit_time = now
+                        if det.drone_lat is not None and det.drone_lon is not None:
+                            track.last_distinct_drone_lat = det.drone_lat
+                            track.last_distinct_drone_lon = det.drone_lon
+                else:
+                    if now > track.last_seen:
+                        track.hits += 1
 
-                if is_distinct:
-                    track.hits += 1
-                    track.last_hit_time = now
-                    if det.drone_lat is not None and det.drone_lon is not None:
-                        track.last_drone_lat = det.drone_lat
-                        track.last_drone_lon = det.drone_lon
+                track.last_hit_time = now
+                if det.drone_lat is not None and det.drone_lon is not None:
+                    track.last_drone_lat = det.drone_lat
+                    track.last_drone_lon = det.drone_lon
 
                 track.max_confidence = max(track.max_confidence, det.confidence)
                 track.sum_conf += det.confidence
@@ -165,6 +177,7 @@ class TrackAggregator:
                     lat=det.lat,
                     lon=det.lon,
                     hits=1,
+                    distinct_hits=1,
                     max_confidence=det.confidence,
                     sum_conf=det.confidence,
                     sum_conf_lat=det.confidence * det.lat,
@@ -174,6 +187,9 @@ class TrackAggregator:
                     last_hit_time=now,
                     last_drone_lat=det.drone_lat,
                     last_drone_lon=det.drone_lon,
+                    last_distinct_hit_time=now,
+                    last_distinct_drone_lat=det.drone_lat,
+                    last_distinct_drone_lon=det.drone_lon,
                     last_emitted_time=0.0,
                     last_emitted_hits=0,
                     confirmed=False,
@@ -184,7 +200,7 @@ class TrackAggregator:
 
         # Check emission criteria
         for track in self.tracks.values():
-            if not track.confirmed and track.hits >= self.min_hits:
+            if not track.confirmed and track.distinct_hits >= self.min_hits:
                 track.confirmed = True
                 track.last_emitted_time = now
                 track.last_emitted_hits = track.hits

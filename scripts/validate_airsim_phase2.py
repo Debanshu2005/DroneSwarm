@@ -370,7 +370,9 @@ async def run_phase2_validation(
     # STAGE 3 & 4: Scene Target Setup, Frame Acquisition & Target Visibility
     # =========================================================================
     print(f"\n[Stage 3 & 4/11] Scene target configuration, frame acquisition & visibility check...")
-    texture_path = REPO_ROOT / "ml" / "data" / "sample_target_garbage.png"
+    texture_path = REPO_ROOT / "assets" / "perception" / "sample_target_garbage.png"
+    if not texture_path.exists():
+        texture_path = REPO_ROOT / "ml" / "data" / "sample_target_garbage.png"
     target_meta: Dict[str, Any] = {}
     raw_frame_image: Optional[np.ndarray] = None
 

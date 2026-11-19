@@ -14,9 +14,8 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-import sys
 import time
-from typing import Dict, Tuple
+from typing import Dict
 
 import numpy as np
 import torch

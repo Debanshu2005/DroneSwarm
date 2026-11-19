@@ -9,8 +9,8 @@ import uuid
 import sqlite3
 from typing import List, Dict, Tuple, Optional, Any
 
-from gfs.models import Observation, InboxPacket, InboxItem, wgs84_to_enu
-from gfs.canonical import construct_canonical_obs_id, compute_cnor_v1_hash, validate_observation_dict
+from gfs.models import Observation
+from gfs.canonical import construct_canonical_obs_id, compute_cnor_v1_hash
 from gfs.config import GFSConfig
 
 

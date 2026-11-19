@@ -1,7 +1,6 @@
 """Perception preflight validation for dependencies and model weights."""
 
 from pathlib import Path
-import sys
 from typing import Optional, Tuple
 from DroneOS2.shared.utils.logger import setup_logger
 
@@ -46,12 +45,12 @@ def run_perception_preflight(
 
     missing_deps = []
     try:
-        import numpy
+        __import__("numpy")
     except ImportError:
         missing_deps.append("numpy")
 
     try:
-        import cv2
+        __import__("cv2")
     except ImportError:
         missing_deps.append("opencv-python-headless")
 
@@ -63,12 +62,12 @@ def run_perception_preflight(
     is_onnx = weights_path.suffix.lower() == ".onnx"
     if is_onnx:
         try:
-            import onnxruntime
+            __import__("onnxruntime")
         except ImportError:
             missing_deps.append("onnxruntime")
 
     try:
-        import ultralytics
+        __import__("ultralytics")
     except ImportError:
         missing_deps.append("ultralytics")
 

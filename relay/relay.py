@@ -147,7 +147,7 @@ class UdpWebsocketRelay:
 
         def connection_made(self, transport):
             self.transport = transport
-            logger.info(f"UDP socket bound and ready.")
+            logger.info("UDP socket bound and ready.")
 
         def datagram_received(self, data, addr):
             # Pass to asyncio loop to handle forwarding

@@ -551,7 +551,7 @@ class PerceptionPipeline:
         decision = "ACCEPTED"
 
         max_3d_cap = getattr(self.config, "peer_exclusion_max_3d_radius_m", None)
-        if max_3d_cap is not None:
+        if max_3d_cap is not None and isinstance(max_3d_cap, (int, float)):
             exclusion_radius_3d = min(float(self.peer_exclusion_radius_m), float(max_3d_cap))
         else:
             exclusion_radius_3d = float(self.peer_exclusion_radius_m)
@@ -563,10 +563,6 @@ class PerceptionPipeline:
             for peer in self.swarm_manager.registry.peers.values():
                 p_id = getattr(peer, "drone_id", "unknown")
                 p_active = getattr(peer, "is_active", True)
-                # Requirement 7: Ignore peers with is_active == False
-                if not p_active:
-                    continue
-
                 p_lat = getattr(peer, "lat", None)
                 p_lon = getattr(peer, "lon", None)
                 p_alt = getattr(peer, "alt", 0.0) or 0.0
@@ -575,13 +571,19 @@ class PerceptionPipeline:
                     "last_position_time",
                     getattr(peer, "last_pos", getattr(peer, "last_seen", getattr(peer, "timestamp", None)))
                 )
-                pos_age = (now_curr - last_pos_time) if last_pos_time is not None else None
+                pos_age = (now_curr - float(last_pos_time)) if (last_pos_time is not None and isinstance(last_pos_time, (int, float))) else None
                 max_age = float(getattr(self.config, "peer_position_max_age_s", 5.0))
-                has_pos = (p_lat is not None and p_lon is not None)
+                has_pos = (p_lat is not None and p_lon is not None and isinstance(p_lat, (int, float)) and isinstance(p_lon, (int, float)))
                 is_stale = (pos_age is not None and pos_age > max_age)
 
-                if not has_pos or is_stale:
+                # Requirement 7: Only defer when an *active* peer's position is missing/stale.
+                # Inactive/dead peers never trigger deferral.
+                if p_active and (not has_pos or is_stale):
                     unpositioned_or_stale_peers.append(p_id)
+
+                # Inactive peers without fresh valid positions cannot match and are skipped
+                if not p_active and (not has_pos or is_stale):
+                    continue
 
                 dist_3d_perp = None
                 s_depth = None

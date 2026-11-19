@@ -69,7 +69,7 @@ def train(
     for k, v in train_kwargs.items():
         print(f"  {k}: {v}")
 
-    train_results = model.train(**train_kwargs)
+    _ = model.train(**train_kwargs)
 
     # Evaluate on the TEST split
     print("\n" + "=" * 60)

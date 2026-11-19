@@ -11,13 +11,11 @@ import argparse
 import csv
 import json
 from pathlib import Path
-import sys
 from typing import Dict, List
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 
 
 THRESHOLDS = [0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70]

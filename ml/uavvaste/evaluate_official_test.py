@@ -17,14 +17,9 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
-import sys
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import cv2
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
 import torch
 from ultralytics import YOLO
 
@@ -93,7 +88,7 @@ def evaluate_official_test_set(
     std_map50_95 = float(std_dict.get("metrics/mAP50-95(B)", 0.0))
     std_f1 = (2.0 * std_prec * std_rec) / (std_prec + std_rec) if (std_prec + std_rec) > 0 else 0.0
 
-    print(f"  Standard Test Metrics (conf=0.25):")
+    print("  Standard Test Metrics (conf=0.25):")
     print(f"    Precision: {std_prec*100:.2f}% | Recall: {std_rec*100:.2f}% | F1: {std_f1*100:.2f}%")
     print(f"    mAP@50:    {std_map50*100:.2f}% | mAP@50-95: {std_map50_95*100:.2f}%")
 
@@ -184,7 +179,6 @@ def evaluate_official_test_set(
         img_fp = 0
 
         for p in sorted(pred_boxes, key=lambda x: x["conf"], reverse=True):
-            matched = False
             best_iou = 0.0
             best_g_idx = -1
             for g_idx, g_box in enumerate(gt_boxes):

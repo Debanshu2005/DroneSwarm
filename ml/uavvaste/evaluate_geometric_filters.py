@@ -18,11 +18,9 @@ Measures Precision, Recall, and False Positive rejection under:
 import argparse
 import json
 from pathlib import Path
-import sys
-from typing import Dict, List, Tuple
+from typing import Dict
 
 import cv2
-import numpy as np
 import torch
 from ultralytics import YOLO
 

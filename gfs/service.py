@@ -10,7 +10,6 @@ import json
 import time
 import logging
 from typing import List, Dict, Tuple, Optional, Any, Set
-import sqlite3
 
 from gfs.models import (
     Observation,
@@ -30,6 +29,7 @@ from gfs.association import (
 )
 from gfs.hypothesis import form_new_global_objects
 from gfs.inbox import (
+    ingest_raw_packet,
     claim_pending_packets,
     commit_packet_dispositions
 )
@@ -644,9 +644,6 @@ class GFSService:
             print("  GFS status: ACTIVE (running OCC fusion pipeline)")
             print("  Press Ctrl+C to terminate.")
             print("=" * 60)
-
-            from gfs.inbox import ingest_raw_packet
-            from gfs.outbox import lease_outbox_events, record_successful_transmission, process_gcs_ack
 
             interval_s = self.config.batch_interval_ms / 1000.0
 

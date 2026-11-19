@@ -21,8 +21,7 @@ import argparse
 import json
 from pathlib import Path
 import shutil
-import sys
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import cv2
 import numpy as np

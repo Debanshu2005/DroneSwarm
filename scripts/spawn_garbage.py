@@ -15,7 +15,9 @@ sys.path.insert(0, str(REPO_ROOT))
 import airsim
 from DroneOS.perception.geolocate import meters_to_lat_lon
 
-DEFAULT_TEXTURE = REPO_ROOT / "ml" / "data" / "optimal_airsim_target.png"
+DEFAULT_TEXTURE = REPO_ROOT / "assets" / "perception" / "optimal_airsim_target.png"
+if not DEFAULT_TEXTURE.exists():
+    DEFAULT_TEXTURE = REPO_ROOT / "ml" / "data" / "optimal_airsim_target.png"
 
 
 def get_client(host="127.0.0.1", port=41451):

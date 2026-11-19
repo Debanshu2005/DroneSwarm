@@ -144,7 +144,8 @@ class LiveAirSimTelemetryAdapter:
                 armed_state = "UNKNOWN"
 
         # In AirSim: LandedState.Landed == 0, LandedState.Flying == 1
-        is_airborne = (state.landed_state == airsim.LandedState.Flying) or (altitude_agl >= 1.0)
+        flying_state = getattr(getattr(airsim, "LandedState", None), "Flying", 1)
+        is_airborne = (state.landed_state == flying_state) or (altitude_agl >= 1.0)
         flight_mode = "HOLD" if is_airborne else "LANDED"
 
         telem = TelemetryData(
@@ -289,7 +290,9 @@ async def setup_scene_target(
     application, and independent ground-truth coordinate acquisition.
     """
     if texture_path is None:
-        texture_path = REPO_ROOT / "ml" / "data" / "sample_target_garbage.png"
+        texture_path = REPO_ROOT / "assets" / "perception" / "sample_target_garbage.png"
+        if not texture_path.exists():
+            texture_path = REPO_ROOT / "ml" / "data" / "sample_target_garbage.png"
 
     # Determine unique actor name for this validation run
     if unique_name:

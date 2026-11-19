@@ -8,7 +8,10 @@ import {
   reconcileSnapshot,
   getConfirmedGarbage,
   getProvisionalGarbage,
-  LifecycleState
+  LifecycleState,
+  DEFAULT_BENCHMARK_TARGETS,
+  isDemoModeEnabled,
+  getInitialBenchmarkTargets
 } from './garbage.js';
 
 function assert(condition, message) {
@@ -248,6 +251,25 @@ const throwingStorage = {
 };
 savePersistedGarbage(throwingStorage, { "G-1": { id: "G-1" } }); // Must not throw
 savePersistedTombstones(throwingStorage, { "G-1": { version: 2 } }); // Must not throw
+
+// Benchmark Targets Demo Gating Tests
+console.log("Running Benchmark Target Demo Gating Tests...");
+const realSessionGarbage = loadPersistedGarbage(null, { enableDemo: false });
+assert(Object.keys(realSessionGarbage).length === 0, "Real session must NEVER seed default benchmark targets");
+
+const demoSessionGarbage = loadPersistedGarbage(null, { enableDemo: true });
+assert(Object.keys(demoSessionGarbage).length === 2, "Demo session seeds default benchmark targets");
+assert(demoSessionGarbage['G-0ab2d222'].isDemo === true, "Demo target G-0ab2d222 must be labeled isDemo: true");
+assert(demoSessionGarbage['G-0ab2d222'].synthetic === true, "Demo target G-0ab2d222 must be labeled synthetic: true");
+assert(demoSessionGarbage['G-0ab2d222'].label.includes('demo'), "Demo target label must indicate demo");
+assert(demoSessionGarbage['G-467e474f'].isDemo === true, "Demo target G-467e474f must be labeled isDemo: true");
+assert(demoSessionGarbage['G-467e474f'].synthetic === true, "Demo target G-467e474f must be labeled synthetic: true");
+assert(demoSessionGarbage['G-467e474f'].label.includes('demo'), "Demo target label must indicate demo");
+
+assert(isDemoModeEnabled({ enableDemo: false }) === false, "isDemoModeEnabled respects explicit false");
+assert(isDemoModeEnabled({ enableDemo: true }) === true, "isDemoModeEnabled respects explicit true");
+assert(Object.keys(getInitialBenchmarkTargets({ enableDemo: false })).length === 0, "getInitialBenchmarkTargets returns empty when demo disabled");
+assert(Object.keys(getInitialBenchmarkTargets({ enableDemo: true })).length === 2, "getInitialBenchmarkTargets returns 2 when demo enabled");
 
 // Case D: Contract B Authoritative GFS Snapshot Recovery and Reconciliation
 console.log("Running Contract B Snapshot Reconciliation Tests...");

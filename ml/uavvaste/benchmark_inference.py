@@ -9,7 +9,7 @@ import gc
 import json
 from pathlib import Path
 import time
-from typing import Dict, List
+from typing import Dict
 
 import cv2
 import numpy as np

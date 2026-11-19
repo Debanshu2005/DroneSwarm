@@ -75,7 +75,9 @@ def test_telemetry_altitude_gating():
 async def test_live_yolo_inference_on_sample_target():
     """Verify trained checkpoint models/garbage.pt detects rubbish on genuine crop."""
     weights_path = REPO_ROOT / "models" / "garbage.pt"
-    crop_path = REPO_ROOT / "ml" / "data" / "sample_target_garbage.png"
+    crop_path = REPO_ROOT / "assets" / "perception" / "sample_target_garbage.png"
+    if not crop_path.exists():
+        crop_path = REPO_ROOT / "ml" / "data" / "sample_target_garbage.png"
     assert weights_path.exists(), "models/garbage.pt must exist"
     assert crop_path.exists(), "Sample target garbage crop must exist"
 
@@ -259,7 +261,7 @@ def test_track_aggregator_interface_contract():
 
     # 3. Step 2: Second matching detection -> confirmed track & emission
     det2 = GeoreferencedDetection(label="rubbish", confidence=0.90, lat=47.641469, lon=-122.140139, altitude_agl=10.0)
-    emitted2 = aggregator.update([det2], now=101.0)
+    emitted2 = aggregator.update([det2], now=102.5)
 
     assert len(emitted2) == 1, "Second hit must emit newly confirmed track"
     item = emitted2[0]
@@ -601,12 +603,15 @@ async def test_pipeline_safety_gates_rejection_diagnostics():
     assert pipe.last_step_stats["raw_detections"] == 0
 
     # Gate 9: Aggregation no emission on 1st hit when min_hits=2
+    cur_time = [now]
     frame1 = Frame(image=np.zeros((720, 1280, 3), dtype=np.uint8), timestamp=now)
-    frame2 = Frame(image=np.zeros((720, 1280, 3), dtype=np.uint8), timestamp=now + 0.5)
+    frame2 = Frame(image=np.zeros((720, 1280, 3), dtype=np.uint8), timestamp=now + 2.5)
     fs_advancing = MagicMock()
     fs_advancing.get_frame = AsyncMock(side_effect=[frame1, frame2])
+    fc_advancing = MagicMock()
+    fc_advancing.get_telemetry = AsyncMock(side_effect=lambda: make_telem(timestamp=cur_time[0]))
 
-    pipe = PerceptionPipeline(drone_id="drone1", frame_source=fs_advancing, detector=detector, flight_controller=fc_ok, network_adapter=net_mock, config=config)
+    pipe = PerceptionPipeline(drone_id="drone1", frame_source=fs_advancing, detector=detector, flight_controller=fc_advancing, network_adapter=net_mock, config=config)
     await pipe._step()
     assert pipe.last_rejection_reason == "AGGREGATION_NO_EMISSION"
     assert pipe.last_step_stats["reached_inference"] is True
@@ -620,6 +625,7 @@ async def test_pipeline_safety_gates_rejection_diagnostics():
     assert track.hits == 1
 
     # Step 2: 2nd hit with advancing time confirms track and emits!
+    cur_time[0] = now + 2.5
     await pipe._step()
     assert pipe.last_rejection_reason is None
     assert pipe.last_step_stats["emitted_items"] == 1

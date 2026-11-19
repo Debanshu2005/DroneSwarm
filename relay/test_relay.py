@@ -2,9 +2,16 @@ import pytest
 import asyncio
 from unittest.mock import MagicMock
 import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from relay import UdpWebsocketRelay
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+try:
+    from relay.relay import UdpWebsocketRelay
+except ImportError:
+    from relay import UdpWebsocketRelay
 
 @pytest.mark.asyncio
 async def test_groundstation_heartbeat_gating():
@@ -59,6 +66,8 @@ async def test_simulation_relay_uses_its_own_unicast_drone_endpoint():
         udp_target_host="127.0.0.1", udp_target_port=14550,
     )
     relay.transport = MagicMock()
+    # Connect a mock client so heartbeat gating is satisfied
+    relay.clients.add(MagicMock())
 
     await relay.forward_ws_to_udp('{"msg_type":"command","sender_id":"gs","target_id":"drone1"}')
     await relay._send_relay_groundstation_heartbeat()

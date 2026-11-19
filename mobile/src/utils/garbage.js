@@ -14,14 +14,16 @@ export const LifecycleState = Object.freeze({
 
 /**
  * Standard benchmark garbage targets (AirSim origin coordinates).
- * Seeded on initial app launch when no prior session data exists.
+ * Gated behind explicit demo mode flag (never seeded into a real production session).
  */
 export const DEFAULT_BENCHMARK_TARGETS = {
   'G-0ab2d222': {
     id: 'G-0ab2d222',
     global_id: 'G-0ab2d222',
-    label: 'rubbish',
+    label: 'rubbish (demo)',
     status: 'ACTIVE',
+    isDemo: true,
+    synthetic: true,
     lat: 47.6414997000614,
     lon: -122.14008769986052,
     alt: 10.14,
@@ -36,8 +38,10 @@ export const DEFAULT_BENCHMARK_TARGETS = {
   'G-467e474f': {
     id: 'G-467e474f',
     global_id: 'G-467e474f',
-    label: 'rubbish',
+    label: 'rubbish (demo)',
     status: 'ACTIVE',
+    isDemo: true,
+    synthetic: true,
     lat: 47.64163450006141,
     lon: -122.14008769986052,
     alt: 10.14,
@@ -50,6 +54,47 @@ export const DEFAULT_BENCHMARK_TARGETS = {
     lastSeen: 1794806907545
   }
 };
+
+/**
+ * Check whether demo targets are explicitly enabled via settings, environment or options.
+ * @param {object} [options={}]
+ * @returns {boolean}
+ */
+export function isDemoModeEnabled(options = {}) {
+  if (options && options.enableDemo !== undefined) {
+    return Boolean(options.enableDemo);
+  }
+  // Check localStorage setting toggle if in browser
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = window.localStorage.getItem('PhoneOS_DemoTargets');
+      if (stored !== null) return stored === 'true';
+    }
+  } catch (e) {
+    // Ignore storage errors
+  }
+  // Check Vite environment variable
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    return import.meta.env.VITE_DEMO_TARGETS === 'true' || import.meta.env.VITE_DEMO_TARGETS === true;
+  }
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env.VITE_DEMO_TARGETS === 'true';
+  }
+  return false;
+}
+
+/**
+ * Get default benchmark targets only if demo mode is explicitly enabled.
+ * In a real production session, returns an empty object {}.
+ * @param {object} [options={}]
+ * @returns {Record<string, object>}
+ */
+export function getInitialBenchmarkTargets(options = {}) {
+  if (isDemoModeEnabled(options)) {
+    return JSON.parse(JSON.stringify(DEFAULT_BENCHMARK_TARGETS));
+  }
+  return {};
+}
 
 /**
  * Validate coordinates and confidence for an incoming detection item.
@@ -351,16 +396,24 @@ export function savePersistedTombstones(storage, tombstones) {
 /**
  * Load persisted active garbage markers from storage (localStorage or storage adapter).
  * Safely recovers from missing or corrupted storage.
+ * When storage has no prior markers, benchmark targets are ONLY seeded if demo mode is enabled.
  * @param {Storage|object} storage
+ * @param {object} [options={}]
  * @returns {Record<string, object>}
  */
-export function loadPersistedGarbage(storage) {
-  if (!storage) return {};
+export function loadPersistedGarbage(storage, options = {}) {
+  if (!storage) return getInitialBenchmarkTargets(options);
   try {
     const raw = typeof storage.getItem === 'function' ? storage.getItem('PhoneOS_Garbage') : storage['PhoneOS_Garbage'];
-    return raw ? JSON.parse(raw) : {};
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+        return parsed;
+      }
+    }
+    return getInitialBenchmarkTargets(options);
   } catch (e) {
-    return {};
+    return getInitialBenchmarkTargets(options);
   }
 }
 

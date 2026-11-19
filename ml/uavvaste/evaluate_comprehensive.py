@@ -12,7 +12,6 @@ Outputs saved to ml/reports/
 
 import json
 from pathlib import Path
-import sys
 
 import cv2
 import matplotlib
