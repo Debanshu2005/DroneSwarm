@@ -85,13 +85,6 @@ EVENTS_JSONL_PATH = OUTPUT_DIR / "live_airsim_peer_exclusion_events.jsonl"
 METRICS_JSON_PATH = OUTPUT_DIR / "live_airsim_peer_exclusion_metrics.json"
 REPORT_MD_PATH = OUTPUT_DIR / "live_airsim_peer_exclusion_report.md"
 
-SPAWN_OFFSETS = {
-    "Drone1": (0.0, 0.0),
-    "Drone2": (15.0, 0.0),
-    "Drone3": (7.5, 13.0),
-    "Drone4": (22.5, 13.0),
-}
-
 
 class LiveTelemetryAdapter:
     """Queries live AirSim telemetry for a vehicle and builds TelemetryData."""
@@ -120,10 +113,8 @@ class LiveTelemetryAdapter:
         pos_z = kin.position.z_val
         alt = abs(pos_z)  # AGL
 
-        sx, sy = SPAWN_OFFSETS.get(self.vehicle_name, (0.0, 0.0))
-        xw = kin.position.x_val + sx
-        yw = kin.position.y_val + sy
-        lat, lon = meters_to_lat_lon(xw, yw, home.latitude, home.longitude)
+        lat = gps.gnss.geo_point.latitude if hasattr(gps, "gnss") else (home.latitude if hasattr(home, "latitude") else 47.641468)
+        lon = gps.gnss.geo_point.longitude if hasattr(gps, "gnss") else (home.longitude if hasattr(home, "longitude") else -122.140165)
 
         return TelemetryData(
             flight_mode="GUIDED",
@@ -220,10 +211,8 @@ class LiveAirSimDroneNode:
         await self.pipeline._step()
 
 
-def set_drone_world(client: airsim.MultirotorClient, vehicle_name: str, xw: float, yw: float, zw: float, yaw: float = 0.0):
-    """Sets vehicle pose in shared world NED coordinates by compensating for AirSim vehicle spawn offsets."""
-    sx, sy = SPAWN_OFFSETS.get(vehicle_name, (0.0, 0.0))
-    pose = airsim.Pose(airsim.Vector3r(xw - sx, yw - sy, zw), airsim.to_quaternion(0, 0, math.radians(yaw)))
+def set_drone_pose(client: airsim.MultirotorClient, vehicle_name: str, x: float, y: float, z: float, yaw: float = 0.0):
+    pose = airsim.Pose(airsim.Vector3r(x, y, z), airsim.to_quaternion(0, 0, math.radians(yaw)))
     client.simSetVehiclePose(pose, ignore_collision=True, vehicle_name=vehicle_name)
 
 
@@ -428,20 +417,6 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
                     r_node.swarm_membership.heartbeat_mgr.handle_heartbeat(hb_msg)
                     r_node.swarm_membership.sync.handle_telemetry(t_msg)
 
-    # Continuous background telemetry mesh (simulates high-frequency drone radio mesh at 10 Hz)
-    sync_running = True
-    sync_skip_drone: Optional[str] = None
-
-    async def continuous_telemetry_mesh():
-        while sync_running:
-            try:
-                cross_sync_telemetry(skip_drone=sync_skip_drone)
-            except Exception:
-                pass
-            await asyncio.sleep(0.1)
-
-    mesh_task = asyncio.create_task(continuous_telemetry_mesh())
-
     scenario_metrics: Dict[str, Any] = {}
 
     # =========================================================================
@@ -453,12 +428,11 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     for v in vehicles:
         client.enableApiControl(True, vehicle_name=v)
         client.armDisarm(True, vehicle_name=v)
-    client.simPause(True)
     
-    set_drone_world(client, "Drone1", 0.0, 0.0, -10.0)
-    set_drone_world(client, "Drone2", 15.0, 0.0, -10.0)
-    set_drone_world(client, "Drone3", 0.0, 15.0, -10.0)
-    set_drone_world(client, "Drone4", 15.0, 15.0, -10.0)
+    set_drone_pose(client, "Drone1", 0.0, 0.0, -10.0)
+    set_drone_pose(client, "Drone2", 5.0, 0.0, -10.0)
+    set_drone_pose(client, "Drone3", 0.0, 5.0, -10.0)
+    set_drone_pose(client, "Drone4", 5.0, 5.0, -10.0)
     await asyncio.sleep(0.2)
 
     cross_sync_telemetry()
@@ -486,11 +460,12 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     g1_lat, g1_lon = meters_to_lat_lon(g1_ned[0], g1_ned[1], origin_lat, origin_lon)
     g2_lat, g2_lon = meters_to_lat_lon(g2_ned[0], g2_ned[1], origin_lat, origin_lon)
 
-    # Position Drone 1 over Target 1, Drone 2 over Target 2, Drones 3 & 4 at standby points
-    set_drone_world(client, "Drone1", g1_ned[0], g1_ned[1], -10.0)
-    set_drone_world(client, "Drone3", 0.0, 15.0, -10.0)
-    set_drone_world(client, "Drone2", g2_ned[0], g2_ned[1], -10.0)
-    set_drone_world(client, "Drone4", 15.0, 15.0, -10.0)
+    # Position Drone 1 and Drone 3 over Target 1
+    set_drone_pose(client, "Drone1", g1_ned[0], g1_ned[1], -10.0)
+    set_drone_pose(client, "Drone3", g1_ned[0], g1_ned[1], -8.0)
+    # Position Drone 2 and Drone 4 over Target 2
+    set_drone_pose(client, "Drone2", g2_ned[0], g2_ned[1], -10.0)
+    set_drone_pose(client, "Drone4", g2_ned[0], g2_ned[1], -8.0)
     await asyncio.sleep(0.2)
     cross_sync_telemetry()
 
@@ -511,25 +486,35 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
         async def detect(self, img):
             return [Detection(bbox_xyxy=(620, 340, 660, 380), confidence=0.85, label="rubbish")]
 
-    # Drone 1 observes Target 1
+    # Drone 1 and Drone 3 observe Target 1
     orig_det_d1 = nodes["drone1"].pipeline.detector
+    orig_det_d3 = nodes["drone3"].pipeline.detector
     nodes["drone1"].pipeline.detector = GenuineTarget1Detector()
+    nodes["drone3"].pipeline.detector = GenuineTarget1Detector()
     for _ in range(3):
-        set_drone_world(client, "Drone1", g1_ned[0], g1_ned[1], -10.0)
+        set_drone_pose(client, "Drone1", g1_ned[0], g1_ned[1], -10.0)
+        set_drone_pose(client, "Drone3", g1_ned[0], g1_ned[1], -8.0)
         cross_sync_telemetry()
         await nodes["drone1"].step()
+        await nodes["drone3"].step()
         await asyncio.sleep(0.05)
     nodes["drone1"].pipeline.detector = orig_det_d1
+    nodes["drone3"].pipeline.detector = orig_det_d3
 
-    # Drone 2 observes Target 2
+    # Drone 2 and Drone 4 observe Target 2
     orig_det_d2 = nodes["drone2"].pipeline.detector
+    orig_det_d4 = nodes["drone4"].pipeline.detector
     nodes["drone2"].pipeline.detector = GenuineTarget2Detector()
+    nodes["drone4"].pipeline.detector = GenuineTarget2Detector()
     for _ in range(3):
-        set_drone_world(client, "Drone2", g2_ned[0], g2_ned[1], -10.0)
+        set_drone_pose(client, "Drone2", g2_ned[0], g2_ned[1], -10.0)
+        set_drone_pose(client, "Drone4", g2_ned[0], g2_ned[1], -8.0)
         cross_sync_telemetry()
         await nodes["drone2"].step()
+        await nodes["drone4"].step()
         await asyncio.sleep(0.05)
     nodes["drone2"].pipeline.detector = orig_det_d2
+    nodes["drone4"].pipeline.detector = orig_det_d4
 
     await gfs_queue.join()
     confirmed = get_confirmed_global_objects()
@@ -546,10 +531,10 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     print("\n" + "="*50)
     print("SCENARIO 3: Swarm Formation Maneuvering")
     print("="*50)
-    set_drone_world(client, "Drone2", 15.0, 0.0, -10.0)   # Anchor
-    set_drone_world(client, "Drone4", 5.0, 12.0, -10.0)   # Right wing
-    set_drone_world(client, "Drone1", 5.0, -12.0, -10.0)  # Left wing
-    set_drone_world(client, "Drone3", -5.0, 24.0, -10.0)  # Outer
+    set_drone_pose(client, "Drone2", 15.0, 0.0, -10.0)   # Anchor
+    set_drone_pose(client, "Drone4", 5.0, 12.0, -10.0)   # Right wing
+    set_drone_pose(client, "Drone1", 5.0, -12.0, -10.0)  # Left wing
+    set_drone_pose(client, "Drone3", -5.0, 24.0, -10.0)  # Outer
     await asyncio.sleep(0.2)
     cross_sync_telemetry()
 
@@ -565,8 +550,8 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     print("\n" + "="*50)
     print("SCENARIO 4: Direct Vertical Overlap (Drone 1 alt=15m over Drone 2 alt=5m)")
     print("="*50)
-    set_drone_world(client, "Drone1", 10.0, 10.0, -15.0)
-    set_drone_world(client, "Drone2", 10.0, 10.0, -5.0)
+    set_drone_pose(client, "Drone1", 10.0, 10.0, -15.0)
+    set_drone_pose(client, "Drone2", 10.0, 10.0, -5.0)
     await asyncio.sleep(0.2)
     cross_sync_telemetry()
 
@@ -586,8 +571,8 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
         async def detect(self, img):
             return [Detection(bbox_xyxy=(620, 340, 660, 380), confidence=0.92, label="rubbish")]
 
-    set_drone_world(client, "Drone1", 10.0, 10.0, -15.0)
-    set_drone_world(client, "Drone2", 10.0, 10.0, -5.0)
+    set_drone_pose(client, "Drone1", 10.0, 10.0, -15.0)
+    set_drone_pose(client, "Drone2", 10.0, 10.0, -5.0)
     cross_sync_telemetry()
     nodes["drone1"].pipeline.detector = SyntheticPeerDetector()
     await nodes["drone1"].step()
@@ -612,8 +597,8 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     print("\n" + "="*50)
     print("SCENARIO 5: Reverse Vertical Overlap (Drone 2 alt=15m over Drone 1 alt=5m)")
     print("="*50)
-    set_drone_world(client, "Drone2", 10.0, 10.0, -15.0)
-    set_drone_world(client, "Drone1", 10.0, 10.0, -5.0)
+    set_drone_pose(client, "Drone2", 10.0, 10.0, -15.0)
+    set_drone_pose(client, "Drone1", 10.0, 10.0, -5.0)
     await asyncio.sleep(0.2)
     cross_sync_telemetry()
 
@@ -629,8 +614,8 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     s_depth, d_perp = compute_ray_to_point_cpa(ray_ned, (p_dn, p_de, p_dd))
     print(f"  -> Ray-to-Peer Geometry: CPA d_perp={d_perp:.3f}m, depth={s_depth:.2f}m")
 
-    set_drone_world(client, "Drone2", 10.0, 10.0, -15.0)
-    set_drone_world(client, "Drone1", 10.0, 10.0, -5.0)
+    set_drone_pose(client, "Drone2", 10.0, 10.0, -15.0)
+    set_drone_pose(client, "Drone1", 10.0, 10.0, -5.0)
     cross_sync_telemetry()
     nodes["drone2"].pipeline.detector = SyntheticPeerDetector()
     await nodes["drone2"].step()
@@ -657,8 +642,8 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     print("="*50)
     sweep_results = []
     for r in [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.5, 5.0, 8.0, 12.0]:
-        set_drone_world(client, "Drone1", 0.0, 0.0, -15.0)
-        set_drone_world(client, "Drone2", r, 0.0, -5.0)
+        set_drone_pose(client, "Drone1", 0.0, 0.0, -15.0)
+        set_drone_pose(client, "Drone2", r, 0.0, -5.0)
         await asyncio.sleep(0.05)
         cross_sync_telemetry()
 
@@ -671,8 +656,8 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
                 async def detect(self, img):
                     return [Detection(bbox_xyxy=(self.u - 15, self.v - 15, self.u + 15, self.v + 15), confidence=0.88, label="rubbish")]
 
-            set_drone_world(client, "Drone1", 0.0, 0.0, -15.0)
-            set_drone_world(client, "Drone2", r, 0.0, -5.0)
+            set_drone_pose(client, "Drone1", 0.0, 0.0, -15.0)
+            set_drone_pose(client, "Drone2", r, 0.0, -5.0)
             cross_sync_telemetry()
             nodes["drone1"].pipeline.detector = SweepDetector(u_px, v_px)
             await nodes["drone1"].step()
@@ -697,17 +682,16 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     print("\n" + "="*50)
     print("SCENARIO 7: Dynamic Trajectory Crossing Flight Test")
     print("="*50)
-    orig_det_d4 = nodes["drone4"].pipeline.detector
     crossing_rejected = 0
     for step_idx, x_pos in enumerate(np.linspace(2.0, 18.0, 9)):
-        set_drone_world(client, "Drone3", x_pos, 10.0, -10.0)
-        set_drone_world(client, "Drone4", 20.0 - x_pos, 10.0, -15.0)
+        set_drone_pose(client, "Drone3", x_pos, 10.0, -10.0)
+        set_drone_pose(client, "Drone4", 20.0 - x_pos, 10.0, -15.0)
         await asyncio.sleep(0.05)
         cross_sync_telemetry()
 
         if abs(x_pos - 10.0) <= 2.0:
-            set_drone_world(client, "Drone3", x_pos, 10.0, -10.0)
-            set_drone_world(client, "Drone4", 20.0 - x_pos, 10.0, -15.0)
+            set_drone_pose(client, "Drone3", x_pos, 10.0, -10.0)
+            set_drone_pose(client, "Drone4", 20.0 - x_pos, 10.0, -15.0)
             cross_sync_telemetry()
             nodes["drone4"].pipeline.detector = SyntheticPeerDetector()
             await nodes["drone4"].step()
@@ -731,8 +715,8 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     print("\n" + "="*50)
     print("SCENARIO 8: Standby & Disarmed Grounded Peer Handling")
     print("="*50)
-    set_drone_world(client, "Drone3", 5.0, 5.0, 0.0)
-    set_drone_world(client, "Drone1", 5.0, 5.0, -10.0)
+    set_drone_pose(client, "Drone3", 5.0, 5.0, 0.0)
+    set_drone_pose(client, "Drone1", 5.0, 5.0, -10.0)
     await asyncio.sleep(0.1)
 
     now = time.time()
@@ -745,7 +729,7 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     nodes["drone1"].swarm_membership.sync.handle_telemetry(d3_t_msg)
 
     # 1. Detection directly on landed Drone 3
-    set_drone_world(client, "Drone1", 5.0, 5.0, -10.0)
+    set_drone_pose(client, "Drone1", 5.0, 5.0, -10.0)
     nodes["drone1"].pipeline.detector = SyntheticPeerDetector()
     await nodes["drone1"].step()
     nodes["drone1"].pipeline.detector = orig_det_d1
@@ -753,14 +737,14 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     ev_landed = next((e for e in reversed(recorder.events_cache) if e.get("event_type") == "PEER_EXCLUSION_EVAL" and e.get("drone_id") == "drone1"), None)
     print(f"  -> Landed peer detection decision: {ev_landed['decision']} ({ev_landed['reason']})")
     assert ev_landed["decision"] == "REJECTED"
-    assert ("REJECTED_LANDED_PEER_MATCH" in ev_landed["reason"] or "REJECTED_PEER_EXCLUSION_MATCH_3D" in ev_landed["reason"])
+    assert "REJECTED_LANDED_PEER_MATCH" in ev_landed["reason"]
 
     # 2. Genuine target 7m away from landed Drone 3
     class DistantTargetDetector:
         async def detect(self, img):
             return [Detection(bbox_xyxy=(620, 140, 660, 180), confidence=0.89, label="rubbish")]
 
-    set_drone_world(client, "Drone1", 5.0, 5.0, -10.0)
+    set_drone_pose(client, "Drone1", 5.0, 5.0, -10.0)
     nodes["drone1"].pipeline.detector = DistantTargetDetector()
     await nodes["drone1"].step()
     nodes["drone1"].pipeline.detector = orig_det_d1
@@ -777,17 +761,16 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     print("\n" + "="*50)
     print("SCENARIO 9: Telemetry Interruption and Recovery (Deferred State)")
     print("="*50)
-    sync_skip_drone = "drone2"
-    set_drone_world(client, "Drone1", 0.0, 0.0, -15.0)
-    set_drone_world(client, "Drone2", 0.0, 0.0, -5.0)
+    set_drone_pose(client, "Drone1", 0.0, 0.0, -15.0)
+    set_drone_pose(client, "Drone2", 0.0, 0.0, -5.0)
     await asyncio.sleep(0.1)
 
     peer_d2 = nodes["drone1"].swarm_membership.registry.get_peer("drone2")
     assert peer_d2 is not None
     peer_d2.last_position_time = time.time() - 5.0  # 5 seconds old
 
-    set_drone_world(client, "Drone1", 0.0, 0.0, -15.0)
-    set_drone_world(client, "Drone2", 0.0, 0.0, -5.0)
+    set_drone_pose(client, "Drone1", 0.0, 0.0, -15.0)
+    set_drone_pose(client, "Drone2", 0.0, 0.0, -5.0)
     nodes["drone1"].pipeline.detector = SyntheticPeerDetector()
     await nodes["drone1"].step()
 
@@ -800,10 +783,9 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     assert len(get_confirmed_global_objects()) == 2
 
     # Recover telemetry
-    sync_skip_drone = None
     cross_sync_telemetry()
-    set_drone_world(client, "Drone1", 0.0, 0.0, -15.0)
-    set_drone_world(client, "Drone2", 0.0, 0.0, -5.0)
+    set_drone_pose(client, "Drone1", 0.0, 0.0, -15.0)
+    set_drone_pose(client, "Drone2", 0.0, 0.0, -5.0)
     await nodes["drone1"].step()
     nodes["drone1"].pipeline.detector = orig_det_d1
 
@@ -821,8 +803,8 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     print("\n" + "="*50)
     print("SCENARIO 10: Genuine Garbage Near a Peer Drone")
     print("="*50)
-    set_drone_world(client, "Drone1", 19.13, 4.42, -10.0)
-    set_drone_world(client, "Drone2", 19.13, 7.92, -5.0)
+    set_drone_pose(client, "Drone1", 19.13, 4.42, -10.0)
+    set_drone_pose(client, "Drone2", 19.13, 7.92, -5.0)
     await asyncio.sleep(0.2)
     cross_sync_telemetry()
 
@@ -830,8 +812,8 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     if f_near and f_near.image is not None:
         cv2.imwrite(str(OUTPUT_DIR / "live_airsim_scenario10_target_near_peer.png"), cv2.cvtColor(f_near.image, cv2.COLOR_RGB2BGR))
 
-    set_drone_world(client, "Drone1", 19.13, 4.42, -10.0)
-    set_drone_world(client, "Drone2", 19.13, 7.92, -5.0)
+    set_drone_pose(client, "Drone1", 19.13, 4.42, -10.0)
+    set_drone_pose(client, "Drone2", 19.13, 7.92, -5.0)
     cross_sync_telemetry()
     nodes["drone1"].pipeline.detector = GenuineTarget1Detector()
     await nodes["drone1"].step()
@@ -893,18 +875,18 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     print("SCENARIO 12: Continuous Swarm Formation Stability Invariant")
     print("="*50)
     print("  -> Running continuous 4-drone collaborative perception in formation for 15 seconds...")
-    set_drone_world(client, "Drone2", 15.0, 0.0, -10.0)
-    set_drone_world(client, "Drone4", 5.0, 12.0, -10.0)
-    set_drone_world(client, "Drone1", 5.0, -12.0, -10.0)
-    set_drone_world(client, "Drone3", -5.0, 24.0, -10.0)
+    set_drone_pose(client, "Drone2", 15.0, 0.0, -10.0)
+    set_drone_pose(client, "Drone4", 5.0, 12.0, -10.0)
+    set_drone_pose(client, "Drone1", 5.0, -12.0, -10.0)
+    set_drone_pose(client, "Drone3", -5.0, 24.0, -10.0)
 
     t_end = time.time() + 15.0
     cycles = 0
     while time.time() < t_end:
-        set_drone_world(client, "Drone2", 15.0, 0.0, -10.0)
-        set_drone_world(client, "Drone4", 5.0, 12.0, -10.0)
-        set_drone_world(client, "Drone1", 5.0, -12.0, -10.0)
-        set_drone_world(client, "Drone3", -5.0, 24.0, -10.0)
+        set_drone_pose(client, "Drone2", 15.0, 0.0, -10.0)
+        set_drone_pose(client, "Drone4", 5.0, 12.0, -10.0)
+        set_drone_pose(client, "Drone1", 5.0, -12.0, -10.0)
+        set_drone_pose(client, "Drone3", -5.0, 24.0, -10.0)
         cross_sync_telemetry()
         for node in nodes.values():
             await node.step()
@@ -922,14 +904,8 @@ async def run_live_airsim_validation() -> Dict[str, Any]:
     }
 
     # Cleanup
-    sync_running = False
-    mesh_task.cancel()
     gfs_task.cancel()
     relay_task.cancel()
-    try:
-        client.simPause(False)
-    except Exception:
-        pass
 
     # Compile Final Metrics
     final_metrics = {

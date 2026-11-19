@@ -5,7 +5,10 @@ import {
   savePersistedTombstones,
   loadPersistedGarbage,
   savePersistedGarbage,
-  reconcileSnapshot
+  reconcileSnapshot,
+  getConfirmedGarbage,
+  getProvisionalGarbage,
+  LifecycleState
 } from './garbage.js';
 
 function assert(condition, message) {
@@ -477,4 +480,263 @@ assert(stateAfterSnapshotSubsume["G-9999"].seenBy.includes("drone3"), "seenBy dr
 
 console.log("Section 2: Local Track <-> Global Object Bidirectional Deduplication Suite Passed 100%!");
 
-console.log("All garbage utility and recovery tests passed successfully!");
+// ============================================================================
+// Section 3: PhoneOS Provisional Detection Lifecycle Suite (12 Requirements)
+// ============================================================================
+console.log("Running Section 3: PhoneOS Provisional Detection Lifecycle Suite...");
+
+// 1. mergeDetections with 5 candidates: 1 confirmed, 4 provisional -> 5 markers displayed
+const fiveCandidates = [
+  {
+    id: "G-conf-01",
+    global_id: "G-conf-01",
+    label: "rubbish",
+    lat: 47.641468,
+    lon: -122.140165,
+    confidence: 0.78,
+    lifecycle_state: LifecycleState.CONFIRMED,
+    confirmation_method: "multi_drone_association",
+    version: 1,
+    status: "ACTIVE"
+  },
+  {
+    id: "G-prov-01",
+    global_id: "G-prov-01",
+    label: "rubbish",
+    lat: 47.641500,
+    lon: -122.140200,
+    confidence: 0.62,
+    lifecycle_state: LifecycleState.PROVISIONAL,
+    provisional_reason: "SINGLE_DRONE_LOW_CONFIDENCE",
+    version: 1,
+    status: "ACTIVE"
+  },
+  {
+    id: "G-prov-02",
+    global_id: "G-prov-02",
+    label: "rubbish",
+    lat: 47.641550,
+    lon: -122.140250,
+    confidence: 0.59,
+    lifecycle_state: LifecycleState.PROVISIONAL,
+    provisional_reason: "SINGLE_DRONE_LOW_CONFIDENCE",
+    version: 1,
+    status: "ACTIVE"
+  },
+  {
+    id: "G-prov-03",
+    global_id: "G-prov-03",
+    label: "rubbish",
+    lat: 47.641600,
+    lon: -122.140300,
+    confidence: 0.61,
+    lifecycle_state: LifecycleState.PROVISIONAL,
+    provisional_reason: "SINGLE_DRONE_LOW_CONFIDENCE",
+    version: 1,
+    status: "ACTIVE"
+  },
+  {
+    id: "G-prov-04",
+    global_id: "G-prov-04",
+    label: "rubbish",
+    lat: 47.641650,
+    lon: -122.140350,
+    confidence: 0.58,
+    lifecycle_state: LifecycleState.PROVISIONAL,
+    provisional_reason: "SINGLE_DRONE_LOW_CONFIDENCE",
+    version: 1,
+    status: "ACTIVE"
+  }
+];
+
+const stateWithFive = mergeDetections({}, fiveCandidates, "gfs", 10000);
+assert(Object.keys(stateWithFive).length === 5, "Requirement 1: Exactly 5 markers must be displayed");
+
+// 2. Separate count readouts: getConfirmedGarbage gives 1, getProvisionalGarbage gives 4
+const confirmedMap = getConfirmedGarbage(stateWithFive);
+const provisionalMap = getProvisionalGarbage(stateWithFive);
+assert(Object.keys(confirmedMap).length === 1, "Requirement 2: Confirmed count must be exactly 1");
+assert(Object.keys(provisionalMap).length === 4, "Requirement 2: Provisional count must be exactly 4");
+
+// 3. Distinct visual styling attributes: Provisional metadata
+for (let i = 1; i <= 4; i++) {
+  const pId = `G-prov-0${i}`;
+  const pItem = stateWithFive[pId];
+  assert(pItem !== undefined, `Provisional ${pId} must exist`);
+  assert(pItem.lifecycle_state === LifecycleState.PROVISIONAL, `Requirement 3: ${pId} lifecycle_state must be PROVISIONAL`);
+  assert(pItem.provisional_reason === "SINGLE_DRONE_LOW_CONFIDENCE", `Requirement 3: ${pId} provisional_reason must match`);
+  assert(!pItem.confirmation_method, `Requirement 3: ${pId} confirmation_method must be falsy`);
+}
+
+// 4. Confirmed metadata
+const cItem = stateWithFive["G-conf-01"];
+assert(cItem.lifecycle_state === LifecycleState.CONFIRMED, "Requirement 4: Confirmed lifecycle_state must be CONFIRMED");
+assert(cItem.confirmation_method === "multi_drone_association", "Requirement 4: Confirmed confirmation_method must match");
+
+// 5. Visibility filters correctly partition markers
+const allKeys = Object.keys(stateWithFive);
+const cKeys = Object.keys(confirmedMap);
+const pKeys = Object.keys(provisionalMap);
+assert(cKeys.includes("G-conf-01"), "Requirement 5: Confirmed map contains G-conf-01");
+assert(!cKeys.some(k => k.startsWith("G-prov")), "Requirement 5: Confirmed map has NO provisional keys");
+assert(!pKeys.includes("G-conf-01"), "Requirement 5: Provisional map has NO confirmed keys");
+assert(cKeys.length + pKeys.length === allKeys.length, "Requirement 5: Total partitioned equals 5");
+
+// 6. Promotion event: global object with same ID transitions from PROVISIONAL to CONFIRMED
+// G-prov-01 is confirmed by second drone:
+const promoEvent = {
+  id: "G-prov-01",
+  global_id: "G-prov-01",
+  label: "rubbish",
+  lat: 47.641501,
+  lon: -122.140201,
+  confidence: 0.81,
+  lifecycle_state: LifecycleState.CONFIRMED,
+  confirmation_method: "multi_drone_association",
+  provisional_reason: null,
+  version: 2,
+  status: "ACTIVE"
+};
+
+const stateAfterPromo = mergeDetections(stateWithFive, [promoEvent], "gfs", 12000);
+assert(Object.keys(stateAfterPromo).length === 5, "Requirement 6: Total marker count must remain 5 (no duplicates)");
+assert(stateAfterPromo["G-prov-01"].lifecycle_state === LifecycleState.CONFIRMED, "Requirement 6: G-prov-01 promoted in-place to CONFIRMED");
+assert(stateAfterPromo["G-prov-01"].version === 2, "Requirement 6: Version updated to 2");
+const confAfterPromo = getConfirmedGarbage(stateAfterPromo);
+const provAfterPromo = getProvisionalGarbage(stateAfterPromo);
+assert(Object.keys(confAfterPromo).length === 2, "Requirement 6: Confirmed count now 2");
+assert(Object.keys(provAfterPromo).length === 3, "Requirement 6: Provisional count now 3");
+
+// 7. Retirement event: marker disappears upon status: 'RETIRED' and tombstone recorded
+const testTombstones = {};
+const retireProvEvent = {
+  id: "G-prov-04",
+  status: "RETIRED",
+  version: 2
+};
+const stateAfterRetire = mergeDetections(stateAfterPromo, [retireProvEvent], "gfs", 13000, new Set(), false, testTombstones);
+assert(stateAfterRetire["G-prov-04"] === undefined, "Requirement 7: G-prov-04 removed on retirement");
+assert(Object.keys(stateAfterRetire).length === 4, "Requirement 7: Total active markers now 4");
+assert(testTombstones["G-prov-04"] !== undefined, "Requirement 7: Tombstone recorded for G-prov-04");
+
+// 8. Offline snapshot reload: reconcileSnapshot preserves both confirmed and provisional correctly
+const snapshotPayload = [
+  {
+    id: "G-conf-01",
+    global_id: "G-conf-01",
+    label: "rubbish",
+    lat: 47.641468,
+    lon: -122.140165,
+    confidence: 0.78,
+    lifecycle_state: LifecycleState.CONFIRMED,
+    confirmation_method: "multi_drone_association",
+    version: 1,
+    status: "ACTIVE"
+  },
+  {
+    id: "G-prov-01",
+    global_id: "G-prov-01",
+    label: "rubbish",
+    lat: 47.641501,
+    lon: -122.140201,
+    confidence: 0.81,
+    lifecycle_state: LifecycleState.CONFIRMED,
+    confirmation_method: "multi_drone_association",
+    version: 2,
+    status: "ACTIVE"
+  },
+  {
+    id: "G-prov-02",
+    global_id: "G-prov-02",
+    label: "rubbish",
+    lat: 47.641550,
+    lon: -122.140250,
+    confidence: 0.59,
+    lifecycle_state: LifecycleState.PROVISIONAL,
+    provisional_reason: "SINGLE_DRONE_LOW_CONFIDENCE",
+    version: 1,
+    status: "ACTIVE"
+  },
+  {
+    id: "G-prov-03",
+    global_id: "G-prov-03",
+    label: "rubbish",
+    lat: 47.641600,
+    lon: -122.140300,
+    confidence: 0.61,
+    lifecycle_state: LifecycleState.PROVISIONAL,
+    provisional_reason: "SINGLE_DRONE_LOW_CONFIDENCE",
+    version: 1,
+    status: "ACTIVE"
+  }
+];
+
+const restoredFromSnapshot = reconcileSnapshot({}, snapshotPayload, testTombstones);
+assert(Object.keys(restoredFromSnapshot).length === 4, "Requirement 8: Reconciled snapshot has 4 items");
+assert(Object.keys(getConfirmedGarbage(restoredFromSnapshot)).length === 2, "Requirement 8: Snapshot has 2 confirmed");
+assert(Object.keys(getProvisionalGarbage(restoredFromSnapshot)).length === 2, "Requirement 8: Snapshot has 2 provisional");
+
+// 9. Version-aware update: older version ignored, newer version applied
+const staleUpdate = {
+  id: "G-prov-01",
+  version: 1,
+  confidence: 0.50,
+  lifecycle_state: LifecycleState.PROVISIONAL
+};
+const stateAfterStalePromo = mergeDetections(restoredFromSnapshot, [staleUpdate], "gfs", 14000, new Set(), false, testTombstones);
+assert(stateAfterStalePromo["G-prov-01"].version === 2, "Requirement 9: Version 2 preserved against stale version 1");
+assert(stateAfterStalePromo["G-prov-01"].lifecycle_state === LifecycleState.CONFIRMED, "Requirement 9: Confirmed status preserved");
+
+// 10. Local dismissal: user dismisses provisional marker -> stays dismissed across snapshots
+const userDismissed = new Set(["G-prov-02"]);
+const stateAfterDismiss = mergeDetections(restoredFromSnapshot, [], "gfs", 15000, userDismissed, false, testTombstones);
+assert(stateAfterDismiss["G-prov-02"] === undefined, "Requirement 10: Dismissed G-prov-02 not in active state");
+const reSnapshot = reconcileSnapshot(stateAfterDismiss, snapshotPayload, testTombstones, {}, 0, userDismissed);
+assert(reSnapshot["G-prov-02"] === undefined, "Requirement 10: Dismissed marker stays excluded after snapshot reload");
+
+// 11. Same drone multiple observations do not prematurely set lifecycle_state = 'CONFIRMED'
+const localSingleDronePkt1 = {
+  id: "drone4-track99",
+  label: "rubbish",
+  confidence: 0.62,
+  lat: 47.642000,
+  lon: -122.141000,
+  hits: 2
+};
+const stateDrone1 = mergeDetections({}, [localSingleDronePkt1], "drone4", 16000);
+assert(stateDrone1["drone4-track99"].lifecycle_state === LifecycleState.PROVISIONAL, "Requirement 11: Single drone track is PROVISIONAL");
+
+const localSingleDronePkt2 = {
+  id: "drone4-track99",
+  label: "rubbish",
+  confidence: 0.63,
+  lat: 47.642000,
+  lon: -122.141000,
+  hits: 5
+};
+const stateDrone2 = mergeDetections(stateDrone1, [localSingleDronePkt2], "drone4", 17000);
+assert(stateDrone2["drone4-track99"].lifecycle_state === LifecycleState.PROVISIONAL, "Requirement 11: Multiple hits from SAME drone must remain PROVISIONAL");
+assert(stateDrone2["drone4-track99"].seenBy.length === 1 && stateDrone2["drone4-track99"].seenBy[0] === "drone4", "Requirement 11: Single drone provenance");
+
+// 12. Max 500 entries bound respects mixed provisional and confirmed objects
+let maxTestState = {};
+for (let i = 0; i < 510; i++) {
+  const isConf = (i % 2 === 0);
+  maxTestState[`item-mix-${i}`] = {
+    id: `item-mix-${i}`,
+    lat: 47.64 + i * 0.0001,
+    lon: -122.14,
+    confidence: isConf ? 0.75 : 0.60,
+    lifecycle_state: isConf ? LifecycleState.CONFIRMED : LifecycleState.PROVISIONAL,
+    hits: 1,
+    firstSeen: 20000 + i,
+    lastSeen: 20000 + i
+  };
+}
+const boundedMixedState = mergeDetections(maxTestState, [], "gfs", 30000);
+assert(Object.keys(boundedMixedState).length === 500, "Requirement 12: Bound capped at 500");
+assert(boundedMixedState["item-mix-0"] === undefined, "Requirement 12: Oldest dropped");
+assert(boundedMixedState["item-mix-509"] !== undefined, "Requirement 12: Newest retained");
+
+console.log("Section 3: PhoneOS Provisional Detection Lifecycle Suite (12 Requirements) Passed 100%!");
+console.log("All garbage utility, recovery, and provisional lifecycle tests passed successfully!");

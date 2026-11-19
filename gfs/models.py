@@ -4,8 +4,16 @@ Data models for the Global Fusion Service (GFS).
 
 from __future__ import annotations
 import math
+from enum import Enum
 from dataclasses import dataclass, field
 from typing import List, Dict, Set, Optional, Any, Tuple
+
+
+class LifecycleState(str, Enum):
+    PROVISIONAL = "PROVISIONAL"
+    CONFIRMED = "CONFIRMED"
+    REJECTED = "REJECTED"
+    RETIRED = "RETIRED"
 
 
 # WGS84 Constants
@@ -251,6 +259,10 @@ class GlobalObject:
     source_estimates: Dict[str, SourceEstimate] = field(default_factory=dict)
     version: int = 1
     fusion_method: str = "single_estimate"
+    lifecycle_state: str = LifecycleState.CONFIRMED.value  # 'PROVISIONAL', 'CONFIRMED', 'REJECTED', 'RETIRED'
+    confirmation_method: Optional[str] = None
+    provisional_reason: Optional[str] = None
+    expires_at_ms: Optional[int] = None
 
 
 @dataclass

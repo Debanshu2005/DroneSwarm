@@ -31,8 +31,10 @@ def enqueue_global_object_event(
     payload_dict = {
         "event_id": event_id,
         "event_type": event_type,
+        "id": glob.global_id,
         "global_id": glob.global_id,
         "label": glob.label,
+        "lifecycle_state": getattr(glob, "lifecycle_state", "CONFIRMED"),
         "status": "REACTIVATED" if event_type == "GLOBAL_OBJECT_REACTIVATED" else glob.status,
         "lat": glob.lat,
         "lon": glob.lon,
@@ -45,6 +47,9 @@ def enqueue_global_object_event(
         "last_seen_ms": glob.last_seen_ms,
         "version": glob.version,
         "fusion_method": getattr(glob, "fusion_method", "single_estimate"),
+        "confirmation_method": getattr(glob, "confirmation_method", None),
+        "provisional_reason": getattr(glob, "provisional_reason", None),
+        "expires_at_ms": getattr(glob, "expires_at_ms", None),
         "emitted_at_ms": now_ms
     }
 

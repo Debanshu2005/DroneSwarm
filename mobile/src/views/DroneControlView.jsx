@@ -84,7 +84,8 @@ export default function DroneControlView({ setView }) {
   const [mapStyle, setMapStyle] = useState('satellite');
   const [centerMode, setCenterMode] = useState('DRONE');
   const [centerTarget, setCenterTarget] = useState(null);
-  const [showGarbage, setShowGarbage] = useState(true);
+  const [showConfirmed, setShowConfirmed] = useState(true);
+  const [showProvisional, setShowProvisional] = useState(true);
   
   const tiles = {
      street: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -307,7 +308,12 @@ export default function DroneControlView({ setView }) {
                </CircleMarker>
             )}
 
-            {showGarbage && <GarbageLayer garbage={garbage} onDismiss={dismissGarbage} />}
+            <GarbageLayer
+               garbage={garbage}
+               showConfirmed={showConfirmed}
+               showProvisional={showProvisional}
+               onDismiss={dismissGarbage}
+            />
          </MapContainer>
          </ErrorBoundary>
       </div>
@@ -356,11 +362,20 @@ export default function DroneControlView({ setView }) {
                  </button>
 
                  <button
-                    className={`hud-btn ${showGarbage ? 'active' : ''} ${garbageList.length > 0 ? 'garbage-btn has-garbage' : 'garbage-btn'}`}
-                    onClick={() => setShowGarbage(prev => !prev)}
-                    title="Toggle Garbage Detection Pins"
+                    className={`hud-btn ${showConfirmed ? 'active' : ''} ${garbageList.filter(g => g && g.lifecycle_state !== 'PROVISIONAL').length > 0 ? 'garbage-btn has-garbage' : 'garbage-btn'}`}
+                    onClick={() => setShowConfirmed(prev => !prev)}
+                    title="Toggle Confirmed Garbage Pins"
                  >
-                    <Trash2 size={13}/> GARBAGE ({garbageList.length})
+                    <Trash2 size={13}/> CONFIRMED ({garbageList.filter(g => g && g.lifecycle_state !== 'PROVISIONAL').length})
+                 </button>
+
+                 <button
+                    className={`hud-btn ${showProvisional ? 'active' : ''} ${garbageList.filter(g => g && g.lifecycle_state === 'PROVISIONAL').length > 0 ? 'garbage-btn has-provisional' : 'garbage-btn'}`}
+                    onClick={() => setShowProvisional(prev => !prev)}
+                    title="Toggle Provisional (Unconfirmed) Garbage Pins"
+                    style={showProvisional ? { borderColor: '#f59e0b', color: '#f59e0b' } : {}}
+                 >
+                    PROVISIONAL ({garbageList.filter(g => g && g.lifecycle_state === 'PROVISIONAL').length})
                  </button>
 
                  {garbageList.length > 0 && (

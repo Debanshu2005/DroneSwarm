@@ -40,16 +40,16 @@ export const DroneProvider = ({ children }) => {
   const [wsManager, setWsManager] = useState(null);
   const [isConnected, setIsConnected] = useState("DISCONNECTED");
   const [connectionError, setConnectionError] = useState("");
-  
+
   const [drones, setDrones] = useState({});
   const [selectedDrones, setSelectedDrones] = useState(new Set());
   const [swarmState, setSwarmState] = useState({});
-  
+
   const [wsUrl, setWsUrl] = useState(() => {
     try {
       const urlWs = new URLSearchParams(window.location.search).get('ws');
       if (urlWs) return urlWs;
-    } catch (_) {}
+    } catch (_) { }
     return safeStorageGet("PhoneOS_WsUrl", "ws://swarmos-pi.local:8080");
   });
   const [relayAuthToken, setRelayAuthToken] = useState(() => safeStorageGet("PhoneOS_RelayAuthToken", ""));
@@ -122,11 +122,11 @@ export const DroneProvider = ({ children }) => {
     }
     addLog(`Cleared all garbage markers`, 'INFO', 'PHONEOS', null, 'GARBAGE_CLEARED');
   };
-  
+
   // Advanced Test Overrides
   const [testOverrides, setTestOverrides] = useState({});
   const [testSessionLog, setTestSessionLog] = useState([]);
-  
+
   const setTestOverride = (droneId, key, value) => {
     setTestOverrides(prev => ({
       ...prev,
@@ -137,13 +137,13 @@ export const DroneProvider = ({ children }) => {
     }));
     logTestEvent(droneId, `Override ${key} = ${value}`);
   };
-  
+
   const injectFailure = (droneId, injectionType, active = true) => {
     if (!wsManager || isConnected !== "CONNECTED") return;
     wsManager.send(new TestInjectMessage(GS_ID, droneId, injectionType, active));
     logTestEvent(droneId, `Inject Failure: ${injectionType} = ${active}`);
   };
-  
+
   const clearTestOverrides = (droneId) => {
     setTestOverrides(prev => {
       const next = { ...prev };
@@ -152,11 +152,11 @@ export const DroneProvider = ({ children }) => {
     });
     logTestEvent(droneId, `Cleared all test overrides`);
   };
-  
+
   const logTestEvent = (droneId, message) => {
     setTestSessionLog(prev => [{ time: Date.now(), droneId, message }, ...prev].slice(0, 500));
   };
-  
+
   const clearTestSessionLog = () => setTestSessionLog([]);
 
   // Time tracker for stale checks
@@ -176,12 +176,12 @@ export const DroneProvider = ({ children }) => {
     safeStorageSet("PhoneOS_TestMode", testMode);
     safeStorageSet("PhoneOS_IndoorMode", indoorMode);
   }, [wsUrl, relayAuthToken, testMode, indoorMode]);
-  
+
   // Drone cleanup task & demo mode
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
-      
+
       if (testMode) {
         setDrones(prev => ({
           ...prev,
@@ -206,21 +206,21 @@ export const DroneProvider = ({ children }) => {
         }));
         if (isConnected !== "CONNECTED") setIsConnected("CONNECTED");
       }
-      
+
       setDrones(prev => {
         let changed = false;
         const newDrones = { ...prev };
         for (const [id, drone] of Object.entries(newDrones)) {
           if (id.startsWith("drone_test") && testMode) continue;
-          
+
           const freshness = evaluateTelemetryFreshness(drone);
           const health = evaluateDroneHealth(drone);
-          
+
           let newStatus = drone.status;
           if (freshness === 'OFFLINE') newStatus = 'OFFLINE';
           else if (freshness === 'STALE') newStatus = 'DEGRADED';
           else if (drone.status === 'OFFLINE' || drone.status === 'DEGRADED') newStatus = 'CONNECTED';
-          
+
           if (newStatus !== drone.status || health !== drone.healthScore || freshness !== drone.freshness) {
             newDrones[id] = { ...drone, status: newStatus, healthScore: health, freshness };
             changed = true;
@@ -239,7 +239,7 @@ export const DroneProvider = ({ children }) => {
 
     // Load any previously saved connections
     manager.loadSavedConnections();
-    
+
     // Add default configured connection for backward compatibility or dev (if no others exist)
     if (wsUrl && Object.keys(manager.connections).length === 0) {
       const isDefaultPiUrl = wsUrl.includes('swarmos-pi.local') || wsUrl.endsWith(':8080');
@@ -280,7 +280,7 @@ export const DroneProvider = ({ children }) => {
         eventBufferRef.current = [];
         try {
           manager.send({ type: "gfs_snapshot_request", timestamp: Date.now() });
-        } catch (_) {}
+        } catch (_) { }
       }
       addLog(
         `Connection ${url}: ${status}${detail.reason ? ` (${detail.reason})` : ""}`,
@@ -337,21 +337,21 @@ export const DroneProvider = ({ children }) => {
           if (msg.telemetry?.latitude && msg.telemetry?.longitude) {
             path = [...path, [msg.telemetry.latitude, msg.telemetry.longitude]].slice(-100);
           }
-          
+
           let sanitizedTelemetry = { ...(existing.telemetry || {}) };
           for (const [k, v] of Object.entries(msg.telemetry || {})) {
-              if (v !== null && v !== undefined) {
-                  sanitizedTelemetry[k] = v;
-              }
+            if (v !== null && v !== undefined) {
+              sanitizedTelemetry[k] = v;
+            }
           }
           if (sanitizedTelemetry.battery_level !== undefined && sanitizedTelemetry.battery_level !== null) {
-              if (isNaN(sanitizedTelemetry.battery_level) || !isFinite(sanitizedTelemetry.battery_level)) {
-                  sanitizedTelemetry.battery_level = null;
-              } else {
-                  sanitizedTelemetry.battery_level = Math.max(0, Math.min(100, Math.round(sanitizedTelemetry.battery_level)));
-              }
+            if (isNaN(sanitizedTelemetry.battery_level) || !isFinite(sanitizedTelemetry.battery_level)) {
+              sanitizedTelemetry.battery_level = null;
+            } else {
+              sanitizedTelemetry.battery_level = Math.max(0, Math.min(100, Math.round(sanitizedTelemetry.battery_level)));
+            }
           }
-          
+
           const now = Date.now();
           return {
             ...prev,
@@ -371,144 +371,144 @@ export const DroneProvider = ({ children }) => {
     });
 
     manager.subscribe(MessageType.STATUS, (msg) => {
-       let severity = 'INFO';
-       if (msg.severity) {
-         const sev = msg.severity.toLowerCase();
-         if (sev === 'error') severity = 'ERROR';
-         else if (sev === 'critical') severity = 'CRITICAL';
-         else if (sev === 'warning') severity = 'WARNING';
-       }
-       let source = 'PX4';
-       let event = 'STATUS_TEXT';
-       
-       if (severity === 'ERROR' || severity === 'CRITICAL') {
-         source = 'DRONEOS';
-         event = 'BACKEND_ERROR';
-       }
-       
-       addLog(`ACK from ${msg.sender_id}: ${msg.status_text}`, severity, source, msg.sender_id, event);
+      let severity = 'INFO';
+      if (msg.severity) {
+        const sev = msg.severity.toLowerCase();
+        if (sev === 'error') severity = 'ERROR';
+        else if (sev === 'critical') severity = 'CRITICAL';
+        else if (sev === 'warning') severity = 'WARNING';
+      }
+      let source = 'PX4';
+      let event = 'STATUS_TEXT';
+
+      if (severity === 'ERROR' || severity === 'CRITICAL') {
+        source = 'DRONEOS';
+        event = 'BACKEND_ERROR';
+      }
+
+      addLog(`ACK from ${msg.sender_id}: ${msg.status_text}`, severity, source, msg.sender_id, event);
     });
 
     manager.subscribe(MessageType.COMMAND_LIFECYCLE, (msg) => {
-       setDrones(prev => {
-          const drone = prev[msg.sender_id];
-          if (!drone) return prev;
-          const currentCmdId = drone.commandState?.cmd_id;
-          const isCurrentCommand = Boolean(msg.cmd_id && currentCmdId && msg.cmd_id === currentCmdId);
-          console.info("RECV LIFECYCLE", {
-            sender_id: msg.sender_id,
-            target_id: msg.target_id,
-            action: msg.action,
-            stage: msg.stage,
-            cmd_id: msg.cmd_id,
-            currentCmdId,
-            acceptedForUi: isCurrentCommand,
-          });
-          // Late lifecycle events (for example HOVER after a movement release)
-          // must not replace a newer LAND/RTL command in the UI.
-          if (!isCurrentCommand) return prev;
-          return {
-             ...prev,
-             [msg.sender_id]: {
-                ...drone,
-                commandState: {
-                   ...drone.commandState,
-                   action: msg.action,
-                   state: msg.stage,
-                   reason: msg.reason,
-                   cmd_id: msg.cmd_id || (drone.commandState ? drone.commandState.cmd_id : undefined)
-                }
-             }
-          };
-       });
-        
-        let severity = 'INFO';
-        if (msg.stage === 'REJECTED' || msg.stage === 'FAILED' || msg.stage === 'TIMEOUT') severity = 'ERROR';
-        addLog(`COMMAND ${msg.action.toUpperCase()}: ${msg.stage}${msg.reason ? ` (${msg.reason})` : ''}`, severity, 'DRONEOS', msg.sender_id, `COMMAND_${msg.stage}`);
+      setDrones(prev => {
+        const drone = prev[msg.sender_id];
+        if (!drone) return prev;
+        const currentCmdId = drone.commandState?.cmd_id;
+        const isCurrentCommand = Boolean(msg.cmd_id && currentCmdId && msg.cmd_id === currentCmdId);
+        console.info("RECV LIFECYCLE", {
+          sender_id: msg.sender_id,
+          target_id: msg.target_id,
+          action: msg.action,
+          stage: msg.stage,
+          cmd_id: msg.cmd_id,
+          currentCmdId,
+          acceptedForUi: isCurrentCommand,
+        });
+        // Late lifecycle events (for example HOVER after a movement release)
+        // must not replace a newer LAND/RTL command in the UI.
+        if (!isCurrentCommand) return prev;
+        return {
+          ...prev,
+          [msg.sender_id]: {
+            ...drone,
+            commandState: {
+              ...drone.commandState,
+              action: msg.action,
+              state: msg.stage,
+              reason: msg.reason,
+              cmd_id: msg.cmd_id || (drone.commandState ? drone.commandState.cmd_id : undefined)
+            }
+          }
+        };
+      });
+
+      let severity = 'INFO';
+      if (msg.stage === 'REJECTED' || msg.stage === 'FAILED' || msg.stage === 'TIMEOUT') severity = 'ERROR';
+      addLog(`COMMAND ${msg.action.toUpperCase()}: ${msg.stage}${msg.reason ? ` (${msg.reason})` : ''}`, severity, 'DRONEOS', msg.sender_id, `COMMAND_${msg.stage}`);
     });
 
     manager.subscribe(MessageType.ERROR, (msg) => {
-       addLog(`COMMAND FAILED: ${msg.error_msg}`, 'ERROR', 'MAVSDK', msg.sender_id, 'ERROR');
-       setDrones(prev => {
-          const drone = prev[msg.sender_id];
-          if (!drone) return prev;
-          return {
-             ...prev,
-             [msg.sender_id]: {
-                ...drone,
-                commandState: { ...drone.commandState, state: 'REJECTED' },
-                diagnostics: { ...(drone.diagnostics || {}), last_error: msg.error_msg }
-             }
-          };
-       });
+      addLog(`COMMAND FAILED: ${msg.error_msg}`, 'ERROR', 'MAVSDK', msg.sender_id, 'ERROR');
+      setDrones(prev => {
+        const drone = prev[msg.sender_id];
+        if (!drone) return prev;
+        return {
+          ...prev,
+          [msg.sender_id]: {
+            ...drone,
+            commandState: { ...drone.commandState, state: 'REJECTED' },
+            diagnostics: { ...(drone.diagnostics || {}), last_error: msg.error_msg }
+          }
+        };
+      });
     });
 
     manager.subscribe(MessageType.PARAM_RESPONSE, (msg) => {
-       setDrones(prev => {
-          const drone = prev[msg.sender_id];
-          if (!drone) return prev;
-          
-          let updatedParams = { ...(drone.parameters || {}) };
-          let updatedHistory = [ ...(drone.paramHistory || []) ];
-          
-          if (msg.action === "read_all" && msg.parameters) {
-             updatedParams = msg.parameters;
-          } else if (msg.success && msg.param_name !== null) {
-             const oldVal = updatedParams[msg.param_name];
-             updatedParams[msg.param_name] = msg.param_value;
-             
-             if (msg.action === "write") {
-                updatedHistory.unshift({
-                   time: Date.now(),
-                   name: msg.param_name,
-                   old_value: oldVal,
-                   new_value: msg.param_value,
-                   status: 'SUCCESS'
-                });
-             }
-          }
-          
-          if (msg.message && !msg.success) {
-             addLog(`Param Error from ${msg.sender_id}: ${msg.message}`);
-             if (msg.action === "write" && msg.param_name) {
-                updatedHistory.unshift({
-                   time: Date.now(),
-                   name: msg.param_name,
-                   old_value: updatedParams[msg.param_name],
-                   new_value: msg.param_value,
-                   status: 'FAILED',
-                   error: msg.message
-                });
-             }
-          }
+      setDrones(prev => {
+        const drone = prev[msg.sender_id];
+        if (!drone) return prev;
 
-          // Keep bounded history
-          if (updatedHistory.length > 50) updatedHistory = updatedHistory.slice(0, 50);
+        let updatedParams = { ...(drone.parameters || {}) };
+        let updatedHistory = [...(drone.paramHistory || [])];
 
-          return {
-             ...prev,
-             [msg.sender_id]: {
-                ...drone,
-                parameters: updatedParams,
-                paramHistory: updatedHistory,
-                paramSyncState: { pending: false, lastSync: Date.now(), lastAction: msg.action, lastParam: msg.param_name }
-             }
-          };
-       });
+        if (msg.action === "read_all" && msg.parameters) {
+          updatedParams = msg.parameters;
+        } else if (msg.success && msg.param_name !== null) {
+          const oldVal = updatedParams[msg.param_name];
+          updatedParams[msg.param_name] = msg.param_value;
+
+          if (msg.action === "write") {
+            updatedHistory.unshift({
+              time: Date.now(),
+              name: msg.param_name,
+              old_value: oldVal,
+              new_value: msg.param_value,
+              status: 'SUCCESS'
+            });
+          }
+        }
+
+        if (msg.message && !msg.success) {
+          addLog(`Param Error from ${msg.sender_id}: ${msg.message}`);
+          if (msg.action === "write" && msg.param_name) {
+            updatedHistory.unshift({
+              time: Date.now(),
+              name: msg.param_name,
+              old_value: updatedParams[msg.param_name],
+              new_value: msg.param_value,
+              status: 'FAILED',
+              error: msg.message
+            });
+          }
+        }
+
+        // Keep bounded history
+        if (updatedHistory.length > 50) updatedHistory = updatedHistory.slice(0, 50);
+
+        return {
+          ...prev,
+          [msg.sender_id]: {
+            ...drone,
+            parameters: updatedParams,
+            paramHistory: updatedHistory,
+            paramSyncState: { pending: false, lastSync: Date.now(), lastAction: msg.action, lastParam: msg.param_name }
+          }
+        };
+      });
     });
 
     manager.subscribe(MessageType.DIAGNOSTICS, (msg) => {
-       setDrones(prev => {
-          const drone = prev[msg.sender_id];
-          if (!drone) return prev;
-          return {
-             ...prev,
-             [msg.sender_id]: {
-                ...drone,
-                diagnostics: msg.diagnostics
-             }
-          };
-       });
+      setDrones(prev => {
+        const drone = prev[msg.sender_id];
+        if (!drone) return prev;
+        return {
+          ...prev,
+          [msg.sender_id]: {
+            ...drone,
+            diagnostics: msg.diagnostics
+          }
+        };
+      });
     });
 
     manager.subscribe(MessageType.SWARM_STATE, (msg) => {
@@ -590,7 +590,8 @@ export const DroneProvider = ({ children }) => {
           msg.objects || [],
           tombstonesRef.current,
           msg.tombstones || {},
-          watermarkId
+          watermarkId,
+          dismissedGarbageIdsRef.current
         );
 
         // Process buffered events arriving while snapshot was in flight
@@ -643,111 +644,111 @@ export const DroneProvider = ({ children }) => {
 
   const sendCommand = (action, params = null, targetIds = null, isEmergency = false) => {
     if (!wsManager || isConnected !== "CONNECTED") return;
-    
+
     const targets = targetIds || Array.from(selectedDrones);
     if (targets.length === 0) return;
-    
+
     targets.forEach(id => {
-       // Prevent duplicate pending commands (unless MOVE which is streamable)
-       const currentState = drones[id]?.commandState;
-       if (currentState && currentState.state === 'SENDING' && currentState.action === action && action !== CommandAction.MOVE && action !== 'formation_update') {
-           console.warn(`Command ${action} is already pending for ${id}. Deduplicating.`);
-           return;
-       }
+      // Prevent duplicate pending commands (unless MOVE which is streamable)
+      const currentState = drones[id]?.commandState;
+      if (currentState && currentState.state === 'SENDING' && currentState.action === action && action !== CommandAction.MOVE && action !== 'formation_update') {
+        console.warn(`Command ${action} is already pending for ${id}. Deduplicating.`);
+        return;
+      }
 
-       // Strict Command Gating
-       const tel = drones[id]?.telemetry || {};
+      // Strict Command Gating
+      const tel = drones[id]?.telemetry || {};
 
-       if (action === CommandAction.TAKEOFF && tel.armed_state !== 'ARMED') {
-           addLog(`TAKEOFF rejected by UI: not armed`, 'WARNING', 'PHONEOS', id, 'TAKEOFF_BLOCKED');
-           return;
-       }
-       if (action === CommandAction.RTL && tel.home_valid === false) {
-           addLog(`RTL rejected by UI: home invalid`, 'WARNING', 'PHONEOS', id, 'RTL_BLOCKED');
-           return;
-       }
+      if (action === CommandAction.TAKEOFF && tel.armed_state !== 'ARMED') {
+        addLog(`TAKEOFF rejected by UI: not armed`, 'WARNING', 'PHONEOS', id, 'TAKEOFF_BLOCKED');
+        return;
+      }
+      if (action === CommandAction.RTL && tel.home_valid === false) {
+        addLog(`RTL rejected by UI: home invalid`, 'WARNING', 'PHONEOS', id, 'RTL_BLOCKED');
+        return;
+      }
 
-       const cmd_id = `cmd_${Date.now()}_${id}`;
-       console.info("COMMAND QUEUED", { target_id: id, action, cmd_id, timestamp: Date.now() });
-       setDrones(prev => ({
-          ...prev,
-          [id]: {
-             ...prev[id],
-             commandState: { action, state: 'SENDING', cmd_id, timestamp: Date.now() }
-          }
-       }));
-       
-       if (isEmergency) {
-          wsManager.send(new EmergencyMessage(GS_ID, id));
-       } else {
-          wsManager.send(new ControlMessage(GS_ID, action, params, id, cmd_id));
-       }
-       addLog(`Sent ${action} to ${id}`);
+      const cmd_id = `cmd_${Date.now()}_${id}`;
+      console.info("COMMAND QUEUED", { target_id: id, action, cmd_id, timestamp: Date.now() });
+      setDrones(prev => ({
+        ...prev,
+        [id]: {
+          ...prev[id],
+          commandState: { action, state: 'SENDING', cmd_id, timestamp: Date.now() }
+        }
+      }));
+
+      if (isEmergency) {
+        wsManager.send(new EmergencyMessage(GS_ID, id));
+      } else {
+        wsManager.send(new ControlMessage(GS_ID, action, params, id, cmd_id));
+      }
+      addLog(`Sent ${action} to ${id}`);
     });
   };
 
   const sendTerminalCommand = (text, targetIds = null) => {
     if (!wsManager || isConnected !== "CONNECTED") return;
-    
+
     const targets = targetIds || Array.from(selectedDrones);
     if (targets.length === 0) return;
-    
+
     targets.forEach(id => {
-       wsManager.send(new TerminalCommandMessage(GS_ID, text, id));
+      wsManager.send(new TerminalCommandMessage(GS_ID, text, id));
     });
   };
 
   const sendParamRequest = (action, param_name = null, param_value = null, param_type = null, targetId = null) => {
     if (!wsManager || isConnected !== "CONNECTED") return;
-    
+
     const targets = targetId ? [targetId] : Array.from(selectedDrones);
     if (targets.length === 0) return;
-    
+
     targets.forEach(id => {
-       wsManager.send(new ParamRequestMessage(GS_ID, id, action, param_name, param_value, param_type));
-       
-       setDrones(prev => ({
-          ...prev,
-          [id]: {
-             ...(prev[id] || {}),
-             paramSyncState: { pending: true, lastSync: prev[id]?.paramSyncState?.lastSync || 0 }
-          }
-       }));
+      wsManager.send(new ParamRequestMessage(GS_ID, id, action, param_name, param_value, param_type));
+
+      setDrones(prev => ({
+        ...prev,
+        [id]: {
+          ...(prev[id] || {}),
+          paramSyncState: { pending: true, lastSync: prev[id]?.paramSyncState?.lastSync || 0 }
+        }
+      }));
     });
   };
 
   // Command Reply Monitor
   useEffect(() => {
     const timeoutMonitor = setInterval(() => {
-       const now = Date.now();
-       setDrones(prev => {
-          let changed = false;
-          const nextDrones = { ...prev };
-          for (const [id, drone] of Object.entries(nextDrones)) {
-             if (drone.commandState && drone.commandState.state === 'SENDING') {
-                if (now - drone.commandState.timestamp > 20000) {
-                   nextDrones[id] = {
-                      ...drone,
-                      commandState: { ...drone.commandState, state: 'NO_REPLY' }
-                   };
-                   changed = true;
-                   addLog(`No backend reply for ${id}`, 'WARNING', 'PHONEOS', id, 'COMMAND_NO_REPLY');
-                }
-             }
+      const now = Date.now();
+      setDrones(prev => {
+        let changed = false;
+        const nextDrones = { ...prev };
+        for (const [id, drone] of Object.entries(nextDrones)) {
+          if (drone.commandState && drone.commandState.state === 'SENDING') {
+            if (now - drone.commandState.timestamp > 20000) {
+              nextDrones[id] = {
+                ...drone,
+                commandState: { ...drone.commandState, state: 'NO_REPLY' }
+              };
+              changed = true;
+              addLog(`No backend reply for ${id}`, 'WARNING', 'PHONEOS', id, 'COMMAND_NO_REPLY');
+            }
           }
-          return changed ? nextDrones : prev;
-       });
+        }
+        return changed ? nextDrones : prev;
+      });
     }, 1000);
     return () => clearInterval(timeoutMonitor);
   }, []);
 
   const toggleSelect = (id) => {
-     const newSet = new Set(selectedDrones);
-     if (newSet.has(id)) newSet.delete(id);
-     else newSet.add(id);
-     setSelectedDrones(newSet);
+    const newSet = new Set(selectedDrones);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedDrones(newSet);
   };
-  
+
   const selectAll = () => setSelectedDrones(new Set(Object.keys(drones)));
   const selectNone = () => setSelectedDrones(new Set());
   const selectOnly = (id) => setSelectedDrones(new Set([id]));

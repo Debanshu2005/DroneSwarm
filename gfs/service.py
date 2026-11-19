@@ -17,6 +17,7 @@ from gfs.models import (
     LocalTracklet,
     GlobalObject,
     SourceEstimate,
+    LifecycleState,
     wgs84_to_enu
 )
 from gfs.config import GFSConfig
@@ -83,6 +84,41 @@ class GFSService:
             )
             cur.execute("DELETE FROM deferred_observations WHERE expires_at_ms <= ?", (now_ms,))
 
+            # 2b. Enforce provisional candidate TTL policy (transition to RETIRED)
+            cur.execute(
+                """SELECT global_id, version, last_seen_ms FROM global_objects
+                   WHERE status = 'ACTIVE' AND lifecycle_state = 'PROVISIONAL' AND expires_at_ms IS NOT NULL AND expires_at_ms <= ?""",
+                (now_ms,)
+            )
+            expired_prov_rows = cur.fetchall()
+            for er in expired_prov_rows:
+                eg_id = er["global_id"]
+                eg_ver = int(er["version"] or 1) + 1
+                cur.execute(
+                    """UPDATE global_objects
+                       SET status = 'RETIRED', lifecycle_state = 'RETIRED', version = ?
+                       WHERE global_id = ?""",
+                    (eg_ver, eg_id)
+                )
+                import uuid
+                ret_evt_id = f"evt-{uuid.uuid4().hex}"
+                ret_payload = {
+                    "event_id": ret_evt_id,
+                    "event_type": "GLOBAL_OBJECT_RETIRED",
+                    "global_id": eg_id,
+                    "id": eg_id,
+                    "status": "RETIRED",
+                    "lifecycle_state": "RETIRED",
+                    "version": eg_ver,
+                    "last_seen_ms": er["last_seen_ms"] or now_ms,
+                    "emitted_at_ms": now_ms
+                }
+                cur.execute(
+                    "INSERT INTO gfs_outbox_events (id, payload, status) VALUES (?, ?, 'PENDING')",
+                    (ret_evt_id, json.dumps(ret_payload, sort_keys=True))
+                )
+                logger.info("Provisional object %s expired (TTL exceeded), transitioned to RETIRED (ver=%d)", eg_id, eg_ver)
+
             cur.execute(
                 """SELECT obs_id, packet_id, raw_payload, defer_reason 
                    FROM deferred_observations 
@@ -119,7 +155,23 @@ class GFSService:
                 recovered_deferred_ids.add(r["obs_id"])
 
             if not claimed_observations:
-                return {"status": "NO_OBSERVATIONS", "fused": 0, "new_globals": 0}
+                if expired_prov_rows:
+                    con.commit()
+                cur.execute("SELECT lifecycle_state, count(*) as cnt FROM global_objects WHERE status = 'ACTIVE' GROUP BY lifecycle_state")
+                counts = {r["lifecycle_state"]: r["cnt"] for r in cur.fetchall()}
+                return {
+                    "status": "NO_OBSERVATIONS",
+                    "fused": 0,
+                    "new_globals": 0,
+                    "provisional_created": 0,
+                    "confirmed_created": 0,
+                    "provisional_promoted": 0,
+                    "updated_globals": 0,
+                    "active_confirmed_count": counts.get(LifecycleState.CONFIRMED.value, 0),
+                    "active_provisional_count": counts.get(LifecycleState.PROVISIONAL.value, 0),
+                    "provisional_expired": len(expired_prov_rows),
+                    "deferred": 0
+                }
 
             try:
                 from DroneOS.perception.diagnostics import log_gfs_observation_rx, log_gfs_fusion_result
@@ -159,10 +211,12 @@ class GFSService:
             cur.execute(
                 """SELECT global_id, label, status, lat, lon, alt, east_m, north_m,
                           cov_xx, cov_yy, cov_xy, confidence, first_seen_ms, last_seen_ms,
-                          observation_count, source_count, source_estimates_json, version
+                          observation_count, source_count, source_estimates_json, version,
+                          lifecycle_state, confirmation_method, provisional_reason, expires_at_ms
                    FROM global_objects WHERE status = 'ACTIVE'"""
             )
             active_globals: Dict[str, GlobalObject] = {}
+            initial_lifecycle_states: Dict[str, str] = {}
             for r in cur.fetchall():
                 src_dict: Dict[str, SourceEstimate] = {}
                 raw_src = json.loads(r["source_estimates_json"])
@@ -182,6 +236,13 @@ class GFSService:
                         observation_count=s_data["observation_count"]
                     )
 
+                l_state = r["lifecycle_state"] if "lifecycle_state" in r.keys() and r["lifecycle_state"] else LifecycleState.CONFIRMED.value
+                conf_method = r["confirmation_method"] if "confirmation_method" in r.keys() else None
+                prov_reason = r["provisional_reason"] if "provisional_reason" in r.keys() else None
+                exp_at = r["expires_at_ms"] if "expires_at_ms" in r.keys() else None
+
+                initial_lifecycle_states[r["global_id"]] = l_state
+
                 active_globals[r["global_id"]] = GlobalObject(
                     global_id=r["global_id"],
                     label=r["label"],
@@ -200,7 +261,11 @@ class GFSService:
                     observation_count=r["observation_count"],
                     source_count=r["source_count"],
                     source_estimates=src_dict,
-                    version=r["version"]
+                    version=r["version"],
+                    lifecycle_state=l_state,
+                    confirmation_method=conf_method,
+                    provisional_reason=prov_reason,
+                    expires_at_ms=exp_at
                 )
 
             # Fetch identity history
@@ -220,9 +285,10 @@ class GFSService:
                     tracklets_by_drone[t.drone_id] = []
                 tracklets_by_drone[t.drone_id].append(t)
 
-            drone_matched_pairs: Dict[str, str] = {}  # local_track_id -> global_id
+            drone_matched_pairs: Dict[Tuple[str, str], str] = {}  # (drone_id, local_track_id) -> global_id
             swarm_unmatched_tracklets: List[LocalTracklet] = []
             updated_global_ids: Set[str] = set()
+            promoted_global_ids: Set[str] = set()
             reactivated_global_ids: Set[str] = set()
             new_identity_records: List[Tuple[LocalTracklet, str]] = []
 
@@ -244,10 +310,13 @@ class GFSService:
                             tracklet=trk,
                             ref_lat=self.config.ref_origin_lat,
                             ref_lon=self.config.ref_origin_lon,
-                            ref_alt=self.config.ref_origin_alt
+                            ref_alt=self.config.ref_origin_alt,
+                            config=self.config
                         )
                         updated_global_ids.add(g_id)
-                        drone_matched_pairs[trk.local_track_id] = g_id
+                        if initial_lifecycle_states.get(g_id) == LifecycleState.PROVISIONAL.value and glob.lifecycle_state == LifecycleState.CONFIRMED.value:
+                            promoted_global_ids.add(g_id)
+                        drone_matched_pairs[(trk.drone_id, trk.local_track_id)] = g_id
                         new_identity_records.append((trk, g_id))
 
             # 5. RETRY HISTORICAL UNMATCHED TRACKS AGAINST THEIR HISTORICAL IDENTITY
@@ -319,7 +388,11 @@ class GFSService:
                             observation_count=hr["observation_count"],
                             source_count=hr["source_count"],
                             source_estimates=src_dict,
-                            version=hr["version"]
+                            version=hr["version"],
+                            lifecycle_state=hr["lifecycle_state"] if "lifecycle_state" in hr.keys() and hr["lifecycle_state"] else LifecycleState.CONFIRMED.value,
+                            confirmation_method=hr["confirmation_method"] if "confirmation_method" in hr.keys() else None,
+                            provisional_reason=hr["provisional_reason"] if "provisional_reason" in hr.keys() else None,
+                            expires_at_ms=hr["expires_at_ms"] if "expires_at_ms" in hr.keys() else None
                         )
                         active_globals[hist_g_id] = target_glob
 
@@ -337,10 +410,13 @@ class GFSService:
                             tracklet=h_trk,
                             ref_lat=self.config.ref_origin_lat,
                             ref_lon=self.config.ref_origin_lon,
-                            ref_alt=self.config.ref_origin_alt
+                            ref_alt=self.config.ref_origin_alt,
+                            config=self.config
                         )
                         updated_global_ids.add(hist_g_id)
-                        drone_matched_pairs[h_trk.local_track_id] = hist_g_id
+                        if initial_lifecycle_states.get(hist_g_id) == LifecycleState.PROVISIONAL.value and target_glob.lifecycle_state == LifecycleState.CONFIRMED.value:
+                            promoted_global_ids.add(hist_g_id)
+                        drone_matched_pairs[(h_trk.drone_id, h_trk.local_track_id)] = hist_g_id
                         new_identity_records.append((h_trk, hist_g_id))
                         continue
 
@@ -364,13 +440,14 @@ class GFSService:
                         se = ng.source_estimates[trk.drone_id]
                         if se.local_track_id == trk.local_track_id:
                             new_identity_records.append((trk, ng.global_id))
-                            drone_matched_pairs[trk.local_track_id] = ng.global_id
+                            drone_matched_pairs[(trk.drone_id, trk.local_track_id)] = ng.global_id
 
             # 7. Item Dispositions
             item_dispositions: Dict[str, Tuple[str, Optional[str], Optional[str]]] = {}
             for trk in local_tracklets:
-                if trk.local_track_id in drone_matched_pairs:
-                    g_id = drone_matched_pairs[trk.local_track_id]
+                trk_key = (trk.drone_id, trk.local_track_id)
+                if trk_key in drone_matched_pairs:
+                    g_id = drone_matched_pairs[trk_key]
                     for o in trk.observations:
                         item_dispositions[o.obs_id] = ("FUSED", None, g_id)
                 elif trk in historical_deferred:
@@ -429,8 +506,9 @@ class GFSService:
                     """INSERT INTO global_objects
                        (global_id, label, status, lat, lon, alt, east_m, north_m,
                         cov_xx, cov_yy, cov_xy, confidence, first_seen_ms, last_seen_ms,
-                        observation_count, source_count, source_estimates_json, version)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        observation_count, source_count, source_estimates_json, version,
+                        lifecycle_state, confirmation_method, provisional_reason, expires_at_ms)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                        ON CONFLICT(global_id) DO UPDATE SET
                         status = excluded.status,
                         lat = excluded.lat,
@@ -446,17 +524,24 @@ class GFSService:
                         observation_count = excluded.observation_count,
                         source_count = excluded.source_count,
                         source_estimates_json = excluded.source_estimates_json,
-                        version = version + 1""",
+                        version = version + 1,
+                        lifecycle_state = excluded.lifecycle_state,
+                        confirmation_method = excluded.confirmation_method,
+                        provisional_reason = excluded.provisional_reason,
+                        expires_at_ms = excluded.expires_at_ms""",
                     (glob.global_id, glob.label, glob.status, glob.lat, glob.lon, glob.alt,
                      glob.east_m, glob.north_m, glob.cov_xx, glob.cov_yy, glob.cov_xy,
                      glob.confidence, glob.first_seen_ms, glob.last_seen_ms,
-                     glob.observation_count, glob.source_count, src_json, glob.version)
+                     glob.observation_count, glob.source_count, src_json, glob.version,
+                     glob.lifecycle_state, glob.confirmation_method, glob.provisional_reason, glob.expires_at_ms)
                 )
 
                 # Enqueue Outbox Event
                 new_gid_set = {ng.global_id for ng in new_globals}
                 if g_id in reactivated_global_ids:
                     evt_type = "GLOBAL_OBJECT_REACTIVATED"
+                elif g_id in promoted_global_ids:
+                    evt_type = "GLOBAL_OBJECT_CONFIRMED"
                 elif g_id in new_gid_set:
                     evt_type = "GLOBAL_OBJECT_NEW"
                 else:
@@ -486,13 +571,27 @@ class GFSService:
                 if oid in item_dispositions and item_dispositions[oid][0] == "FUSED":
                     cur.execute("DELETE FROM deferred_observations WHERE obs_id = ?", (oid,))
 
-            return {
+            provisional_created = len([ng for ng in new_globals if ng.lifecycle_state == LifecycleState.PROVISIONAL.value])
+            confirmed_created = len([ng for ng in new_globals if ng.lifecycle_state == LifecycleState.CONFIRMED.value])
+            provisional_promoted = len(promoted_global_ids)
+            active_confirmed = len([g for g in active_globals.values() if g.lifecycle_state == LifecycleState.CONFIRMED.value and g.status == "ACTIVE"])
+            active_provisional = len([g for g in active_globals.values() if g.lifecycle_state == LifecycleState.PROVISIONAL.value and g.status == "ACTIVE"])
+
+            batch_metrics = {
                 "status": "SUCCESS",
                 "fused": len([d for d in item_dispositions.values() if d[0] == "FUSED"]),
                 "new_globals": len(new_globals),
+                "provisional_created": provisional_created,
+                "confirmed_created": confirmed_created,
+                "provisional_promoted": provisional_promoted,
                 "updated_globals": len(updated_global_ids),
+                "active_confirmed_count": active_confirmed,
+                "active_provisional_count": active_provisional,
+                "provisional_expired": len(expired_prov_rows),
                 "deferred": len(ambiguous_def) + len(low_conf_def) + len(historical_deferred)
             }
+            logger.info("GFS Batch Completed: %s", json.dumps(batch_metrics))
+            return batch_metrics
 
     def run_daemon(self) -> None:
         """

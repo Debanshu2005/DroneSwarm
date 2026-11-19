@@ -4,7 +4,7 @@ Validated configuration models for the Global Fusion Service (GFS).
 
 import os
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union, Tuple
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
@@ -55,6 +55,11 @@ class GFSConfig(BaseModel):
         description="List of authorized GCS client identifiers"
     )
     deferred_observation_ttl_ms: int = Field(default=60000, gt=0, description="Deferred observation TTL in ms")
+    provisional_object_ttl_ms: int = Field(default=60000, gt=0, description="Provisional candidate TTL in ms")
+    provisional_max_lifetime_ms: int = Field(default=300000, gt=0, description="Maximum total lifetime for unconfirmed provisional object in ms")
+    enable_temporal_parallax_confirmation: bool = Field(default=False, description="Experimental temporal parallax confirmation flag")
+    temporal_parallax_min_baseline_m: float = Field(default=4.0, gt=0.0, description="Minimum drone translation baseline in metres for parallax")
+    temporal_parallax_min_duration_s: float = Field(default=5.0, gt=0.0, description="Minimum tracking duration in seconds for parallax")
 
     @classmethod
     def load(cls, config_path: Optional[str] = None) -> "GFSConfig":
@@ -69,7 +74,7 @@ class GFSConfig(BaseModel):
                     data.update(loaded)
 
         # Environment variable overrides
-        env_mappings = {
+        env_mappings: Dict[str, Union[str, Tuple[str, Any]]] = {
             "GFS_DB_PATH": "db_path",
             "GFS_LOCK_PATH": "lock_path",
             "GFS_INBOX_UDP_PORT": ("inbox_udp_port", int),
@@ -78,15 +83,17 @@ class GFSConfig(BaseModel):
             "GFS_BATCH_INTERVAL_MS": ("batch_interval_ms", int),
             "GFS_HMAC_SECRET": "hmac_secret_key",
             "GFS_R_MAX_M": ("spatial_physical_r_max_m", float),
+            "GFS_PROVISIONAL_TTL_MS": ("provisional_object_ttl_ms", int),
+            "GFS_ENABLE_TEMPORAL_PARALLAX": ("enable_temporal_parallax_confirmation", lambda v: str(v).lower() in ("true", "1", "yes")),
         }
         for env_var, field_spec in env_mappings.items():
             val = os.environ.get(env_var)
             if val is not None:
                 if isinstance(field_spec, tuple):
                     field_name, field_type = field_spec
-                    data[field_name] = field_type(val)
+                    data[str(field_name)] = field_type(val)
                 else:
-                    data[field_spec] = val
+                    data[str(field_spec)] = val
 
         return cls(**data)
 

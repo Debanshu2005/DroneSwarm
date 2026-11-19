@@ -77,9 +77,14 @@ export default function MapView() {
   const [mapStyle, setMapStyle] = useState('satellite');
   const [centerTarget, setCenterTarget] = useState(null);
   const [showFormation, setShowFormation] = useState(true);
-  const [showGarbage, setShowGarbage] = useState(true);
+  const [showConfirmed, setShowConfirmed] = useState(true);
+  const [showProvisional, setShowProvisional] = useState(true);
   const location = useDeviceLocation();
   const userLocation = location.coords;
+
+  const gValues = Object.values(garbage || {});
+  const confirmedCount = gValues.filter(g => g && g.lifecycle_state !== 'PROVISIONAL').length;
+  const provisionalCount = gValues.filter(g => g && g.lifecycle_state === 'PROVISIONAL').length;
 
   const mergedTargets = {};
   const allWaypoints = [];
@@ -173,13 +178,21 @@ export default function MapView() {
                 </button>
             )}
             <button
-               className={`secondary-btn compact ${showGarbage ? 'active' : ''}`}
-               onClick={() => setShowGarbage(!showGarbage)}
-               title="Toggle Garbage Markers"
+               className={`secondary-btn compact ${showConfirmed ? 'active' : ''}`}
+               onClick={() => setShowConfirmed(!showConfirmed)}
+               title="Toggle Confirmed Garbage Markers"
             >
-               <Trash2 size={16}/> Garbage ({Object.keys(garbage || {}).length})
+               <Trash2 size={16}/> Confirmed ({confirmedCount})
             </button>
-            {Object.keys(garbage || {}).length > 0 && (
+            <button
+               className={`secondary-btn compact ${showProvisional ? 'active' : ''}`}
+               onClick={() => setShowProvisional(!showProvisional)}
+               title="Toggle Provisional (Unconfirmed) Garbage Markers"
+               style={showProvisional ? { borderColor: '#f59e0b', color: '#f59e0b' } : {}}
+            >
+               Provisional ({provisionalCount})
+            </button>
+            {gValues.length > 0 && (
                <button
                   className="secondary-btn compact"
                   onClick={() => {
@@ -315,7 +328,12 @@ export default function MapView() {
                 );
             })}
 
-            {showGarbage && <GarbageLayer garbage={garbage} onDismiss={dismissGarbage} />}
+            <GarbageLayer
+               garbage={garbage}
+               showConfirmed={showConfirmed}
+               showProvisional={showProvisional}
+               onDismiss={dismissGarbage}
+            />
          </MapContainer>
       </div>
 

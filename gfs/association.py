@@ -6,7 +6,7 @@ Mahalanobis gating, identity-history enforcement, and deterministic Covariance I
 
 from __future__ import annotations
 import math
-from typing import List, Dict, Set, Tuple, Optional, Any
+from typing import List, Dict, Set, Tuple, Optional, Any, Union, overload, Literal
 import numpy as np
 from scipy.optimize import linear_sum_assignment, minimize_scalar, minimize
 
@@ -15,6 +15,7 @@ from gfs.models import (
     LocalTracklet,
     GlobalObject,
     SourceEstimate,
+    LifecycleState,
     wgs84_to_enu,
     enu_to_wgs84
 )
@@ -99,7 +100,7 @@ def solve_exact_forced_prefix_hungarian_int(
                 continue
 
             if not remaining_rows:
-                cand_total = sum(cost_int[ri, ci] for ri, ci in final_assignment) + edge_cost
+                cand_total = sum(cost_int[ri, ci] for ri, ci in final_assignment if ci >= 0) + edge_cost
                 if cand_total == Z_star:
                     final_assignment.append((r, c))
                     assigned_cols.add(c)
@@ -111,7 +112,7 @@ def solve_exact_forced_prefix_hungarian_int(
                 sub_r, sub_c = linear_sum_assignment(sub_cost)
                 sub_val = int(sub_cost[sub_r, sub_c].sum())
 
-                cand_total = sum(cost_int[ri, ci] for ri, ci in final_assignment) + edge_cost + sub_val
+                cand_total = sum(cost_int[ri, ci] for ri, ci in final_assignment if ci >= 0) + edge_cost + sub_val
                 if cand_total == Z_star:
                     final_assignment.append((r, c))
                     assigned_cols.add(c)
@@ -171,9 +172,12 @@ def associate_drone_tracklets_to_globals(
             if trk.label != glob.label:
                 continue
 
-            # Temporal compatibility (tracklet vs global last_seen)
-            time_diff = abs(trk.last_seen_ms - glob.last_seen_ms)
-            if time_diff > config.temporal_max_diff_ms:
+            # Temporal compatibility: reject stale observations arriving from the past
+            if trk.last_seen_ms < glob.last_seen_ms and (glob.last_seen_ms - trk.last_seen_ms) > config.temporal_max_diff_ms:
+                continue
+
+            # Gated check against expired provisional candidates
+            if glob.expires_at_ms is not None and trk.last_seen_ms > glob.expires_at_ms:
                 continue
 
             # Spatial physical distance bound
@@ -214,6 +218,33 @@ def associate_drone_tracklets_to_globals(
             unmatched_tracklets.append(trk)
 
     return matched_pairs, unmatched_tracklets
+
+
+@overload
+def fuse_covariance_intersection(
+    estimates: List[SourceEstimate],
+    noise_floor: float = ...,
+    method: str = ...,
+    return_diagnostics: Literal[False] = ...,
+) -> Tuple[float, float, float, float, float]: ...
+
+
+@overload
+def fuse_covariance_intersection(
+    estimates: List[SourceEstimate],
+    noise_floor: float = ...,
+    method: str = ...,
+    return_diagnostics: Literal[True] = ...,
+) -> Tuple[float, float, float, float, float, Dict[str, Any]]: ...
+
+
+@overload
+def fuse_covariance_intersection(
+    estimates: List[SourceEstimate],
+    noise_floor: float = ...,
+    method: str = ...,
+    return_diagnostics: bool = ...,
+) -> Union[Tuple[float, float, float, float, float], Tuple[float, float, float, float, float, Dict[str, Any]]]: ...
 
 
 def fuse_covariance_intersection(
@@ -336,10 +367,17 @@ def fuse_covariance_intersection(
                 return -logdet
 
             res = minimize_scalar(obj_2, bounds=(0.0, 1.0), method="bounded")
-            best_w = float(min(max(res.x, 0.0), 1.0))
-            raw_weights = [best_w, 1.0 - best_w]
-            diagnostics["method_applied"] = "optimized_brent"
-            diagnostics["optimizer_success"] = bool(getattr(res, "success", True))
+            if getattr(res, "success", True):
+                best_w = float(min(max(res.x, 0.0), 1.0))
+                raw_weights = [best_w, 1.0 - best_w]
+                diagnostics["method_applied"] = "optimized_brent"
+                diagnostics["optimizer_success"] = True
+            else:
+                inv_traces = [1.0 / max(float(np.trace(P)), 1e-6) for P in cov_matrices]
+                sum_it = sum(inv_traces)
+                raw_weights = [it / sum_it for it in inv_traces]
+                diagnostics["method_applied"] = "fallback_inverse_trace"
+                diagnostics["optimizer_success"] = False
         else:
             # Deterministic multi-dimensional constrained optimization
             # Initial guess: inverse-trace weights
@@ -379,8 +417,8 @@ def fuse_covariance_intersection(
         weights = [w / total_w for w in clamped_weights]
 
     # 5. Weighted combination in information form
-    P_inv_fused = np.zeros((2, 2), dtype=np.float64)
-    info_vec_fused = np.zeros(2, dtype=np.float64)
+    P_inv_fused: np.ndarray = np.zeros((2, 2), dtype=np.float64)
+    info_vec_fused: np.ndarray = np.zeros(2, dtype=np.float64)
 
     for w, Y, y in zip(weights, info_matrices, info_vectors):
         P_inv_fused += w * Y
@@ -420,13 +458,24 @@ def update_global_object_with_tracklet(
     tracklet: LocalTracklet,
     ref_lat: float,
     ref_lon: float,
-    ref_alt: float = 0.0
+    ref_alt: float = 0.0,
+    config: Optional[GFSConfig] = None
 ) -> None:
     """
     Updates an existing GlobalObject with a matched LocalTracklet using
     retained source-level Covariance Intersection.
+    Handles promotion from PROVISIONAL to CONFIRMED when multi-drone or high-confidence
+    criteria are satisfied.
     """
+    # Capture previous estimate for single-drone temporal baseline computation
+    prev_est = glob.source_estimates.get(tracklet.drone_id)
+    prev_east = prev_est.east_m if prev_est is not None else None
+    prev_north = prev_est.north_m if prev_est is not None else None
+
     # 1. Update retained source estimate for this drone
+    prev_obs_count = prev_est.observation_count if prev_est is not None else 0
+    merged_confidence = max(prev_est.confidence, tracklet.confidence) if prev_est is not None else tracklet.confidence
+
     glob.source_estimates[tracklet.drone_id] = SourceEstimate(
         drone_id=tracklet.drone_id,
         drone_session_id=tracklet.drone_session_id,
@@ -437,9 +486,9 @@ def update_global_object_with_tracklet(
         cov_xx=tracklet.cov_xx,
         cov_yy=tracklet.cov_yy,
         cov_xy=tracklet.cov_xy,
-        confidence=tracklet.confidence,
+        confidence=merged_confidence,
         last_seen_ms=tracklet.last_seen_ms,
-        observation_count=len(tracklet.observations)
+        observation_count=prev_obs_count + len(tracklet.observations)
     )
 
     # 2. Deterministic multi-estimate CI over all retained drone estimates
@@ -468,6 +517,56 @@ def update_global_object_with_tracklet(
     for est in estimates:
         prob_miss *= (1.0 - est.confidence)
     glob.confidence = round(1.0 - prob_miss, 4)
+
+    # 3. Lifecycle Evaluation and Promotion
+    current_state = getattr(glob, "lifecycle_state", LifecycleState.CONFIRMED.value)
+    if current_state == LifecycleState.PROVISIONAL.value:
+        distinct_drones = set(glob.source_estimates.keys())
+        max_conf = max(e.confidence for e in estimates)
+
+        # Rule A: Multi-drone confirmation (>= 2 distinct drones)
+        if len(distinct_drones) >= 2:
+            glob.lifecycle_state = LifecycleState.CONFIRMED.value
+            glob.confirmation_method = "multi_drone_association"
+            glob.provisional_reason = None
+            glob.expires_at_ms = None
+        # Rule B: Single-drone high confidence (>= 0.70)
+        elif max_conf >= 0.70:
+            glob.lifecycle_state = LifecycleState.CONFIRMED.value
+            glob.confirmation_method = "single_drone_high_confidence"
+            glob.provisional_reason = None
+            glob.expires_at_ms = None
+        # Rule C: Gated experimental temporal parallax confirmation
+        elif config and getattr(config, "enable_temporal_parallax_confirmation", False):
+            # Same drone tracked for >= min_duration with >= min_baseline translation
+            min_dur_ms = int(getattr(config, "temporal_parallax_min_duration_s", 5.0) * 1000)
+            min_base_m = float(getattr(config, "temporal_parallax_min_baseline_m", 4.0))
+            tracking_dur_ms = max(glob.last_seen_ms, tracklet.last_seen_ms) - glob.first_seen_ms
+
+            baseline_m = 0.0
+            if prev_east is not None and prev_north is not None:
+                baseline_m = math.hypot(tracklet.east_m - prev_east, tracklet.north_m - prev_north)
+            elif len(tracklet.observations) >= 2:
+                o_first = tracklet.observations[0]
+                o_last = tracklet.observations[-1]
+                baseline_m = math.hypot(o_last.east_m - o_first.east_m, o_last.north_m - o_first.north_m)
+
+            if tracking_dur_ms >= min_dur_ms and baseline_m >= min_base_m:
+                glob.lifecycle_state = LifecycleState.CONFIRMED.value
+                glob.confirmation_method = "temporal_parallax"
+                glob.provisional_reason = None
+                glob.expires_at_ms = None
+            else:
+                ttl_ms = getattr(config, "provisional_object_ttl_ms", 60000)
+                glob.expires_at_ms = max(glob.last_seen_ms, tracklet.last_seen_ms) + ttl_ms
+        else:
+            # Remains provisional; refresh TTL
+            ttl_ms = getattr(config, "provisional_object_ttl_ms", 60000) if config else 60000
+            glob.expires_at_ms = max(glob.last_seen_ms, tracklet.last_seen_ms) + ttl_ms
+    elif current_state == LifecycleState.CONFIRMED.value:
+        distinct_drones = set(glob.source_estimates.keys())
+        if len(distinct_drones) >= 2 and glob.confirmation_method != "multi_drone_association":
+            glob.confirmation_method = "multi_drone_association"
 
     # Update metadata
     glob.last_seen_ms = max(glob.last_seen_ms, tracklet.last_seen_ms)

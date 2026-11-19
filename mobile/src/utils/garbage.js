@@ -5,6 +5,13 @@ import { calculateDistance } from './geoUtils.js';
 export const MAX_GARBAGE_ENTRIES = 500;
 export const MULTI_DRONE_MERGE_RADIUS_M = 2.0;
 
+export const LifecycleState = Object.freeze({
+  PROVISIONAL: 'PROVISIONAL',
+  CONFIRMED: 'CONFIRMED',
+  REJECTED: 'REJECTED',
+  RETIRED: 'RETIRED',
+});
+
 /**
  * Standard benchmark garbage targets (AirSim origin coordinates).
  * Seeded on initial app launch when no prior session data exists.
@@ -96,6 +103,10 @@ export function mergeDetections(
   const dismissedSet = dismissedIds instanceof Set ? dismissedIds : new Set(dismissedIds || []);
   const nextById = { ...prevById };
 
+  for (const dismissedId of dismissedSet) {
+    delete nextById[dismissedId];
+  }
+
   for (const rawItem of items) {
     if (!isValidDetectionItem(rawItem)) continue;
     const itemId = rawItem.id || rawItem.global_id;
@@ -130,6 +141,16 @@ export function mergeDetections(
     }
 
     const syntheticFlag = Boolean(rawItem.synthetic || isSynthetic);
+    let incomingLifecycle = rawItem.lifecycle_state;
+    if (!incomingLifecycle) {
+      if (isRetired) {
+        incomingLifecycle = LifecycleState.RETIRED;
+      } else if (rawItem.global_id || itemId.startsWith('G-')) {
+        incomingLifecycle = LifecycleState.CONFIRMED;
+      } else {
+        incomingLifecycle = LifecycleState.PROVISIONAL;
+      }
+    }
 
     // 3. LIFECYCLE RULE: Version-Aware Update for Existing ID
     if (nextById[itemId]) {
@@ -146,6 +167,13 @@ export function mergeDetections(
 
       const isGlobal = itemId.startsWith('G-') || Boolean(rawItem.global_id);
 
+      let resolvedLifecycle = existing.lifecycle_state || LifecycleState.CONFIRMED;
+      if (incomingLifecycle === LifecycleState.CONFIRMED) {
+        resolvedLifecycle = LifecycleState.CONFIRMED;
+      } else if (!existing.lifecycle_state) {
+        resolvedLifecycle = incomingLifecycle;
+      }
+
       nextById[itemId] = {
         ...existing,
         lat: isGlobal ? Number(rawItem.lat) : existing.lat,
@@ -158,6 +186,9 @@ export function mergeDetections(
         synthetic: Boolean(existing.synthetic || syntheticFlag),
         version: rawItem.version !== undefined ? Math.max(incomingVersion, existingVersion || 0) : existing.version,
         status: rawItem.status || existing.status || 'ACTIVE',
+        lifecycle_state: resolvedLifecycle,
+        confirmation_method: rawItem.confirmation_method || existing.confirmation_method || null,
+        provisional_reason: (resolvedLifecycle === LifecycleState.CONFIRMED) ? null : (rawItem.provisional_reason || existing.provisional_reason || null),
       };
 
       if (isGlobal) {
@@ -208,6 +239,7 @@ export function mergeDetections(
         lastSeen: nowMs,
         seenBy,
         synthetic: Boolean(existing.synthetic || syntheticFlag),
+        lifecycle_state: existing.lifecycle_state || LifecycleState.PROVISIONAL,
       };
       continue;
     }
@@ -228,6 +260,9 @@ export function mergeDetections(
       synthetic: syntheticFlag,
       version: rawItem.version !== undefined ? incomingVersion : undefined,
       status: rawItem.status || 'ACTIVE',
+      lifecycle_state: incomingLifecycle,
+      confirmation_method: rawItem.confirmation_method || null,
+      provisional_reason: rawItem.provisional_reason || (incomingLifecycle === LifecycleState.PROVISIONAL ? 'SINGLE_DRONE_LOW_CONFIDENCE' : null),
     };
 
     if (isGlobalObject) {
@@ -349,9 +384,15 @@ export function reconcileSnapshot(
   snapshotObjects = [],
   tombstones = {},
   snapshotTombstones = {},
-  watermarkEventId = 0
+  watermarkEventId = 0,
+  dismissedIds = new Set()
 ) {
+  const dismissedSet = dismissedIds instanceof Set ? dismissedIds : new Set(dismissedIds || []);
   const next = { ...currentGarbage };
+
+  for (const dismissedId of dismissedSet) {
+    delete next[dismissedId];
+  }
 
   // 1. Authoritative Tombstone Ingestion from Snapshot (resolves lost-storage race)
   if (snapshotTombstones && typeof snapshotTombstones === 'object') {
@@ -378,7 +419,7 @@ export function reconcileSnapshot(
   for (const rawObj of snapshotObjects) {
     if (!rawObj || typeof rawObj !== 'object') continue;
     const id = rawObj.id || rawObj.global_id;
-    if (!id) continue;
+    if (!id || dismissedSet.has(id)) continue;
     const incomingVer = Number(rawObj.version !== undefined ? rawObj.version : 0);
 
     // Check tombstone: if retired locally at >= snapshot version, drop snapshot object
@@ -398,6 +439,7 @@ export function reconcileSnapshot(
       continue;
     }
 
+    const incomingLifecycle = rawObj.lifecycle_state || LifecycleState.CONFIRMED;
     next[id] = {
       id,
       label: rawObj.label || 'rubbish',
@@ -412,6 +454,9 @@ export function reconcileSnapshot(
       seenBy: rawObj.source_drones || ['GFS'],
       version: incomingVer,
       status: rawObj.status || 'ACTIVE',
+      lifecycle_state: incomingLifecycle,
+      confirmation_method: rawObj.confirmation_method || null,
+      provisional_reason: rawObj.provisional_reason || (incomingLifecycle === LifecycleState.PROVISIONAL ? 'SINGLE_DRONE_LOW_CONFIDENCE' : null),
       watermark_event_id: watermarkEventId
     };
 
@@ -432,4 +477,34 @@ export function reconcileSnapshot(
     }
   }
   return next;
+}
+
+/**
+ * Filter garbage records to confirmed items only.
+ * @param {Record<string, object>} garbage
+ * @returns {Record<string, object>}
+ */
+export function getConfirmedGarbage(garbage = {}) {
+  const result = {};
+  for (const [id, item] of Object.entries(garbage || {})) {
+    if (item && item.lifecycle_state === LifecycleState.CONFIRMED) {
+      result[id] = item;
+    }
+  }
+  return result;
+}
+
+/**
+ * Filter garbage records to provisional items only.
+ * @param {Record<string, object>} garbage
+ * @returns {Record<string, object>}
+ */
+export function getProvisionalGarbage(garbage = {}) {
+  const result = {};
+  for (const [id, item] of Object.entries(garbage || {})) {
+    if (item && item.lifecycle_state === LifecycleState.PROVISIONAL) {
+      result[id] = item;
+    }
+  }
+  return result;
 }

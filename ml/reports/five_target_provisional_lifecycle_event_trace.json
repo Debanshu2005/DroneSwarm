@@ -1,0 +1,165 @@
+{
+  "scenario": "five_target_provisional_lifecycle_validation",
+  "timestamp_ms": 1001000,
+  "counts": {
+    "spawned_targets": 5,
+    "yolo_detected": 5,
+    "geolocated": 5,
+    "local_tracks_confirmed": 5,
+    "gfs_total_globals": 5,
+    "gfs_confirmed": 1,
+    "gfs_provisional": 4,
+    "relay_snapshot_objects": 5,
+    "phoneos_total_markers": 5,
+    "phoneos_confirmed_markers": 1,
+    "phoneos_provisional_markers": 4
+  },
+  "phoneos_markers": {
+    "G-751d9395": {
+      "id": "G-751d9395",
+      "global_id": "G-751d9395",
+      "label": "rubbish",
+      "confidence": 0.58,
+      "lat": 47.641611906490404,
+      "lon": -122.14011176781578,
+      "lifecycle_state": "PROVISIONAL",
+      "confirmation_method": null,
+      "provisional_reason": "SINGLE_DRONE_LOW_CONFIDENCE",
+      "seenBy": [
+        "drone1"
+      ],
+      "status": "ACTIVE"
+    },
+    "G-750329df": {
+      "id": "G-750329df",
+      "global_id": "G-750329df",
+      "label": "rubbish",
+      "confidence": 0.8775,
+      "lat": 47.64155794211882,
+      "lon": -122.1400585324806,
+      "lifecycle_state": "CONFIRMED",
+      "confirmation_method": "multi_drone_hypothesis",
+      "provisional_reason": null,
+      "seenBy": [
+        "drone2",
+        "drone3"
+      ],
+      "status": "ACTIVE"
+    },
+    "G-7bfd38df": {
+      "id": "G-7bfd38df",
+      "global_id": "G-7bfd38df",
+      "label": "rubbish",
+      "confidence": 0.61,
+      "lat": 47.641611906490404,
+      "lon": -122.14000529892309,
+      "lifecycle_state": "PROVISIONAL",
+      "confirmation_method": null,
+      "provisional_reason": "SINGLE_DRONE_LOW_CONFIDENCE",
+      "seenBy": [
+        "drone1"
+      ],
+      "status": "ACTIVE"
+    },
+    "G-c4aeddcf": {
+      "id": "G-c4aeddcf",
+      "global_id": "G-c4aeddcf",
+      "label": "rubbish",
+      "confidence": 0.59,
+      "lat": 47.64150397662281,
+      "lon": -122.1400053000542,
+      "lifecycle_state": "PROVISIONAL",
+      "confirmation_method": null,
+      "provisional_reason": "SINGLE_DRONE_LOW_CONFIDENCE",
+      "seenBy": [
+        "drone4"
+      ],
+      "status": "ACTIVE"
+    },
+    "G-9e3194fe": {
+      "id": "G-9e3194fe",
+      "global_id": "G-9e3194fe",
+      "label": "rubbish",
+      "confidence": 0.62,
+      "lat": 47.64150397662281,
+      "lon": -122.14011176668471,
+      "lifecycle_state": "PROVISIONAL",
+      "confirmation_method": null,
+      "provisional_reason": "SINGLE_DRONE_LOW_CONFIDENCE",
+      "seenBy": [
+        "drone4"
+      ],
+      "status": "ACTIVE"
+    }
+  },
+  "confirmed_objects": [
+    {
+      "global_id": "G-750329df",
+      "lifecycle_state": "CONFIRMED",
+      "confidence": 0.8775,
+      "sources": [
+        "drone2",
+        "drone3"
+      ],
+      "source_count": 2,
+      "confirmation_method": "multi_drone_hypothesis",
+      "provisional_reason": null,
+      "lat": 47.64155794211882,
+      "lon": -122.1400585324806
+    }
+  ],
+  "provisional_objects": [
+    {
+      "global_id": "G-751d9395",
+      "lifecycle_state": "PROVISIONAL",
+      "confidence": 0.58,
+      "sources": [
+        "drone1"
+      ],
+      "source_count": 1,
+      "confirmation_method": null,
+      "provisional_reason": "SINGLE_DRONE_LOW_CONFIDENCE",
+      "lat": 47.641611906490404,
+      "lon": -122.14011176781578
+    },
+    {
+      "global_id": "G-7bfd38df",
+      "lifecycle_state": "PROVISIONAL",
+      "confidence": 0.61,
+      "sources": [
+        "drone1"
+      ],
+      "source_count": 1,
+      "confirmation_method": null,
+      "provisional_reason": "SINGLE_DRONE_LOW_CONFIDENCE",
+      "lat": 47.641611906490404,
+      "lon": -122.14000529892309
+    },
+    {
+      "global_id": "G-9e3194fe",
+      "lifecycle_state": "PROVISIONAL",
+      "confidence": 0.62,
+      "sources": [
+        "drone4"
+      ],
+      "source_count": 1,
+      "confirmation_method": null,
+      "provisional_reason": "SINGLE_DRONE_LOW_CONFIDENCE",
+      "lat": 47.64150397662281,
+      "lon": -122.14011176668471
+    },
+    {
+      "global_id": "G-c4aeddcf",
+      "lifecycle_state": "PROVISIONAL",
+      "confidence": 0.59,
+      "sources": [
+        "drone4"
+      ],
+      "source_count": 1,
+      "confirmation_method": null,
+      "provisional_reason": "SINGLE_DRONE_LOW_CONFIDENCE",
+      "lat": 47.64150397662281,
+      "lon": -122.1400053000542
+    }
+  ]
+}

@@ -42,7 +42,11 @@ CREATE TABLE IF NOT EXISTS global_objects (
     observation_count INTEGER NOT NULL DEFAULT 1,
     source_count INTEGER NOT NULL DEFAULT 1,
     source_estimates_json TEXT NOT NULL DEFAULT '{}',
-    version INTEGER NOT NULL DEFAULT 1
+    version INTEGER NOT NULL DEFAULT 1,
+    lifecycle_state TEXT NOT NULL DEFAULT 'CONFIRMED' CHECK(lifecycle_state IN ('PROVISIONAL', 'CONFIRMED', 'REJECTED', 'RETIRED')),
+    confirmation_method TEXT,
+    provisional_reason TEXT,
+    expires_at_ms INTEGER
 );
 
 -- 3. Permanent Identity History (Tombstones - ON DELETE RESTRICT)
@@ -148,8 +152,33 @@ CREATE INDEX IF NOT EXISTS idx_inbox_items_disp ON inbox_packet_items(dispositio
 CREATE INDEX IF NOT EXISTS idx_outbox_status_lease ON gfs_outbox_events(status, lease_expires_at_ms);
 CREATE INDEX IF NOT EXISTS idx_consumed_acks_event ON gfs_consumed_acks(event_id, delivery_attempt_id);
 CREATE INDEX IF NOT EXISTS idx_global_objects_status ON global_objects(status, label);
+CREATE INDEX IF NOT EXISTS idx_global_objects_lifecycle ON global_objects(lifecycle_state, status);
 CREATE INDEX IF NOT EXISTS idx_identity_hist_global ON global_track_identity_history(global_id);
 """
+
+
+def migrate_schema(con: sqlite3.Connection) -> None:
+    """
+    Applies schema migrations to ensure existing databases receive new columns.
+    """
+    cur = con.cursor()
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='global_objects'")
+    if not cur.fetchone():
+        return
+
+    cur.execute("PRAGMA table_info(global_objects)")
+    existing_cols = {row[1] for row in cur.fetchall()}
+
+    if "lifecycle_state" not in existing_cols:
+        cur.execute("ALTER TABLE global_objects ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'CONFIRMED'")
+    if "confirmation_method" not in existing_cols:
+        cur.execute("ALTER TABLE global_objects ADD COLUMN confirmation_method TEXT")
+    if "provisional_reason" not in existing_cols:
+        cur.execute("ALTER TABLE global_objects ADD COLUMN provisional_reason TEXT")
+    if "expires_at_ms" not in existing_cols:
+        cur.execute("ALTER TABLE global_objects ADD COLUMN expires_at_ms INTEGER")
+
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_global_objects_lifecycle ON global_objects(lifecycle_state, status)")
 
 
 def create_connection(db_path: str) -> sqlite3.Connection:
@@ -162,6 +191,7 @@ def create_connection(db_path: str) -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON;")
     con.execute("PRAGMA busy_timeout = 5000;")
+    migrate_schema(con)
     return con
 
 
@@ -172,6 +202,7 @@ def init_db(db_path: str) -> None:
     con = create_connection(db_path)
     try:
         con.executescript(SCHEMA_SQL)
+        migrate_schema(con)
         con.commit()
     finally:
         con.close()

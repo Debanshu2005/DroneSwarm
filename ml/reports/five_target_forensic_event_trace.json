@@ -1,0 +1,219 @@
+{
+  "targets": [
+    {
+      "id": "Target1",
+      "ned": [
+        4.0,
+        4.0,
+        0.0
+      ],
+      "label": "rubbish",
+      "simulated_conf": 0.62,
+      "lat": 47.641503976622815,
+      "lon": -122.14011176668473
+    },
+    {
+      "id": "Target2",
+      "ned": [
+        4.0,
+        12.0,
+        0.0
+      ],
+      "label": "rubbish",
+      "simulated_conf": 0.59,
+      "lat": 47.641503976622815,
+      "lon": -122.14000530005417
+    },
+    {
+      "id": "Target3",
+      "ned": [
+        10.0,
+        8.0,
+        0.0
+      ],
+      "label": "rubbish",
+      "simulated_conf": 0.65,
+      "lat": 47.64155794155703,
+      "lon": -122.14005853336944
+    },
+    {
+      "id": "Target4",
+      "ned": [
+        16.0,
+        4.0,
+        0.0
+      ],
+      "label": "rubbish",
+      "simulated_conf": 0.58,
+      "lat": 47.641611906491256,
+      "lon": -122.14011176668473
+    },
+    {
+      "id": "Target5",
+      "ned": [
+        16.0,
+        12.0,
+        0.0
+      ],
+      "label": "rubbish",
+      "simulated_conf": 0.61,
+      "lat": 47.641611906491256,
+      "lon": -122.14000530005417
+    }
+  ],
+  "drones": {
+    "drone1": {
+      "ned": [
+        10.0,
+        8.0,
+        -15.0
+      ],
+      "alt": 15.0,
+      "attitude": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lat": 47.64155794155703,
+      "lon": -122.14005853336944
+    },
+    "drone2": {
+      "ned": [
+        5.0,
+        3.0,
+        -12.0
+      ],
+      "alt": 12.0,
+      "attitude": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lat": 47.64151297077852,
+      "lon": -122.14012507501354
+    },
+    "drone3": {
+      "ned": [
+        5.0,
+        13.0,
+        -12.0
+      ],
+      "alt": 12.0,
+      "attitude": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lat": 47.64151297077852,
+      "lon": -122.13999199172535
+    },
+    "drone4": {
+      "ned": [
+        0.0,
+        8.0,
+        -10.0
+      ],
+      "alt": 10.0,
+      "attitude": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "lat": 47.641468,
+      "lon": -122.14005853336944
+    }
+  },
+  "lifecycle_table": [
+    {
+      "target": "Target1",
+      "yolo_drones": [
+        "drone4"
+      ],
+      "geolocated_drones": [
+        "drone4"
+      ],
+      "local_tracks": [
+        "drone4:drone4-g0001"
+      ],
+      "gfs_status": "GLOBAL_OBJECT",
+      "gfs_global_id": "G-c2130127",
+      "phoneos_status": "G-c2130127",
+      "root_cause": "CONFIRMED_GLOBAL"
+    },
+    {
+      "target": "Target2",
+      "yolo_drones": [
+        "drone4"
+      ],
+      "geolocated_drones": [
+        "drone4"
+      ],
+      "local_tracks": [
+        "drone4:drone4-g0002"
+      ],
+      "gfs_status": "GLOBAL_OBJECT",
+      "gfs_global_id": "G-56b04f87",
+      "phoneos_status": "G-56b04f87",
+      "root_cause": "CONFIRMED_GLOBAL"
+    },
+    {
+      "target": "Target3",
+      "yolo_drones": [
+        "drone2",
+        "drone3"
+      ],
+      "geolocated_drones": [
+        "drone2",
+        "drone3"
+      ],
+      "local_tracks": [
+        "drone2:drone2-g0001",
+        "drone3:drone3-g0001"
+      ],
+      "gfs_status": "GLOBAL_OBJECT",
+      "gfs_global_id": "G-b9db4dc1",
+      "phoneos_status": "G-b9db4dc1",
+      "root_cause": "CONFIRMED_GLOBAL"
+    },
+    {
+      "target": "Target4",
+      "yolo_drones": [
+        "drone1"
+      ],
+      "geolocated_drones": [
+        "drone1"
+      ],
+      "local_tracks": [
+        "drone1:drone1-g0002"
+      ],
+      "gfs_status": "GLOBAL_OBJECT",
+      "gfs_global_id": "G-31cbd591",
+      "phoneos_status": "G-31cbd591",
+      "root_cause": "CONFIRMED_GLOBAL"
+    },
+    {
+      "target": "Target5",
+      "yolo_drones": [
+        "drone1"
+      ],
+      "geolocated_drones": [
+        "drone1"
+      ],
+      "local_tracks": [
+        "drone1:drone1-g0001"
+      ],
+      "gfs_status": "GLOBAL_OBJECT",
+      "gfs_global_id": "G-9444d3ab",
+      "phoneos_status": "G-9444d3ab",
+      "root_cause": "CONFIRMED_GLOBAL"
+    }
+  ],
+  "counts": {
+    "spawned_targets": 5,
+    "yolo_detected_targets": 5,
+    "geolocated_targets": 5,
+    "locally_tracked_targets": 5,
+    "gfs_global_targets": 5,
+    "phoneos_markers": 5
+  }
+}

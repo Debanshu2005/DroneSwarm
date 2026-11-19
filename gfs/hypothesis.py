@@ -9,13 +9,14 @@ import math
 import time
 import uuid
 import hashlib
-from typing import List, Dict, Set, Tuple, Optional
+from typing import List, Dict, Set, Tuple, Optional, overload, Literal
 import numpy as np
 
 from gfs.models import (
     LocalTracklet,
     GlobalObject,
     SourceEstimate,
+    LifecycleState,
     enu_to_wgs84
 )
 from gfs.config import GFSConfig
@@ -65,6 +66,33 @@ def tracklets_are_compatible(
         return False
 
     return True
+
+
+@overload
+def bounded_bron_kerbosch(
+    adj: Dict[str, Set[str]],
+    max_cliques: int = ...,
+    time_limit_ms: float = ...,
+    return_reason: Literal[False] = ...,
+) -> Tuple[List[Set[str]], bool]: ...
+
+
+@overload
+def bounded_bron_kerbosch(
+    adj: Dict[str, Set[str]],
+    max_cliques: int = ...,
+    time_limit_ms: float = ...,
+    return_reason: Literal[True] = ...,
+) -> Tuple[List[Set[str]], bool, str]: ...
+
+
+@overload
+def bounded_bron_kerbosch(
+    adj: Dict[str, Set[str]],
+    max_cliques: int = ...,
+    time_limit_ms: float = ...,
+    return_reason: bool = ...,
+) -> Tuple[List[Set[str]], bool] | Tuple[List[Set[str]], bool, str]: ...
 
 
 def bounded_bron_kerbosch(
@@ -242,12 +270,54 @@ def form_new_global_objects(
 
         # Evaluate candidate cliques independently without favoring larger cliques
         for clean_members in clean_hypotheses:
+            candidate = clean_members[0]
+            valid_enu = math.isfinite(candidate.east_m) and math.isfinite(candidate.north_m) and math.isfinite(candidate.up_m)
+            if candidate.observations:
+                valid_gps = (
+                    math.isfinite(candidate.lat) and math.isfinite(candidate.lon)
+                    and -90.0 <= candidate.lat <= 90.0 and -180.0 <= candidate.lon <= 180.0
+                    and not (abs(candidate.lat) < 1e-6 and abs(candidate.lon) < 1e-6)
+                )
+            else:
+                valid_gps = (
+                    math.isfinite(candidate.lat) and math.isfinite(candidate.lon)
+                    and -90.0 <= candidate.lat <= 90.0 and -180.0 <= candidate.lon <= 180.0
+                )
+            valid_coords = valid_enu and valid_gps
+            valid_label = bool(candidate.label and isinstance(candidate.label, str) and len(candidate.label.strip()) > 0)
+
+            if not valid_coords or not valid_label:
+                for t in clean_members:
+                    low_confidence_deferred.append(t)
+                continue
+
             distinct_drones = {t.drone_id for t in clean_members}
             max_conf = max(t.confidence for t in clean_members)
 
             # Hypothesis acceptance rule:
-            # Multi-drone confirmation (>= 2 drones) OR single-drone high confidence (>= 0.70)
-            if len(distinct_drones) >= 2 or max_conf >= 0.70:
+            # Multi-drone confirmation (>= 2 drones) OR single-drone high confidence (>= 0.70) -> CONFIRMED
+            # Single-drone valid candidate (0.55 <= conf < 0.70) -> PROVISIONAL
+            is_confirmed = (len(distinct_drones) >= 2 or max_conf >= 0.70)
+            is_provisional = False
+            provisional_reason = None
+
+            if is_confirmed:
+                lifecycle_state = LifecycleState.CONFIRMED.value
+                confirmation_method = "multi_drone_hypothesis" if len(distinct_drones) >= 2 else "single_drone_high_confidence"
+                expires_at_ms = None
+            elif max_conf >= 0.55:
+                is_provisional = True
+                lifecycle_state = LifecycleState.PROVISIONAL.value
+                confirmation_method = None
+                provisional_reason = "SINGLE_DRONE_LOW_CONFIDENCE"
+                ttl_ms = getattr(config, "provisional_object_ttl_ms", 60000)
+                expires_at_ms = max(t.last_seen_ms for t in clean_members) + ttl_ms
+            else:
+                for t in clean_members:
+                    low_confidence_deferred.append(t)
+                continue
+
+            if is_confirmed or is_provisional:
                 # Form new global object
                 source_estimates: Dict[str, SourceEstimate] = {}
                 for t in clean_members:
@@ -274,7 +344,7 @@ def form_new_global_objects(
                 )
 
                 # Compute geodetic coordinates
-                up_m = clean_members[0].up_m
+                up_m = float(np.mean([t.up_m for t in clean_members]))
                 lat, lon, alt = enu_to_wgs84(f_east, f_north, up_m, ref_lat, ref_lon, ref_alt)
 
                 # Combined confidence
@@ -288,7 +358,7 @@ def form_new_global_objects(
                 max_seen = max(t.last_seen_ms for t in clean_members)
 
                 # Deterministic synthetic global ID based on sorted member IDs
-                member_sig = "_".join(sorted(f"{t.drone_id}:{t.local_track_id}" for t in clean_members))
+                member_sig = "_".join(sorted(f"{t.drone_id}:{t.drone_session_id}:{t.session_generation}:{t.local_track_id}" for t in clean_members))
                 stable_suffix = hashlib.sha256(member_sig.encode('utf-8')).hexdigest()[:8]
 
                 new_glob = GlobalObject(
@@ -310,11 +380,15 @@ def form_new_global_objects(
                     source_count=len(source_estimates),
                     source_estimates=source_estimates,
                     version=1,
-                    fusion_method=diag["method_applied"]
+                    fusion_method=diag["method_applied"],
+                    lifecycle_state=lifecycle_state,
+                    confirmation_method=confirmation_method,
+                    provisional_reason=provisional_reason,
+                    expires_at_ms=expires_at_ms
                 )
                 new_globals.append(new_glob)
             else:
-                # Single-drone low-confidence candidate: defer
+                # Single-drone candidate failing provisional criteria: defer
                 for t in clean_members:
                     low_confidence_deferred.append(t)
 

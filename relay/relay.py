@@ -408,7 +408,8 @@ class UdpWebsocketRelay:
                 cur = con.cursor()
                 cur.execute("""
                     SELECT global_id, label, status, lat, lon, alt, confidence,
-                           observation_count, source_count, version, first_seen_ms, last_seen_ms
+                           observation_count, source_count, version, first_seen_ms, last_seen_ms,
+                           source_estimates_json, lifecycle_state, confirmation_method, provisional_reason
                     FROM global_objects
                 """)
                 for row in cur.fetchall():
@@ -416,18 +417,34 @@ class UdpWebsocketRelay:
                     if ver > snapshot_revision:
                         snapshot_revision = ver
 
+                    col_keys = row.keys()
+                    src_drones = []
+                    if "source_estimates_json" in col_keys and row["source_estimates_json"]:
+                        try:
+                            src_drones = list(json.loads(row["source_estimates_json"]).keys())
+                        except Exception:
+                            pass
+
+                    l_state = row["lifecycle_state"] if "lifecycle_state" in col_keys and row["lifecycle_state"] else ("CONFIRMED" if row["status"] == "ACTIVE" else "RETIRED")
+                    conf_method = row["confirmation_method"] if "confirmation_method" in col_keys else None
+                    prov_reason = row["provisional_reason"] if "provisional_reason" in col_keys else None
+
                     if row["status"] == "ACTIVE":
                         objects.append({
                             "id": row["global_id"],
                             "global_id": row["global_id"],
                             "label": row["label"],
                             "status": row["status"],
+                            "lifecycle_state": l_state,
+                            "confirmation_method": conf_method,
+                            "provisional_reason": prov_reason,
                             "lat": row["lat"],
                             "lon": row["lon"],
                             "alt": row["alt"],
                             "confidence": row["confidence"],
                             "observation_count": row["observation_count"],
                             "source_count": row["source_count"],
+                            "source_drones": src_drones,
                             "version": ver,
                             "first_seen_ms": row["first_seen_ms"],
                             "last_seen_ms": row["last_seen_ms"],
