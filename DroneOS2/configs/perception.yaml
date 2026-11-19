@@ -16,6 +16,12 @@ max_range_m: 120.0
 ground_elevation_m: 0.0
 merge_radius_m: 2.5
 peer_exclusion_radius_m: 4.0
+peer_position_max_age_s: 5.0
+deferred_buffer_window_s: 3.0
+unknown_peer_deferral_max_s: 3.0
+min_temporal_separation_s: 2.0
+min_drone_displacement_m: 1.5
+gps_sigma_m: 0.6
 min_hits: 2
 update_interval_s: 10.0
 max_tracks: 2000

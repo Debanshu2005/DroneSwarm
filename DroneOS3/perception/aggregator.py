@@ -79,6 +79,7 @@ class TrackAggregator:
         unconfirmed_ttl_s: float = 30.0,
         min_temporal_separation_s: float = 2.0,
         min_drone_displacement_m: float = 1.5,
+        gps_sigma_m: float = 0.6,
     ):
         self.drone_id = drone_id
         self.merge_radius_m = merge_radius_m
@@ -88,6 +89,7 @@ class TrackAggregator:
         self.unconfirmed_ttl_s = unconfirmed_ttl_s
         self.min_temporal_separation_s = min_temporal_separation_s
         self.min_drone_displacement_m = min_drone_displacement_m
+        self.gps_sigma_m = gps_sigma_m
 
         self._seq = 0
         self.tracks: Dict[str, AggregatedTrack] = {}
@@ -129,7 +131,8 @@ class TrackAggregator:
                 track = self.tracks[best_track_id]
 
                 # Check observation distinctness for temporal confirmation (Requirement 8):
-                # Requires either >= min_temporal_separation_s OR >= min_drone_displacement_m
+                # Requires either >= min_temporal_separation_s OR >= max(min_drone_displacement_m, 3 * gps_sigma_m)
+                # to ensure robustness against civil GPS noise on stationary hovering drones.
                 if not track.confirmed:
                     dt = now - track.last_distinct_hit_time
                     disp_m = 0.0
@@ -142,7 +145,8 @@ class TrackAggregator:
                         d_dn, d_de = lat_lon_to_meters(det.drone_lat, det.drone_lon, track.last_distinct_drone_lat, track.last_distinct_drone_lon)
                         disp_m = math.hypot(d_dn, d_de)
 
-                    if dt >= self.min_temporal_separation_s or disp_m >= self.min_drone_displacement_m:
+                    required_disp = max(self.min_drone_displacement_m, 3.0 * self.gps_sigma_m)
+                    if dt >= self.min_temporal_separation_s or disp_m >= required_disp:
                         track.hits += 1
                         track.distinct_hits += 1
                         track.last_distinct_hit_time = now

@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from DroneOS.perception.aggregator import GeoreferencedDetection, TrackAggregator
 from DroneOS.perception.detector import GarbageDetector
 from DroneOS.perception.frame_sources import FrameSource
-from DroneOS.perception.geolocate import pixel_to_lat_lon, lat_lon_to_meters, pixel_to_ray_ned, compute_ray_to_point_cpa
+from DroneOS.perception.geolocate import pixel_to_lat_lon, lat_lon_to_meters, meters_to_lat_lon, pixel_to_ray_ned, compute_ray_to_point_cpa
 from DroneOS.shared.protocol.messages import DetectionItem, DetectionMessage
 from DroneOS.shared.utils.logger import setup_logger
 
@@ -59,6 +59,7 @@ class PerceptionPipeline:
             max_tracks=getattr(config, "max_tracks", 2000),
             min_temporal_separation_s=getattr(config, "min_temporal_separation_s", 2.0),
             min_drone_displacement_m=getattr(config, "min_drone_displacement_m", 1.5),
+            gps_sigma_m=getattr(config, "gps_sigma_m", 1.0),
         )
 
         self._running = False
@@ -371,6 +372,7 @@ class PerceptionPipeline:
                 yaw_deg=yaw,
             )
 
+            obs_time = float(getattr(frame, "timestamp", now_curr) or now_curr)
             is_peer, decision, exclusion_reason, matched_peer_id, matched_dist, registry_contents, peers_eval = (
                 self._evaluate_peer_exclusion(
                     glat=glat,
@@ -388,6 +390,7 @@ class PerceptionPipeline:
                     alt=alt,
                     now_curr=now_curr,
                     ray_ned=ray_ned,
+                    obs_time=obs_time,
                 )
             )
 
@@ -434,6 +437,7 @@ class PerceptionPipeline:
                     "drone_lat": drone_lat,
                     "drone_lon": drone_lon,
                     "alt": alt,
+                    "obs_time": obs_time,
                     "deadline": now_curr + buf_window,
                 })
                 continue
@@ -522,12 +526,18 @@ class PerceptionPipeline:
         alt: float,
         now_curr: float,
         ray_ned: Optional[Tuple[float, float, float]] = None,
+        obs_time: Optional[float] = None,
+        allow_unknown_deferral: bool = True,
     ) -> Tuple[bool, str, str, Optional[str], Optional[float], List[str], List[Dict[str, Any]]]:
         """
         Evaluate candidate ground detection against active peer drones.
         Enforces configurable 3D exclusion volume, ignores inactive/dead peers,
-        and uses separate peer_position_max_age_s for staleness gating.
+        dead-reckons moving peers to observation timestamp obs_time, and treats
+        unpositioned peers as unknown with bounded deferral.
         """
+        if obs_time is None:
+            obs_time = now_curr
+
         cam_cfg = self.config.camera
         if ray_ned is None:
             ray_ned = pixel_to_ray_ned(
@@ -556,7 +566,8 @@ class PerceptionPipeline:
         else:
             exclusion_radius_3d = float(self.peer_exclusion_radius_m)
 
-        unpositioned_or_stale_peers: List[str] = []
+        unpositioned_peers: List[str] = []
+        stale_peers: List[str] = []
 
         if self.swarm_manager and hasattr(self.swarm_manager, "registry"):
             registry_contents = list(self.swarm_manager.registry.peers.keys())
@@ -576,10 +587,25 @@ class PerceptionPipeline:
                 has_pos = (p_lat is not None and p_lon is not None and isinstance(p_lat, (int, float)) and isinstance(p_lon, (int, float)))
                 is_stale = (pos_age is not None and pos_age > max_age)
 
-                # Requirement 7: Only defer when an *active* peer's position is missing/stale.
-                # Inactive/dead peers never trigger deferral.
-                if p_active and (not has_pos or is_stale):
-                    unpositioned_or_stale_peers.append(p_id)
+                # Dead-reckon moving peer back/forward to the observation timestamp
+                if has_pos and last_pos_time is not None and isinstance(last_pos_time, (int, float)):
+                    dt_obs = obs_time - float(last_pos_time)
+                    vx = float(getattr(peer, "vx", 0.0) or getattr(peer, "vel_n", 0.0) or 0.0)
+                    vy = float(getattr(peer, "vy", 0.0) or getattr(peer, "vel_e", 0.0) or 0.0)
+                    vz = float(getattr(peer, "vz", 0.0) or getattr(peer, "vel_d", 0.0) or 0.0)
+                    if abs(dt_obs) <= max_age and (vx != 0.0 or vy != 0.0 or vz != 0.0):
+                        dn = vx * dt_obs
+                        de = vy * dt_obs
+                        p_lat, p_lon = meters_to_lat_lon(dn, de, p_lat, p_lon)
+                        p_alt = p_alt - (vz * dt_obs)
+
+                # Distinguish active unpositioned peers from stale-telemetry peers
+                if p_active:
+                    if not has_pos:
+                        if allow_unknown_deferral:
+                            unpositioned_peers.append(p_id)
+                    elif is_stale:
+                        stale_peers.append(p_id)
 
                 # Inactive peers without fresh valid positions cannot match and are skipped
                 if not p_active and (not has_pos or is_stale):
@@ -640,9 +666,10 @@ class PerceptionPipeline:
                                 break
 
             if not is_peer:
-                if unpositioned_or_stale_peers:
+                if stale_peers or unpositioned_peers:
                     decision = "DEFERRED"
-                    exclusion_reason = f"DEFERRED_UNCERTAIN_PEER_TELEMETRY (stale_or_missing={unpositioned_or_stale_peers})"
+                    pending = stale_peers + unpositioned_peers
+                    exclusion_reason = f"DEFERRED_UNCERTAIN_PEER_TELEMETRY (stale_or_missing={pending})"
                 elif not registry_contents:
                     exclusion_reason = "ACCEPTED_REGISTRY_EMPTY"
                     decision = "ACCEPTED"
@@ -657,19 +684,17 @@ class PerceptionPipeline:
 
     def _process_deferred_buffer(self, now_curr: float) -> List[GeoreferencedDetection]:
         """
-        Re-evaluates buffered deferred detections against newly arrived peer positions.
-        Returns newly confirmed detections whose peer uncertainty cleared.
+        Re-evaluates buffered deferred detections against newly arrived peer positions
+        dead-reckoned to the detection's observation timestamp.
+        Treats unpositioned active peers as unknown with bounded deferral instead
+        of dropping or permanently blocking genuine detections.
         """
         accepted: List[GeoreferencedDetection] = []
         still_buffered: List[Dict[str, Any]] = []
 
         for item in self._deferred_buffer:
-            if now_curr > item["deadline"]:
-                logger.debug(
-                    "Deferred detection at (%.6f, %.6f) buffer window expired without peer telemetry; dropping.",
-                    item["glat"], item["glon"],
-                )
-                continue
+            obs_time = float(item.get("obs_time", now_curr))
+            is_deadline_expired = now_curr > item["deadline"]
 
             is_peer, decision, reason, _, _, _, _ = self._evaluate_peer_exclusion(
                 glat=item["glat"],
@@ -686,14 +711,18 @@ class PerceptionPipeline:
                 drone_lon=item["drone_lon"],
                 alt=item["alt"],
                 now_curr=now_curr,
+                obs_time=obs_time,
+                allow_unknown_deferral=(not is_deadline_expired),
             )
 
             if is_peer:
                 logger.info("Deferred detection matches peer %s upon telemetry update; excluding.", reason)
-            elif decision == "ACCEPTED":
+            elif decision == "ACCEPTED" or is_deadline_expired:
                 logger.info(
-                    "Deferred detection at (%.6f, %.6f) confirmed after peer telemetry update.",
-                    item["glat"], item["glon"],
+                    "Deferred detection at (%.6f, %.6f) confirmed %s.",
+                    item["glat"],
+                    item["glon"],
+                    "after peer telemetry update" if decision == "ACCEPTED" else "after bounded deferral window elapsed",
                 )
                 accepted.append(
                     GeoreferencedDetection(

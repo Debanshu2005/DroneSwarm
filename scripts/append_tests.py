@@ -99,5 +99,8 @@ def test_evaluate_threats_vertical_separation_ignored():
         assert state == "NORMAL"
 """
 
-with open(r"d:\CityGrid\my-project\PhoneOS_Swarm\DroneOS\tests\test_collision_avoidance.py", "a") as f:
+from pathlib import Path
+
+target_file = Path(__file__).resolve().parent.parent / "DroneOS" / "tests" / "test_collision_avoidance.py"
+with open(target_file, "a", encoding="utf-8") as f:
     f.write("\n" + new_tests)

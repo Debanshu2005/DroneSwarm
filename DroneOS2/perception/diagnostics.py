@@ -7,7 +7,9 @@ and generates summary reports.
 from __future__ import annotations
 import json
 import logging
+import os
 from pathlib import Path
+import tempfile
 import threading
 import time
 from typing import Any, Dict, List, Optional
@@ -25,7 +27,14 @@ class DiagnosticRecorder:
     _lock = threading.Lock()
 
     def __init__(self, output_dir: Optional[Path] = None):
-        self.output_dir = Path(output_dir or DEFAULT_OUTPUT_DIR)
+        if output_dir is not None:
+            self.output_dir = Path(output_dir)
+        elif os.environ.get("PERCEPTION_DIAGNOSTICS_DIR"):
+            self.output_dir = Path(os.environ["PERCEPTION_DIAGNOSTICS_DIR"])
+        elif "PYTEST_CURRENT_TEST" in os.environ:
+            self.output_dir = Path(tempfile.gettempdir()) / "peer_exclusion_diagnostics"
+        else:
+            self.output_dir = DEFAULT_OUTPUT_DIR
         self.jsonl_path = self.output_dir / "events.jsonl"
         self._file_lock = threading.Lock()
         self.output_dir.mkdir(parents=True, exist_ok=True)

@@ -86,6 +86,8 @@ ml/reports/scale_025_crop.jpg
 ml/reports/test_*.jpg
 ml/reports/test_*.png
 !ml/reports/official_test_confusion_matrix.png
+ml/reports/**/events.jsonl
+ml/reports/**/*.jsonl
 
 # Temporary root scratch outputs
 /*.txt

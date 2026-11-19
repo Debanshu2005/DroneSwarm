@@ -2,8 +2,11 @@
   "pytorch_model": {
     "path": "models/garbage.pt",
     "sha256": "5e6fe97ead40c8d24edcdb5517b210bf8415ec23719beb8a575fdab3a4028d20",
-    "parameters": 2389735,
-    "gflops": 5.4
+    "layers": 147,
+    "unfused_layers": 261,
+    "parameters": 2524102,
+    "gflops": 5.3,
+    "architecture_note": "YOLO26n architecture with C3k2 and C2PSA blocks. 147 fused layers (2,524,102 params, 5.3 GFLOPs) after fusion for export/inference, and 261 unfused layers during checkpoint training. Reconciles previous 121 layers figure which referenced an earlier YOLOv8 baseline."
   },
   "onnx_model": {
     "path": "models/garbage.onnx",
@@ -33,21 +36,21 @@
     }
   },
   "numerical_validation": {
-    "max_absolute_difference": 0.00146484375,
-    "mean_absolute_difference": 2.5244113203370944e-05,
-    "max_coord_difference_px": 0.00146484375,
-    "max_score_difference": 1.6391277313232422e-07,
+    "max_absolute_difference": 0.001220703125,
+    "mean_absolute_difference": 2.2717695173923858e-05,
+    "max_coord_difference_px": 0.001220703125,
+    "max_score_difference": 1.278297077078605e-07,
     "cosine_similarity": 1.0,
     "tolerance_threshold": 0.002,
     "is_equivalent": true,
-    "justification": "FP32 accumulation differences across 147 layers yield max absolute difference of 1.53e-3 (< 2.0e-3 tolerance), corresponding to < 0.002 px bounding box offset and < 0.002 confidence score delta, with cosine similarity 1.0. Decoded detections are identical within sub-pixel bounds."
+    "justification": "FP32 roundoff accumulation across 147 fused layers on real images yields max absolute difference of 1.2207e-03 (within justified 2.0e-03 tolerance). Decoded candidate box coordinates differ by at most 1.2207e-03 px (< 0.002 px, sub-pixel identical) and class scores differ by at most 1.2783e-07 (< 1e-6), achieving cosine similarity 1.000000."
   },
   "cpu_benchmark": {
-    "device": "CPUExecutionProvider (4 threads)",
+    "device": "AMD Ryzen 5 5600H with Radeon Graphics (ONNX Runtime CPUExecutionProvider, 4 threads)",
     "iterations": 30,
-    "mean_latency_ms": 40.75,
-    "std_latency_ms": 3.65,
-    "p95_latency_ms": 46.61,
-    "fps": 24.5
+    "mean_latency_ms": 43.71,
+    "std_latency_ms": 2.44,
+    "p95_latency_ms": 47.92,
+    "fps": 22.9
   }
 }

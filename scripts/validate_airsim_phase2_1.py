@@ -100,6 +100,8 @@ async def run_phase2_1_live_validation(
     relay_udp_port: int = 14650,
     relay_ws_port: int = 8088,
     gcs_port: int = 5173,
+    ue_bin_path: Optional[str] = None,
+    uproject_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Executes the full DroneSwarm Phase 2.1 Live AirSim & Browser Validation Suite."""
     print("=" * 80)
@@ -148,11 +150,14 @@ async def run_phase2_1_live_validation(
     port_open = (sock_test.connect_ex((host, port)) == 0)
     sock_test.close()
 
-    if not port_open:
-        ue_bin = Path(r"D:\DEB\UE_4.27\Engine\Binaries\Win64\UE4Editor.exe")
-        uproject = Path(r"D:\AirSim\Unreal\Environments\Blocks 4.27 - 2\Blocks.uproject")
+    ue_bin_env = os.environ.get("UE4_EDITOR_PATH")
+    uproject_env = os.environ.get("AIRSIM_UPROJECT_PATH")
+    ue_bin = Path(ue_bin_path or ue_bin_env) if (ue_bin_path or ue_bin_env) else None
+    uproject = Path(uproject_path or uproject_env) if (uproject_path or uproject_env) else None
+
+    if not port_open and ue_bin and uproject:
         if ue_bin.exists() and uproject.exists():
-            print(f"  -> AirSim port {port} offline. Auto-launching UE4 Blocks standalone...")
+            print(f"  -> AirSim port {port} offline. Auto-launching UE4 standalone from {ue_bin}...")
             subprocess.Popen(
                 [str(ue_bin), str(uproject), "-game", "-windowed", "-ResX=1280", "-ResY=720"],
                 creationflags=(subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP) if os.name == "nt" else 0,
@@ -878,6 +883,8 @@ if __name__ == "__main__":
     parser.add_argument("--relay-udp", type=int, default=14650, help="Relay UDP port")
     parser.add_argument("--relay-ws", type=int, default=8088, help="Relay WS port")
     parser.add_argument("--gcs-port", type=int, default=5173, help="GCS Vite dev port")
+    parser.add_argument("--ue-bin", type=str, default=None, help="Path to UE4Editor.exe executable")
+    parser.add_argument("--uproject", type=str, default=None, help="Path to .uproject environment file")
     args = parser.parse_args()
 
     asyncio.run(run_phase2_1_live_validation(
@@ -888,4 +895,6 @@ if __name__ == "__main__":
         relay_udp_port=args.relay_udp,
         relay_ws_port=args.relay_ws,
         gcs_port=args.gcs_port,
+        ue_bin_path=args.ue_bin,
+        uproject_path=args.uproject,
     ))

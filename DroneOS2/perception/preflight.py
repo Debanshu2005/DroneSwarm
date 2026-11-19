@@ -45,12 +45,12 @@ def run_perception_preflight(
 
     missing_deps = []
     try:
-        __import__("numpy")
+        import numpy
     except ImportError:
         missing_deps.append("numpy")
 
     try:
-        __import__("cv2")
+        import cv2
     except ImportError:
         missing_deps.append("opencv-python-headless")
 
@@ -62,14 +62,14 @@ def run_perception_preflight(
     is_onnx = weights_path.suffix.lower() == ".onnx"
     if is_onnx:
         try:
-            __import__("onnxruntime")
-        except ImportError:
+            import onnxruntime
+        except (ImportError, ModuleNotFoundError):
             missing_deps.append("onnxruntime")
-
-    try:
-        __import__("ultralytics")
-    except ImportError:
-        missing_deps.append("ultralytics")
+    else:
+        try:
+            import ultralytics
+        except (ImportError, ModuleNotFoundError):
+            missing_deps.append("ultralytics")
 
     if missing_deps:
         fix = f"pip install {' '.join(missing_deps)}"

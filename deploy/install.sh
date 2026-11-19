@@ -57,7 +57,10 @@ sudo usermod -a -G dialout,video "$CURRENT_USER" || true
 
 # Install dependencies if Python virtual environment exists
 echo "Installing and updating Python dependencies..."
-if [ -f "$WORK_DIR/requirements.txt" ]; then
+if [ "$EDGE_MODE" = "true" ] || [ "$2" = "--edge" ] || [ "$2" = "edge" ]; then
+    echo "Installing edge requirements from $WORK_DIR/requirements-edge.txt (ONNX runtime without torch)..."
+    "$VENV_PYTHON" -m pip install --upgrade -r "$WORK_DIR/requirements-edge.txt" || echo "Warning: pip install encountered non-fatal issues."
+elif [ -f "$WORK_DIR/requirements.txt" ]; then
     echo "Installing requirements from $WORK_DIR/requirements.txt..."
     "$VENV_PYTHON" -m pip install --upgrade -r "$WORK_DIR/requirements.txt" || echo "Warning: pip install encountered non-fatal issues."
 elif [ -f "$WORK_DIR/DroneOS/requirements.txt" ]; then

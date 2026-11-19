@@ -946,6 +946,7 @@ async def execute_genuine_airsim_validation(
     target_altitude_agl: float = 10.0,
     relay_udp_port: int = 14650,
     relay_ws_port: int = 8088,
+    write_report: bool = True,
 ) -> Dict[str, Any]:
     """
     Executes the 11-stage genuine end-to-end AirSim validation pipeline.
@@ -1454,12 +1455,15 @@ async def execute_genuine_airsim_validation(
             except asyncio.CancelledError:
                 pass
 
-    _write_reports(report)
+    if write_report and not os.environ.get("PYTEST_CURRENT_TEST"):
+        _write_reports(report)
     return report
 
 
 def _write_reports(report: Dict[str, Any]) -> None:
     """Writes machine-readable validation JSON report."""
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return
     out_path = REPO_ROOT / "ml" / "reports" / "live_airsim_single_drone_validation.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
