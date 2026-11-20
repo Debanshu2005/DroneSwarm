@@ -70,16 +70,11 @@ class FakeAirSimConcurrency:
             self._state = StrictState()
             self.getMultirotorState = MagicMock(return_value=self._state)
 
-_saved_airsim = sys.modules.get('airsim')
-sys.modules['airsim'] = FakeAirSimConcurrency
-
-@pytest.fixture(autouse=True, scope="module")
-def _cleanup_airsim_module():
-    yield
-    if _saved_airsim is not None:
-        sys.modules['airsim'] = _saved_airsim
-    else:
-        sys.modules.pop('airsim', None)
+@pytest.fixture(autouse=True)
+def _cleanup_airsim_module(monkeypatch):
+    monkeypatch.setitem(sys.modules, 'airsim', FakeAirSimConcurrency)
+    import DroneOS.adapters.airsim_adapter
+    monkeypatch.setattr(DroneOS.adapters.airsim_adapter, "airsim", FakeAirSimConcurrency)
 
 from DroneOS.adapters.airsim_adapter import AirSimFlightController
 from DroneOS.shared.config.models import FlightConfig

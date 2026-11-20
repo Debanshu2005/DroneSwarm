@@ -296,8 +296,9 @@ def test_real_registry_and_telemetry_handler_dead_reckoning_changes_exclusion():
         )
     )
 
-    # Process through real telemetry handler
-    swarm.sync.handle_telemetry(telem_msg)
+    # Process through real telemetry handler at local receipt time 100.0
+    with patch("time.time", return_value=100.0):
+        swarm.sync.handle_telemetry(telem_msg)
 
     # Verify peer stored velocity_x on registry peer
     peer = swarm.registry.get_peer("drone2")
@@ -453,3 +454,75 @@ def test_clock_skew_sender_ahead_and_behind():
     with patch("time.time", return_value=future_time):
         heartbeat_mgr.purge_stale_peers()
         assert registry.get_peer("drone3") is None, "Peer 10s ahead MUST age out when local time exceeds timeout"
+
+    # 3. Moving peer at 5 m/s: dead-reckoned position with +10s and -10s sender skew
+    # must equal the one from a zero-skew run.
+    reg_skew = SwarmRegistry(my_id="drone1")
+    sync_skew = PeerSynchronization(registry=reg_skew, my_id="drone1")
+    base_lat, base_lon = 47.641468, -122.140165
+    vx = 5.0  # 5 m/s North
+
+    with patch("time.time", return_value=t_now):
+        # Baseline: zero skew
+        sync_skew.handle_telemetry(TelemetryMessage(
+            sender_id="peer_zero",
+            timestamp=t_now,
+            telemetry=TelemetryData(
+                flight_mode="OFFBOARD", armed_state="ARMED", gps_valid=True,
+                latitude=base_lat, longitude=base_lon, altitude=10.0,
+                velocity_x=vx, velocity_y=0.0, velocity_z=0.0,
+                timestamp=t_now,
+            )
+        ))
+        # Sender 10s ahead (+10s skew)
+        sync_skew.handle_telemetry(TelemetryMessage(
+            sender_id="peer_ahead",
+            timestamp=t_now + 10.0,
+            telemetry=TelemetryData(
+                flight_mode="OFFBOARD", armed_state="ARMED", gps_valid=True,
+                latitude=base_lat, longitude=base_lon, altitude=10.0,
+                velocity_x=vx, velocity_y=0.0, velocity_z=0.0,
+                timestamp=t_now + 10.0,
+            )
+        ))
+        # Sender 10s behind (-10s skew)
+        sync_skew.handle_telemetry(TelemetryMessage(
+            sender_id="peer_behind",
+            timestamp=t_now - 10.0,
+            telemetry=TelemetryData(
+                flight_mode="OFFBOARD", armed_state="ARMED", gps_valid=True,
+                latitude=base_lat, longitude=base_lon, altitude=10.0,
+                velocity_x=vx, velocity_y=0.0, velocity_z=0.0,
+                timestamp=t_now - 10.0,
+            )
+        ))
+
+    swarm_mgr_skew = MagicMock()
+    swarm_mgr_skew.registry = reg_skew
+    pipe_skew = PerceptionPipeline(
+        drone_id="drone1",
+        frame_source=AsyncMock(),
+        detector=AsyncMock(),
+        flight_controller=AsyncMock(),
+        network_adapter=AsyncMock(),
+        swarm_manager=swarm_mgr_skew,
+        config=PerceptionConfig(),
+    )
+
+    eval_time = t_now + 1.0  # 1.0s elapsed on local clock
+    _, _, _, _, _, _, peers_eval = pipe_skew._evaluate_peer_exclusion(
+        glat=base_lat, glon=base_lon, agl=10.0,
+        u=640, v=360, w=1280, h=720, roll=0, pitch=0, yaw=0,
+        drone_lat=base_lat, drone_lon=base_lon, alt=20.0,
+        now_curr=eval_time, obs_time=eval_time,
+    )
+    eval_by_id = {p["peer_id"]: p for p in peers_eval}
+
+    pos_zero = (eval_by_id["peer_zero"]["lat"], eval_by_id["peer_zero"]["lon"])
+    pos_ahead = (eval_by_id["peer_ahead"]["lat"], eval_by_id["peer_ahead"]["lon"])
+    pos_behind = (eval_by_id["peer_behind"]["lat"], eval_by_id["peer_behind"]["lon"])
+
+    assert pos_ahead[0] == pytest.approx(pos_zero[0], abs=1e-9), "Dead-reckoned latitude with +10s skew must equal zero-skew"
+    assert pos_ahead[1] == pytest.approx(pos_zero[1], abs=1e-9), "Dead-reckoned longitude with +10s skew must equal zero-skew"
+    assert pos_behind[0] == pytest.approx(pos_zero[0], abs=1e-9), "Dead-reckoned latitude with -10s skew must equal zero-skew"
+    assert pos_behind[1] == pytest.approx(pos_zero[1], abs=1e-9), "Dead-reckoned longitude with -10s skew must equal zero-skew"

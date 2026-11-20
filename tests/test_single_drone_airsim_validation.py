@@ -1026,7 +1026,9 @@ def test_verify_target_visibility_distinguishes_texture_from_floor():
 @pytest.mark.asyncio
 async def test_setup_scene_target_unique_naming():
     """Verify that setup_scene_target generates distinct unique actor names per run when unique_name=True."""
-    pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
+    airsim_mod = pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
+    if not hasattr(airsim_mod, "Pose"):
+        pytest.skip("airsim is a mock/fake module lacking Pose")
     from scripts.validate_single_drone_airsim import setup_scene_target
 
     class MockAirSimClient:
@@ -1067,7 +1069,9 @@ async def test_setup_scene_target_unique_naming():
 @pytest.mark.asyncio
 async def test_setup_scene_target_idempotent_reuse():
     """Verify that repeated setup with identical actor name reuses existing actor without re-spawning."""
-    pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
+    airsim_mod = pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
+    if not hasattr(airsim_mod, "Pose"):
+        pytest.skip("airsim is a mock/fake module lacking Pose")
     from scripts.validate_single_drone_airsim import setup_scene_target
 
     class MockAirSimClient:
@@ -1111,7 +1115,9 @@ async def test_setup_scene_target_idempotent_reuse():
 @pytest.mark.asyncio
 async def test_setup_scene_target_stale_cleanup_and_safe_spawning():
     """Verify stale objects from prior runs are cleaned up while new unique object is cleanly spawned."""
-    pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
+    airsim_mod = pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
+    if not hasattr(airsim_mod, "Pose"):
+        pytest.skip("airsim is a mock/fake module lacking Pose")
     from scripts.validate_single_drone_airsim import setup_scene_target
 
     class MockAirSimClient:
@@ -1153,7 +1159,9 @@ async def test_setup_scene_target_stale_cleanup_and_safe_spawning():
 @pytest.mark.asyncio
 async def test_setup_scene_target_spawn_failure_handling():
     """Verify failed simSpawnObject is handled gracefully without crashing and populates diagnostic errors."""
-    pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
+    airsim_mod = pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
+    if not hasattr(airsim_mod, "Pose"):
+        pytest.skip("airsim is a mock/fake module lacking Pose")
     from scripts.validate_single_drone_airsim import setup_scene_target
 
     class FailingClient:

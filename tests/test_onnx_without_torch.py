@@ -66,6 +66,7 @@ def create_synthetic_e2e_onnx(save_path: Path):
 
 def test_preflight_onnx_does_not_require_ultralytics(tmp_path):
     """When using .onnx weights, preflight must succeed even if ultralytics is absent."""
+    pytest.importorskip("onnxruntime", reason="onnxruntime not installed")
     weights_path = tmp_path / "model.onnx"
     weights_path.write_bytes(b"dummy")
 

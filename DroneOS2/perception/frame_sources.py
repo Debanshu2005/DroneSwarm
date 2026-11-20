@@ -84,12 +84,15 @@ class AirSimFrameSource(FrameSource):
             return None
 
         try:
-            import airsim
+            try:
+                import airsim
+            except (ImportError, ModuleNotFoundError):
+                airsim = None
             import cv2
             import numpy as np
 
-            img_req = getattr(airsim, "ImageRequest", None)
-            img_type = getattr(getattr(airsim, "ImageType", None), "Scene", 0)
+            img_req = getattr(airsim, "ImageRequest", None) if airsim is not None else None
+            img_type = getattr(getattr(airsim, "ImageType", None), "Scene", 0) if airsim is not None else 0
             if img_req is not None:
                 request = img_req(self.camera_name, img_type, False, False)
             else:

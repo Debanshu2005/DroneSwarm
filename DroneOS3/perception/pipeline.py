@@ -588,14 +588,11 @@ class PerceptionPipeline:
                 is_stale = (pos_age is not None and pos_age > max_age)
 
                 # Dead-reckon moving peer back/forward to the observation timestamp.
-                # Use sender message timestamp for dead-reckoning interval when available,
-                # falling back to local last_pos_time.
-                ref_pos_time = getattr(peer, "position_msg_time", None)
-                if ref_pos_time is None or not isinstance(ref_pos_time, (int, float)):
-                    ref_pos_time = last_pos_time
-
-                if has_pos and ref_pos_time is not None and isinstance(ref_pos_time, (int, float)):
-                    dt_obs = obs_time - float(ref_pos_time)
+                # Compute the dead-reckoning interval as dt = obs_time - peer.last_position_time (both local clock).
+                # Do not use position_msg_time in any subtraction with local time.
+                # Keep position_msg_time only for logging.
+                if has_pos and last_pos_time is not None and isinstance(last_pos_time, (int, float)):
+                    dt_obs = obs_time - float(last_pos_time)
                     vx = getattr(peer, "velocity_x", None)
                     if vx is None:
                         vx = getattr(peer, "vx", None)
@@ -652,6 +649,7 @@ class PerceptionPipeline:
                     "alt": p_alt,
                     "has_position": has_pos,
                     "last_position_time": last_pos_time,
+                    "position_msg_time": getattr(peer, "position_msg_time", None),
                     "position_age_s": round(pos_age, 3) if pos_age is not None else None,
                     "is_stale": is_stale,
                     "distance_m": round(dist_3d_perp, 3) if dist_3d_perp is not None else None,

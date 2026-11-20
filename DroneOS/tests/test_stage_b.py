@@ -699,6 +699,7 @@ async def test_partial_delivery_3_to_2_one_miss(mock_cfg, monkeypatch):
     if not plan.accepted: return
     if not plan.accepted: return
     if not plan.accepted: return
+    if not plan.accepted: return
     
     new_fp = {"type": "LINE", "spacing": 15.0, "slot_assignments": plan.slot_assignments}
     swarm.identity.drone_id = "d1"
@@ -969,7 +970,6 @@ async def test_real_flight_manager_formation_provider():
     class MockFlightController:
         pass
     fm = FlightManager(MockFlightController(), FlightStateStore())
-    fm.swarm_manager = type("MockSwarmManager", (), {"my_id": "drone1", "registry": {}})()
     fm.swarm_manager = type("MockSwarmManager", (), {"my_id": "drone1", "registry": {}})()
     
     import copy

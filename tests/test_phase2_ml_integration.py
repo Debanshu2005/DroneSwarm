@@ -60,7 +60,9 @@ def test_onnx_static_imgsz_enforcement(tmp_path, caplog):
     mock_session = MagicMock()
     mock_session.get_inputs.return_value = [mock_input]
 
-    with patch("onnxruntime.InferenceSession", return_value=mock_session):
+    mock_ort = MagicMock()
+    mock_ort.InferenceSession.return_value = mock_session
+    with patch.dict("sys.modules", {"onnxruntime": mock_ort}):
         detector._enforce_onnx_input_shape()
         assert detector.imgsz == 640
         assert "overriding imgsz to 640" in caplog.text

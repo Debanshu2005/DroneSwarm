@@ -16,6 +16,8 @@ Strictly replaces all synthetic mocks, synthetic image injection, and manual mes
    Sets LIVE_AIRSIM_E2E_PASS only if every required stage passes.
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import json
@@ -61,6 +63,34 @@ from DroneOS.shared.config.loader import load_yaml_config
 from DroneOS.shared.config.models import CameraConfig, PerceptionConfig
 from DroneOS.shared.protocol.messages import DetectionItem, DetectionMessage, TelemetryData
 from relay.relay import UdpWebsocketRelay
+
+
+def to_eularian_angles(q) -> Tuple[float, float, float]:
+    """Calculate Euler angles (pitch, roll, yaw) in radians from a quaternion."""
+    if airsim is not None and hasattr(airsim, "to_eularian_angles"):
+        return airsim.to_eularian_angles(q)
+    z = getattr(q, "z_val", 0.0)
+    y = getattr(q, "y_val", 0.0)
+    x = getattr(q, "x_val", 0.0)
+    w = getattr(q, "w_val", 1.0)
+    ysqr = y * y
+
+    t0 = +2.0 * (w * x + y * z)
+    t1 = +1.0 - 2.0 * (x * x + ysqr)
+    roll = math.atan2(t0, t1)
+
+    t2 = +2.0 * (w * y - z * x)
+    if t2 > 1.0:
+        t2 = 1.0
+    if t2 < -1.0:
+        t2 = -1.0
+    pitch = math.asin(t2)
+
+    t3 = +2.0 * (w * z + x * y)
+    t4 = +1.0 - 2.0 * (ysqr + z * z)
+    yaw = math.atan2(t3, t4)
+
+    return (pitch, roll, yaw)
 
 
 class LiveAirSimTelemetryAdapter:
@@ -126,7 +156,7 @@ class LiveAirSimTelemetryAdapter:
         pos_z = state.kinematics_estimated.position.z_val
         altitude_agl = -pos_z if not math.isnan(pos_z) else 0.0
 
-        pitch_rad, roll_rad, yaw_rad = airsim.to_eularian_angles(state.kinematics_estimated.orientation)
+        pitch_rad, roll_rad, yaw_rad = to_eularian_angles(state.kinematics_estimated.orientation)
 
         # Determine arming state reliably:
         # 1. Prioritize explicit arming command state if set.
@@ -188,7 +218,7 @@ def diagnose_geolocation_ray(
     try:
         cam_info = client.simGetCameraInfo(cam_cfg.airsim_camera, vehicle_name=vehicle_name)
         q = cam_info.pose.orientation
-        p_rad, r_rad, y_rad = airsim.to_eularian_angles(q)
+        p_rad, r_rad, y_rad = to_eularian_angles(q)
         diag["camera_info"] = {
             "pitch_deg": math.degrees(p_rad),
             "roll_deg": math.degrees(r_rad),

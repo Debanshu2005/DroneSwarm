@@ -126,17 +126,11 @@ class FakeAirSim:
             self._state.kinematics_estimated.linear_velocity.z_val = 0.5
             self.getMultirotorState = MagicMock(return_value=self._state)
 
-_saved_airsim = sys.modules.get('airsim')
-sys.modules['airsim'] = FakeAirSim
-
-@pytest.fixture(scope="module", autouse=True)
-def restore_airsim_module():
-    sys.modules['airsim'] = FakeAirSim
-    yield
-    if _saved_airsim is not None:
-        sys.modules['airsim'] = _saved_airsim
-    else:
-        sys.modules.pop('airsim', None)
+@pytest.fixture(autouse=True)
+def restore_airsim_module(monkeypatch):
+    monkeypatch.setitem(sys.modules, 'airsim', FakeAirSim)
+    import DroneOS1.adapters.airsim_adapter
+    monkeypatch.setattr(DroneOS1.adapters.airsim_adapter, "airsim", FakeAirSim)
 
 from DroneOS1.adapters.airsim_adapter import AirSimFlightController
 from DroneOS1.adapters.factory import AdapterFactory
