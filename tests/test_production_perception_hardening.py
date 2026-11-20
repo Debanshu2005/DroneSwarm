@@ -14,6 +14,7 @@ from DroneOS.perception.aggregator import (
     TrackAggregator,
 )
 from DroneOS.perception.detector import GarbageDetector
+from DroneOS.perception.geolocate import meters_to_lat_lon
 from DroneOS.perception.pipeline import PerceptionPipeline
 from DroneOS.perception.types import Detection
 from DroneOS.shared.config.models import PerceptionConfig
@@ -24,7 +25,8 @@ from DroneOS.shared.protocol.messages import DetectionMessage
 async def test_two_frame_confirmation_requires_distinct_timestamps():
     """Verify that a candidate track requires at least 2 distinct timestamps to confirm."""
     agg = TrackAggregator(drone_id="drone1", min_hits=2, merge_radius_m=2.5)
-    det = GeoreferencedDetection(label="rubbish", confidence=0.80, lat=40.7128, lon=-74.0060)
+    d1_lat, d1_lon = 40.7128, -74.0060
+    det = GeoreferencedDetection(label="rubbish", confidence=0.80, lat=40.7128, lon=-74.0060, drone_lat=d1_lat, drone_lon=d1_lon)
 
     # Frame 1 at t=10.0
     items1 = agg.update([det], now=10.0)
@@ -38,8 +40,10 @@ async def test_two_frame_confirmation_requires_distinct_timestamps():
     assert track.hits == 1, "Hits must remain 1 when timestamp does not advance"
     assert not track.confirmed, "Track must remain unconfirmed"
 
-    # Frame 2 at advanced timestamp t=12.0 (>= 2.0s temporal separation)
-    items2 = agg.update([det], now=12.0)
+    # Frame 2 at advanced timestamp t=12.0 (>= 2.0s temporal separation) with displaced drone
+    d2_lat, d2_lon = meters_to_lat_lon(2.5, 0.0, d1_lat, d1_lon)
+    det2 = GeoreferencedDetection(label="rubbish", confidence=0.80, lat=40.7128, lon=-74.0060, drone_lat=d2_lat, drone_lon=d2_lon)
+    items2 = agg.update([det2], now=12.0)
     assert len(items2) == 1, "Track must be confirmed and emitted on hit 2 at distinct timestamp"
     assert items2[0].status == "new"
     assert items2[0].hits == 2
@@ -49,16 +53,21 @@ async def test_two_frame_confirmation_requires_distinct_timestamps():
 def test_unconfirmed_detections_never_emitted_by_aggregator():
     """Verify aggregator never returns items for tracks that have not reached min_hits."""
     agg = TrackAggregator(drone_id="drone1", min_hits=3)
-    det = GeoreferencedDetection(label="rubbish", confidence=0.90, lat=40.0, lon=-74.0)
+    d_lat, d_lon = 40.0, -74.0
+    det1 = GeoreferencedDetection(label="rubbish", confidence=0.90, lat=40.0, lon=-74.0, drone_lat=d_lat, drone_lon=d_lon)
 
     # Hits 1 and 2
-    res1 = agg.update([det], now=1.0)
-    res2 = agg.update([det], now=3.0)
+    res1 = agg.update([det1], now=1.0)
+    d2_lat, d2_lon = meters_to_lat_lon(2.5, 0.0, d_lat, d_lon)
+    det2 = GeoreferencedDetection(label="rubbish", confidence=0.90, lat=40.0, lon=-74.0, drone_lat=d2_lat, drone_lon=d2_lon)
+    res2 = agg.update([det2], now=3.0)
     assert len(res1) == 0
     assert len(res2) == 0
 
     # Hit 3 reaches min_hits=3
-    res3 = agg.update([det], now=5.0)
+    d3_lat, d3_lon = meters_to_lat_lon(5.0, 0.0, d_lat, d_lon)
+    det3 = GeoreferencedDetection(label="rubbish", confidence=0.90, lat=40.0, lon=-74.0, drone_lat=d3_lat, drone_lon=d3_lon)
+    res3 = agg.update([det3], now=5.0)
     assert len(res3) == 1
     assert res3[0].status == "new"
 

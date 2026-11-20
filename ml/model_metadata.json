@@ -37,7 +37,7 @@
     "imgsz_high_res": 1280,
     "confidence_default": 0.55,
     "confidence_exploration": 0.35,
-    "confidence_rationale": "Default 0.55 selected by optimizing F1 score and minimizing false alerts per minute (0.00/min in synthetic simulation, 96.3% single-frame precision on official test split). Multi-frame confirmation on continuous live video streams remains unvalidated (unverified).",
+    "confidence_rationale": "On the real test split at imgsz 640, F1 is 0.7195 at conf 0.35 versus 0.6222 at 0.55. Confidence 0.55 is a precision-first choice (96.28% precision, 45.96% recall) rather than an F1-maximizing choice. Its false-alarm reduction benefit (0.00/min) is only demonstrated in synthetic Monte Carlo simulation; multi-frame confirmation on continuous live video streams remains unvalidated (unverified).",
     "iou_default": 0.5,
     "opset_default": 17,
     "max_fps_default": 1.0,

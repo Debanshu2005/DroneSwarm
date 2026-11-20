@@ -93,7 +93,7 @@ def test_aggregator_repeated_frame_timestamp_rejection():
     """Identical frame timestamps must not increment hits or trigger false confirmation."""
     agg = TrackAggregator(drone_id="drone1", min_hits=2)
     t0 = 1000.0
-    det = GeoreferencedDetection(label="rubbish", confidence=0.8, lat=22.314, lon=87.310)
+    det = GeoreferencedDetection(label="rubbish", confidence=0.8, lat=22.314, lon=87.310, drone_lat=22.314, drone_lon=87.310)
 
     # Frame 1 at t0
     res1 = agg.update([det], now=t0)
@@ -106,11 +106,37 @@ def test_aggregator_repeated_frame_timestamp_rejection():
     assert len(res2) == 0
     assert track.hits == 1  # Must not increment hits
 
-    # Genuine subsequent frame at t0 + 2.0 (respecting min_temporal_separation_s)
-    res3 = agg.update([det], now=t0 + 2.0)
+    # Genuine subsequent frame at t0 + 2.0 with drone displacement
+    d3_lat, d3_lon = meters_to_lat_lon(2.5, 0.0, 22.314, 87.310)
+    det3 = GeoreferencedDetection(label="rubbish", confidence=0.8, lat=22.314, lon=87.310, drone_lat=d3_lat, drone_lon=d3_lon)
+    res3 = agg.update([det3], now=t0 + 2.0)
     assert len(res3) == 1
     assert track.hits == 2
     assert res3[0].status == "new"
+
+
+def test_detections_without_drone_coordinates_never_reach_confirmed():
+    """Tracks without drone coordinates may NOT reach confirmed status on time separation alone."""
+    agg = TrackAggregator(drone_id="drone1", min_hits=2, min_temporal_separation_s=2.0)
+    t0 = 100.0
+    # Detections without drone position
+    det = GeoreferencedDetection(label="rubbish", confidence=0.85, lat=22.314, lon=87.310, drone_lat=None, drone_lon=None)
+
+    # Frame 1
+    r1 = agg.update([det], now=t0)
+    assert len(r1) == 0
+    track = list(agg.tracks.values())[0]
+    assert track.hits == 1
+    assert track.distinct_hits == 1
+    assert not track.confirmed
+
+    # Multiple subsequent frames arriving across 30 seconds
+    for dt in [2.0, 5.0, 10.0, 20.0, 30.0]:
+        emitted = agg.update([det], now=t0 + dt)
+        assert len(emitted) == 0, f"Must not confirm on time alone at dt={dt}s without drone coordinates"
+        assert not track.confirmed
+        assert track.distinct_hits == 1, "distinct_hits must not increment without spatial verification"
+        assert track.hits == 1, "Hits must not increment without distinct spatial verification"
 
 
 def test_stationary_drone_cannot_self_confirm_in_consecutive_frames():

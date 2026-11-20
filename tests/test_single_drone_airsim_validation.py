@@ -74,6 +74,7 @@ def test_telemetry_altitude_gating():
 @pytest.mark.asyncio
 async def test_live_yolo_inference_on_sample_target():
     """Verify trained checkpoint models/garbage.pt detects rubbish on genuine crop."""
+    pytest.importorskip("ultralytics", reason="ultralytics required for YOLO inference")
     weights_path = REPO_ROOT / "models" / "garbage.pt"
     crop_path = REPO_ROOT / "assets" / "perception" / "sample_target_garbage.png"
     if not crop_path.exists():
@@ -230,6 +231,7 @@ def test_track_aggregator_interface_contract():
        and step 2 yields confirmed track with emitted AggregatorItem.
     """
     from DroneOS.perception.aggregator import TrackAggregator, GeoreferencedDetection
+    from DroneOS.perception.geolocate import meters_to_lat_lon
 
     aggregator = TrackAggregator(drone_id="drone1", min_hits=2, merge_radius_m=2.5)
 
@@ -240,7 +242,8 @@ def test_track_aggregator_interface_contract():
     assert not hasattr(aggregator, "active_tracks"), "TrackAggregator must not have active_tracks"
 
     # 2. Step 1: Single detection with min_hits=2 -> unconfirmed candidate track
-    det1 = GeoreferencedDetection(label="rubbish", confidence=0.85, lat=47.641468, lon=-122.140138, altitude_agl=10.0)
+    d1_lat, d1_lon = 47.641468, -122.140138
+    det1 = GeoreferencedDetection(label="rubbish", confidence=0.85, lat=47.641468, lon=-122.140138, altitude_agl=10.0, drone_lat=d1_lat, drone_lon=d1_lon)
     emitted1 = aggregator.update([det1], now=100.0)
 
     assert len(emitted1) == 0, "First hit must not emit when min_hits=2"
@@ -260,8 +263,9 @@ def test_track_aggregator_interface_contract():
     with pytest.raises(AttributeError):
         _ = track.confidence
 
-    # 3. Step 2: Second matching detection -> confirmed track & emission
-    det2 = GeoreferencedDetection(label="rubbish", confidence=0.90, lat=47.641469, lon=-122.140139, altitude_agl=10.0)
+    # 3. Step 2: Second matching detection with drone displacement -> confirmed track & emission
+    d2_lat, d2_lon = meters_to_lat_lon(2.5, 0.0, d1_lat, d1_lon)
+    det2 = GeoreferencedDetection(label="rubbish", confidence=0.90, lat=47.641469, lon=-122.140139, altitude_agl=10.0, drone_lat=d2_lat, drone_lon=d2_lon)
     emitted2 = aggregator.update([det2], now=102.5)
 
     assert len(emitted2) == 1, "Second hit must emit newly confirmed track"
@@ -1022,6 +1026,7 @@ def test_verify_target_visibility_distinguishes_texture_from_floor():
 @pytest.mark.asyncio
 async def test_setup_scene_target_unique_naming():
     """Verify that setup_scene_target generates distinct unique actor names per run when unique_name=True."""
+    pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
     from scripts.validate_single_drone_airsim import setup_scene_target
 
     class MockAirSimClient:
@@ -1062,6 +1067,7 @@ async def test_setup_scene_target_unique_naming():
 @pytest.mark.asyncio
 async def test_setup_scene_target_idempotent_reuse():
     """Verify that repeated setup with identical actor name reuses existing actor without re-spawning."""
+    pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
     from scripts.validate_single_drone_airsim import setup_scene_target
 
     class MockAirSimClient:
@@ -1105,6 +1111,7 @@ async def test_setup_scene_target_idempotent_reuse():
 @pytest.mark.asyncio
 async def test_setup_scene_target_stale_cleanup_and_safe_spawning():
     """Verify stale objects from prior runs are cleaned up while new unique object is cleanly spawned."""
+    pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
     from scripts.validate_single_drone_airsim import setup_scene_target
 
     class MockAirSimClient:
@@ -1146,6 +1153,7 @@ async def test_setup_scene_target_stale_cleanup_and_safe_spawning():
 @pytest.mark.asyncio
 async def test_setup_scene_target_spawn_failure_handling():
     """Verify failed simSpawnObject is handled gracefully without crashing and populates diagnostic errors."""
+    pytest.importorskip("airsim", reason="airsim required for AirSim target setup")
     from scripts.validate_single_drone_airsim import setup_scene_target
 
     class FailingClient:

@@ -115,8 +115,9 @@ python ml/uavvaste/export_onnx.py --weights models/garbage.pt --imgsz 640 --opse
 ```
 
 ### Multi-Frame Temporal Confirmation & Default Threshold (0.55):
-- The default confidence of **0.55** with `min_hits = 2` was selected to maximize F1 score while eliminating swarm false alerts (0.00 false alerts/min in simulation vs 27.8/min at 0.35, and 96.3% single-frame precision on the official test split).
-- **Synthetic Status Note**: Temporal confirmation metrics in `ml/reports/temporal_confirmation_results.json` are produced by a synthetic Monte Carlo simulation modeling single-frame UAVVaste error rates. Multi-frame confirmation on continuous live video streams remains unvalidated (unverified).
+- On the real test split at `imgsz = 640`, single-frame F1 is **0.7195** at `conf = 0.35` (recall 59.96%, precision 89.94%) versus **0.6222** at `conf = 0.55` (recall 45.96%, precision 96.28%).
+- Confidence **0.55** with `min_hits = 2` is a **precision-first choice** rather than an F1-maximizing choice, intended to minimize false positives in swarm operations.
+- **Synthetic Status Note**: The false-alarm reduction benefit (0.00 false alerts/min in simulation vs 27.8/min at 0.35) is only demonstrated in synthetic Monte Carlo simulation modeling single-frame UAVVaste error rates. Multi-frame confirmation on continuous live video streams remains unvalidated (unverified).
 
 ### Running Threshold Evaluation:
 ```bash

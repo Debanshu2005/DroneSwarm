@@ -17,6 +17,7 @@ def test_ml_pipeline_cpu_smoke(tmp_path):
     Train 1 epoch on CPU with a from-scratch YAML model and tiny synthetic dataset.
     Validates dataset.yaml, training loop, validation on test split, and GarbageDetector loading.
     """
+    pytest.importorskip("ultralytics", reason="ultralytics required for training pipeline")
     data_dir = tmp_path / "smoke_data"
     images_dir = data_dir / "images"
     labels_dir = data_dir / "labels"

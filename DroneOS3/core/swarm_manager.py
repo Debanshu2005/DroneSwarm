@@ -48,6 +48,7 @@ class PeerStateManager:
         self.velocity_z: Optional[float] = None
         self.position_valid: bool = False
         self.last_position_time: Optional[float] = None
+        self.position_msg_time: Optional[float] = None
         self.battery_level: Optional[float] = None
 
     @property
@@ -226,10 +227,12 @@ class PeerSynchronization:
         pos_updated = False
         pos_ts = None
 
-        ts = getattr(t, 'timestamp', None) or getattr(msg, 'timestamp', None) or time.time()
+        local_now = time.time()
+        msg_ts = getattr(t, 'timestamp', None) or getattr(msg, 'timestamp', None) or local_now
         if peer:
             peer.telemetry = t
-            peer.last_seen = ts
+            peer.last_seen = local_now
+            peer.position_msg_time = msg_ts
             if t:
                 peer.velocity_x = getattr(t, "velocity_x", getattr(t, "vx", None))
                 peer.velocity_y = getattr(t, "velocity_y", getattr(t, "vy", None))
@@ -240,7 +243,7 @@ class PeerSynchronization:
                 peer.lon = lon
                 peer.alt = alt
                 peer.position_valid = True
-                peer.last_position_time = ts
+                peer.last_position_time = local_now
                 pos_updated = True
                 pos_ts = peer.last_position_time
 

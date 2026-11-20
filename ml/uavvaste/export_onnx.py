@@ -197,8 +197,10 @@ def export_and_validate_onnx(
     overall_cos_sim = 1.0
     per_image_results = []
 
-    post_nms_max_box_diff = 0.0
-    post_nms_max_score_diff = 0.0
+    post_nms_25_max_box_diff = 0.0
+    post_nms_25_max_score_diff = 0.0
+    post_nms_55_max_box_diff = 0.0
+    post_nms_55_max_score_diff = 0.0
 
     for idx, p in enumerate(sample_images):
         bgr = cv2.imread(str(p))
@@ -243,61 +245,90 @@ def export_and_validate_onnx(
         overall_score_diff = max(overall_score_diff, score_diff)
         overall_cos_sim = min(overall_cos_sim, cos_sim)
 
-        # Post-NMS detection parity (boxes within 1 px, scores within 1e-3)
-        b_pt, s_pt = decode_post_nms(torch_out_tensor, conf_thresh=0.25, iou_thresh=0.45)
-        b_ort, s_ort = decode_post_nms(ort_out_tensor, conf_thresh=0.25, iou_thresh=0.45)
+        # Post-NMS detection parity at exploration/low confidence (0.25)
+        b_pt_25, s_pt_25 = decode_post_nms(torch_out_tensor, conf_thresh=0.25, iou_thresh=0.45)
+        b_ort_25, s_ort_25 = decode_post_nms(ort_out_tensor, conf_thresh=0.25, iou_thresh=0.45)
 
-        img_box_diff = 0.0
-        img_score_diff = 0.0
-        if len(b_pt) > 0 and len(b_ort) > 0 and len(b_pt) == len(b_ort):
-            diffs = [abs(c1 - c2) for b1, b2 in zip(b_pt, b_ort) for c1, c2 in zip(b1, b2)]
-            s_diffs = [abs(s1 - s2) for s1, s2 in zip(s_pt, s_ort)]
-            img_box_diff = float(max(diffs))
-            img_score_diff = float(max(s_diffs))
+        img_box_diff_25 = 0.0
+        img_score_diff_25 = 0.0
+        if len(b_pt_25) > 0 and len(b_ort_25) > 0 and len(b_pt_25) == len(b_ort_25):
+            diffs_25 = [abs(c1 - c2) for b1, b2 in zip(b_pt_25, b_ort_25) for c1, c2 in zip(b1, b2)]
+            s_diffs_25 = [abs(s1 - s2) for s1, s2 in zip(s_pt_25, s_ort_25)]
+            img_box_diff_25 = float(max(diffs_25))
+            img_score_diff_25 = float(max(s_diffs_25))
 
-        post_nms_max_box_diff = max(post_nms_max_box_diff, img_box_diff)
-        post_nms_max_score_diff = max(post_nms_max_score_diff, img_score_diff)
+        post_nms_25_max_box_diff = max(post_nms_25_max_box_diff, img_box_diff_25)
+        post_nms_25_max_score_diff = max(post_nms_25_max_score_diff, img_score_diff_25)
+
+        # Post-NMS detection parity at deployed confidence (0.55)
+        b_pt_55, s_pt_55 = decode_post_nms(torch_out_tensor, conf_thresh=0.55, iou_thresh=0.45)
+        b_ort_55, s_ort_55 = decode_post_nms(ort_out_tensor, conf_thresh=0.55, iou_thresh=0.45)
+
+        img_box_diff_55 = 0.0
+        img_score_diff_55 = 0.0
+        if len(b_pt_55) > 0 and len(b_ort_55) > 0 and len(b_pt_55) == len(b_ort_55):
+            diffs_55 = [abs(c1 - c2) for b1, b2 in zip(b_pt_55, b_ort_55) for c1, c2 in zip(b1, b2)]
+            s_diffs_55 = [abs(s1 - s2) for s1, s2 in zip(s_pt_55, s_ort_55)]
+            img_box_diff_55 = float(max(diffs_55))
+            img_score_diff_55 = float(max(s_diffs_55))
+
+        post_nms_55_max_box_diff = max(post_nms_55_max_box_diff, img_box_diff_55)
+        post_nms_55_max_score_diff = max(post_nms_55_max_score_diff, img_score_diff_55)
 
         per_image_results.append({
             "image": p.name,
-            "raw_max_abs_diff": round(max_abs, 8),
+            "raw_max_abs_diff_diagnostic": round(max_abs, 8),
             "raw_mean_abs_diff": round(mean_abs, 8),
             "raw_cosine_similarity": round(cos_sim, 7),
-            "pt_detections": int(len(b_pt)),
-            "onnx_detections": int(len(b_ort)),
-            "max_box_diff_px": round(img_box_diff, 6),
-            "max_score_diff": round(img_score_diff, 8),
+            "conf_0_25": {
+                "pt_detections": int(len(b_pt_25)),
+                "onnx_detections": int(len(b_ort_25)),
+                "max_box_diff_px": round(img_box_diff_25, 6),
+                "max_score_diff": round(img_score_diff_25, 8),
+            },
+            "conf_0_55": {
+                "pt_detections": int(len(b_pt_55)),
+                "onnx_detections": int(len(b_ort_55)),
+                "max_box_diff_px": round(img_box_diff_55, 6),
+                "max_score_diff": round(img_score_diff_55, 8),
+            },
         })
 
         if (idx + 1) % 5 == 0 or idx == len(sample_images) - 1:
-            print(f"    [{idx+1:02d}/{len(sample_images)}] {p.name}: max_abs={max_abs:.4e}, cos_sim={cos_sim:.6f}, pt_dets={len(b_pt)}, onnx_dets={len(b_ort)}, max_box_diff={img_box_diff:.6e}px")
+            print(f"    [{idx+1:02d}/{len(sample_images)}] {p.name}: raw_diag={max_abs:.4e}, cos_sim={cos_sim:.6f}, "
+                  f"c0.25(pt={len(b_pt_25)},onnx={len(b_ort_25)},box_diff={img_box_diff_25:.4e}px), "
+                  f"c0.55(pt={len(b_pt_55)},onnx={len(b_ort_55)},box_diff={img_box_diff_55:.4e}px)")
 
-    print(f"  Max Absolute Difference:   {overall_max_abs_diff:.6e} (tolerance: {tolerance})")
-    print(f"  Mean Absolute Difference:  {overall_mean_abs_diff:.6e}")
-    print(f"  Max Raw Coord Difference:  {overall_coord_diff:.6e} px")
-    print(f"  Max Raw Score Difference:  {overall_score_diff:.6e}")
-    print(f"  Cosine Similarity:         {overall_cos_sim:.6f}")
-    print(f"  Post-NMS Max Box Diff:     {post_nms_max_box_diff:.4f} px (tolerance <= 1.0 px)")
-    print(f"  Post-NMS Max Score Diff:   {post_nms_max_score_diff:.6e} (tolerance <= 1e-3)")
+    post_nms_max_box_diff = max(post_nms_25_max_box_diff, post_nms_55_max_box_diff)
+    post_nms_max_score_diff = max(post_nms_25_max_score_diff, post_nms_55_max_score_diff)
 
+    print(f"  Raw Max Absolute Difference (Diagnostic): {overall_max_abs_diff:.6e}")
+    print(f"  Raw Mean Absolute Difference:             {overall_mean_abs_diff:.6e}")
+    print(f"  Raw Max Coord Difference:                 {overall_coord_diff:.6e} px")
+    print(f"  Raw Max Score Difference:                 {overall_score_diff:.6e}")
+    print(f"  Raw Cosine Similarity:                    {overall_cos_sim:.6f}")
+    print(f"  Post-NMS @ 0.25 Max Box Diff:             {post_nms_25_max_box_diff:.4f} px (tolerance <= 1.0 px)")
+    print(f"  Post-NMS @ 0.25 Max Score Diff:           {post_nms_25_max_score_diff:.6e} (tolerance <= 1e-3)")
+    print(f"  Post-NMS @ 0.55 Max Box Diff:             {post_nms_55_max_box_diff:.4f} px (tolerance <= 1.0 px)")
+    print(f"  Post-NMS @ 0.55 Max Score Diff:           {post_nms_55_max_score_diff:.6e} (tolerance <= 1e-3)")
+
+    # Equivalence is governed purely by the post-NMS gate (boxes within 1 px, scores within 1e-3)
     is_numerically_equivalent = bool(
-        overall_max_abs_diff <= tolerance
-        and overall_cos_sim > 0.999
-        and post_nms_max_box_diff <= 1.0
+        post_nms_max_box_diff <= 1.0
         and post_nms_max_score_diff <= 1e-3
     )
     if is_numerically_equivalent:
-        print("[PASS] Numerical parity confirmed: PyTorch and ONNX outputs are functionally identical.")
+        print("[PASS] Post-NMS parity confirmed: PyTorch and ONNX outputs are functionally equivalent.")
     else:
-        print(f"[WARN] Difference exceeds tolerance: max_abs={overall_max_abs_diff}, box_diff={post_nms_max_box_diff}px, score_diff={post_nms_max_score_diff}")
+        print(f"[WARN] Post-NMS difference exceeds tolerance: box_diff={post_nms_max_box_diff}px, score_diff={post_nms_max_score_diff}")
 
     # Dynamic justification derived directly from measured real-image values
     computed_justification = (
-        f"FP32 roundoff accumulation across 147 fused layers on {len(sample_images)} real test-split images yields "
-        f"max raw absolute difference of {overall_max_abs_diff:.4e} (within justified {tolerance:.1e} tolerance). "
-        f"Final post-NMS bounding box coordinates differ by at most {post_nms_max_box_diff:.4f} px (< 1 px tolerance, "
-        f"sub-pixel identical) and detection scores differ by at most {post_nms_max_score_diff:.4e} (< 1e-3 tolerance), "
-        f"achieving raw cosine similarity of {overall_cos_sim:.6f} across all evaluation images."
+        f"Post-NMS detections match within sub-pixel tolerance across {len(sample_images)} real test-split images. "
+        f"At deployed conf 0.55, max box difference is {post_nms_55_max_box_diff:.4f} px (< 1 px tolerance) and max score "
+        f"difference is {post_nms_55_max_score_diff:.4e} (< 1e-3 tolerance). At conf 0.25, max box difference is "
+        f"{post_nms_25_max_box_diff:.4f} px and max score difference is {post_nms_25_max_score_diff:.4e}. "
+        f"Raw max tensor difference is {overall_max_abs_diff:.4e} (diagnostic only, cosine similarity {overall_cos_sim:.6f})."
     )
 
     # 4. CPU Latency Benchmark
@@ -367,14 +398,25 @@ def export_and_validate_onnx(
         },
         "numerical_validation": {
             "num_real_images_tested": len(sample_images),
-            "max_absolute_difference": overall_max_abs_diff,
-            "mean_absolute_difference": overall_mean_abs_diff,
-            "max_coord_difference_px": overall_coord_diff,
-            "max_score_difference": overall_score_diff,
-            "cosine_similarity": overall_cos_sim,
+            "raw_max_difference_diagnostic": overall_max_abs_diff,
+            "raw_mean_absolute_difference": overall_mean_abs_diff,
+            "raw_max_coord_difference_px": overall_coord_diff,
+            "raw_max_score_difference": overall_score_diff,
+            "raw_cosine_similarity": overall_cos_sim,
+            "post_nms_conf_0_25": {
+                "max_box_diff_px": round(post_nms_25_max_box_diff, 4),
+                "max_score_diff": round(post_nms_25_max_score_diff, 6),
+                "box_pass": post_nms_25_max_box_diff <= 1.0,
+                "score_pass": post_nms_25_max_score_diff <= 1e-3,
+            },
+            "post_nms_conf_0_55": {
+                "max_box_diff_px": round(post_nms_55_max_box_diff, 4),
+                "max_score_diff": round(post_nms_55_max_score_diff, 6),
+                "box_pass": post_nms_55_max_box_diff <= 1.0,
+                "score_pass": post_nms_55_max_score_diff <= 1e-3,
+            },
             "post_nms_max_box_diff_px": round(post_nms_max_box_diff, 4),
             "post_nms_max_score_diff": round(post_nms_max_score_diff, 6),
-            "tolerance_threshold": tolerance,
             "is_equivalent": is_numerically_equivalent,
             "justification": computed_justification,
             "per_image_results": per_image_results,

@@ -38,8 +38,11 @@ def test_detector_load_backoff_and_recovery(tmp_path):
 
     # Place weights file and mock YOLO
     fake_weights.write_bytes(b"dummy")
-    with patch("ultralytics.YOLO") as mock_yolo:
-        mock_yolo.return_value = MagicMock()
+    mock_ultralytics = MagicMock()
+    mock_yolo_cls = MagicMock()
+    mock_yolo_cls.return_value = MagicMock()
+    mock_ultralytics.YOLO = mock_yolo_cls
+    with patch.dict("sys.modules", {"ultralytics": mock_ultralytics}):
         assert detector.load() is True
         status, reason = detector.get_status()
         assert status == "OK"

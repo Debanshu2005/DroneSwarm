@@ -19,6 +19,7 @@ def test_preflight_disabled():
 
 
 def test_preflight_missing_weights(tmp_path, caplog):
+    pytest.importorskip("ultralytics", reason="ultralytics required for .pt preflight")
     cfg = PerceptionConfig(enabled=True, weights=str(tmp_path / "nonexistent.pt"))
     with caplog.at_level(logging.ERROR):
         status, reason = run_perception_preflight(cfg, repo_root=tmp_path)
@@ -59,6 +60,7 @@ def test_preflight_onnx_missing_onnxruntime(tmp_path, caplog):
 
 
 def test_preflight_all_valid(tmp_path):
+    pytest.importorskip("ultralytics", reason="ultralytics required for .pt preflight")
     fake_weights = tmp_path / "garbage.pt"
     fake_weights.write_bytes(b"dummy")
     cfg = PerceptionConfig(enabled=True, weights=str(fake_weights))

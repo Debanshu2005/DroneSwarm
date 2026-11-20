@@ -131,6 +131,7 @@ async def test_airsim_frame_source_reconnection_after_failure():
 @pytest.mark.asyncio
 async def test_live_yolo_inference_with_garbage_checkpoint():
     """Load models/garbage.pt and verify inference execution on a 1280x720 simulated frame."""
+    pytest.importorskip("ultralytics", reason="ultralytics required for YOLO inference")
     weights_path = Path("models/garbage.pt")
     assert weights_path.exists(), "models/garbage.pt must exist"
 

@@ -587,9 +587,15 @@ class PerceptionPipeline:
                 has_pos = (p_lat is not None and p_lon is not None and isinstance(p_lat, (int, float)) and isinstance(p_lon, (int, float)))
                 is_stale = (pos_age is not None and pos_age > max_age)
 
-                # Dead-reckon moving peer back/forward to the observation timestamp
-                if has_pos and last_pos_time is not None and isinstance(last_pos_time, (int, float)):
-                    dt_obs = obs_time - float(last_pos_time)
+                # Dead-reckon moving peer back/forward to the observation timestamp.
+                # Use sender message timestamp for dead-reckoning interval when available,
+                # falling back to local last_pos_time.
+                ref_pos_time = getattr(peer, "position_msg_time", None)
+                if ref_pos_time is None or not isinstance(ref_pos_time, (int, float)):
+                    ref_pos_time = last_pos_time
+
+                if has_pos and ref_pos_time is not None and isinstance(ref_pos_time, (int, float)):
+                    dt_obs = obs_time - float(ref_pos_time)
                     vx = getattr(peer, "velocity_x", None)
                     if vx is None:
                         vx = getattr(peer, "vx", None)

@@ -163,15 +163,10 @@ class TrackAggregator:
                         else:
                             delta_bearing_deg = 0.0
 
-                    sigma_diff = math.sqrt(2.0) * self.gps_sigma_m
-                    required_disp = max(self.min_drone_displacement_m, 3.0 * sigma_diff)
+                        sigma_diff = math.sqrt(2.0) * self.gps_sigma_m
+                        required_disp = max(self.min_drone_displacement_m, 3.0 * sigma_diff)
 
-                    dt = now - track.last_distinct_hit_time
-                    time_advanced = (now > track.last_seen)
-
-                    # Stationary drone must NOT confirm on time separation alone.
-                    # Requires drone displacement >= 3*sigma_diff OR viewpoint change exceeding GPS noise cone.
-                    if has_drone_coords:
+                        time_advanced = (now > track.last_seen)
                         t_dn, t_de = lat_lon_to_meters(track.lat, track.lon, det.drone_lat, det.drone_lon)
                         range_to_target = max(1.0, math.hypot(t_dn, t_de))
                         # 3-sigma angular noise cone from GPS jitter at current range
@@ -182,7 +177,9 @@ class TrackAggregator:
                         viewpoint_or_disp_ok = (disp_m >= required_disp) or (delta_bearing_deg >= angle_threshold_deg)
                         is_distinct = time_advanced and viewpoint_or_disp_ok
                     else:
-                        is_distinct = (dt >= self.min_temporal_separation_s)
+                        # Detections without drone coordinates cannot verify spatial displacement
+                        # or viewpoint angle change; they must NOT reach confirmed status on time alone.
+                        is_distinct = False
 
                     if is_distinct:
                         track.hits += 1

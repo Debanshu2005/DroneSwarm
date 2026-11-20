@@ -2,7 +2,8 @@
 Tests for moving peer dead-reckoning and unpositioned peer bounded deferral in peer exclusion.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from DroneOS.perception.geolocate import meters_to_lat_lon
@@ -369,3 +370,86 @@ def test_real_registry_and_telemetry_handler_dead_reckoning_changes_exclusion():
     assert matched_id_b == "drone2"
     assert dist_b < 1.0, f"Dead-reckoned peer should be within 1.0m of target, got {dist_b}"
     assert "REJECTED_PEER_EXCLUSION_MATCH_3D" in reason_b
+
+
+def test_clock_skew_sender_ahead_and_behind():
+    """Sender timestamp 10s ahead or behind must not cause premature purge, false staleness, or failure to age out."""
+    from DroneOS.core.swarm_manager import SwarmHeartbeatManager, SwarmRegistry, PeerSynchronization
+    from DroneOS.shared.protocol.messages import TelemetryData, TelemetryMessage
+
+    registry = SwarmRegistry(my_id="drone1")
+    sync = PeerSynchronization(registry=registry, my_id="drone1")
+    heartbeat_mgr = SwarmHeartbeatManager(registry=registry, timeout_sec=5.0, my_id="drone1")
+
+    # 1. Sender timestamp 10s behind
+    t_now = time.time()
+    telem_behind = TelemetryMessage(
+        sender_id="drone2",
+        timestamp=t_now - 10.0,
+        telemetry=TelemetryData(
+            flight_mode="OFFBOARD",
+            armed_state="ARMED",
+            gps_valid=True,
+            latitude=47.641468,
+            longitude=-122.140165,
+            altitude=10.0,
+            timestamp=t_now - 10.0,
+        )
+    )
+    sync.handle_telemetry(telem_behind)
+    peer2 = registry.get_peer("drone2")
+    assert peer2 is not None
+    assert abs(peer2.last_seen - t_now) < 0.5, "last_seen must be local receipt time"
+    assert abs(peer2.last_position_time - t_now) < 0.5, "last_position_time must be local receipt time"
+    assert peer2.position_msg_time == t_now - 10.0, "position_msg_time must store sender message timestamp"
+
+    # Must NOT be purged on timeout check
+    heartbeat_mgr.purge_stale_peers()
+    assert registry.get_peer("drone2") is not None, "Peer 10s behind must NOT be prematurely purged"
+
+    # Must NOT be marked stale in pipeline
+    swarm_mgr = MagicMock()
+    swarm_mgr.registry = registry
+    pipe = PerceptionPipeline(
+        drone_id="drone1",
+        frame_source=AsyncMock(),
+        detector=AsyncMock(),
+        flight_controller=AsyncMock(),
+        network_adapter=AsyncMock(),
+        swarm_manager=swarm_mgr,
+        config=PerceptionConfig(),
+    )
+    is_peer, decision, reason, _, _, _, _ = pipe._evaluate_peer_exclusion(
+        glat=47.641468, glon=-122.140165, agl=10.0,
+        u=640, v=360, w=1280, h=720, roll=0, pitch=0, yaw=0,
+        drone_lat=47.641468, drone_lon=-122.140165, alt=20.0,
+        now_curr=time.time(), obs_time=time.time()
+    )
+    assert "DEFERRED_STALE_PEER" not in reason, "Peer 10s behind must NOT be marked stale"
+
+    # 2. Sender timestamp 10s ahead
+    telem_ahead = TelemetryMessage(
+        sender_id="drone3",
+        timestamp=t_now + 10.0,
+        telemetry=TelemetryData(
+            flight_mode="OFFBOARD",
+            armed_state="ARMED",
+            gps_valid=True,
+            latitude=47.641468,
+            longitude=-122.140165,
+            altitude=10.0,
+            timestamp=t_now + 10.0,
+        )
+    )
+    sync.handle_telemetry(telem_ahead)
+    peer3 = registry.get_peer("drone3")
+    assert peer3 is not None
+    assert abs(peer3.last_seen - t_now) < 0.5, "last_seen must be local receipt time"
+    assert abs(peer3.last_position_time - t_now) < 0.5, "last_position_time must be local receipt time"
+    assert peer3.position_msg_time == t_now + 10.0, "position_msg_time must store sender message timestamp"
+
+    # Advance local time by 6s (> timeout_sec 5.0s): peer MUST age out!
+    future_time = t_now + 6.0
+    with patch("time.time", return_value=future_time):
+        heartbeat_mgr.purge_stale_peers()
+        assert registry.get_peer("drone3") is None, "Peer 10s ahead MUST age out when local time exceeds timeout"

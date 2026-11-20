@@ -10,6 +10,7 @@ from DroneOS.perception.aggregator import (
     GeoreferencedDetection,
     TrackAggregator,
 )
+from DroneOS.perception.geolocate import meters_to_lat_lon
 from ml.uavvaste.evaluate_temporal_confirmation import (
     CONFIGURATIONS,
     simulate_multi_frame_evaluation,
@@ -45,7 +46,8 @@ def test_temporal_confirmation_simulation_execution():
 def test_aggregator_duplicate_timestamp_rejection():
     """Verify that repeated processing of identical timestamp does NOT increment hits."""
     aggregator = TrackAggregator(drone_id="drone1", min_hits=2)
-    det = GeoreferencedDetection(label="rubbish", confidence=0.85, lat=40.0, lon=-74.0)
+    d1_lat, d1_lon = 40.0, -74.0
+    det = GeoreferencedDetection(label="rubbish", confidence=0.85, lat=40.0, lon=-74.0, drone_lat=d1_lat, drone_lon=d1_lon)
 
     # Frame 1 at t = 100.0
     emitted1 = aggregator.update([det], now=100.0)
@@ -58,8 +60,10 @@ def test_aggregator_duplicate_timestamp_rejection():
     assert len(emitted2) == 0
     assert aggregator.tracks[track_id].hits == 1  # Hits must NOT increment!
 
-    # Frame 2 at t = 102.5 (timestamp advances >= min_temporal_separation_s)
-    emitted3 = aggregator.update([det], now=102.5)
+    # Frame 2 at t = 102.5 (timestamp advances >= min_temporal_separation_s with displaced drone)
+    d2_lat, d2_lon = meters_to_lat_lon(2.5, 0.0, d1_lat, d1_lon)
+    det2 = GeoreferencedDetection(label="rubbish", confidence=0.85, lat=40.0, lon=-74.0, drone_lat=d2_lat, drone_lon=d2_lon)
+    emitted3 = aggregator.update([det2], now=102.5)
     assert len(emitted3) == 1  # Confirmed!
     assert emitted3[0].status == "new"
     assert aggregator.tracks[track_id].hits == 2
