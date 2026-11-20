@@ -36,7 +36,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-import airsim
+try:
+    import airsim
+except ImportError:
+    airsim = None
 from DroneOS.perception.aggregator import AggregatedTrack, GeoreferencedDetection, TrackAggregator
 from DroneOS.perception.detector import GarbageDetector
 from DroneOS.perception.frame_sources import AirSimFrameSource

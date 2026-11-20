@@ -218,9 +218,10 @@ async def test_pipeline_does_not_broadcast_unconfirmed_tracks():
     await pipeline._step()
     assert mock_net.broadcast_message.call_count == 0, "Pipeline must NOT broadcast on duplicate timestamp"
 
-    # Step 3: Advance timestamp to 102.5 (>= 2.0s separation for stationary drone) -> Hit 2 reached -> BROADCAST triggered
+    # Step 3: Advance timestamp and drone position (>= 3*sigma_diff displacement) -> Hit 2 reached -> BROADCAST triggered
     mock_frame.timestamp = 102.5
     mock_telem.timestamp = 102.5
+    mock_telem.latitude = float(mock_telem.latitude) + (2.2 / 111139.0)
     await pipeline._step()
     assert mock_net.broadcast_message.call_count == 1, "Pipeline MUST broadcast on hit 2"
 

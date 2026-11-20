@@ -59,7 +59,7 @@ class PerceptionPipeline:
             max_tracks=getattr(config, "max_tracks", 2000),
             min_temporal_separation_s=getattr(config, "min_temporal_separation_s", 2.0),
             min_drone_displacement_m=getattr(config, "min_drone_displacement_m", 1.5),
-            gps_sigma_m=getattr(config, "gps_sigma_m", 1.0),
+            gps_sigma_m=getattr(config, "gps_sigma_m", 0.5),
         )
 
         self._running = False
@@ -590,9 +590,27 @@ class PerceptionPipeline:
                 # Dead-reckon moving peer back/forward to the observation timestamp
                 if has_pos and last_pos_time is not None and isinstance(last_pos_time, (int, float)):
                     dt_obs = obs_time - float(last_pos_time)
-                    vx = float(getattr(peer, "vx", 0.0) or getattr(peer, "vel_n", 0.0) or 0.0)
-                    vy = float(getattr(peer, "vy", 0.0) or getattr(peer, "vel_e", 0.0) or 0.0)
-                    vz = float(getattr(peer, "vz", 0.0) or getattr(peer, "vel_d", 0.0) or 0.0)
+                    vx = getattr(peer, "velocity_x", None)
+                    if vx is None:
+                        vx = getattr(peer, "vx", None)
+                    if vx is None and hasattr(peer, "telemetry") and peer.telemetry:
+                        vx = getattr(peer.telemetry, "velocity_x", getattr(peer.telemetry, "vx", None))
+                    vx = float(vx or getattr(peer, "vel_n", 0.0) or 0.0)
+
+                    vy = getattr(peer, "velocity_y", None)
+                    if vy is None:
+                        vy = getattr(peer, "vy", None)
+                    if vy is None and hasattr(peer, "telemetry") and peer.telemetry:
+                        vy = getattr(peer.telemetry, "velocity_y", getattr(peer.telemetry, "vy", None))
+                    vy = float(vy or getattr(peer, "vel_e", 0.0) or 0.0)
+
+                    vz = getattr(peer, "velocity_z", None)
+                    if vz is None:
+                        vz = getattr(peer, "vz", None)
+                    if vz is None and hasattr(peer, "telemetry") and peer.telemetry:
+                        vz = getattr(peer.telemetry, "velocity_z", getattr(peer.telemetry, "vz", None))
+                    vz = float(vz or getattr(peer, "vel_d", 0.0) or 0.0)
+
                     if abs(dt_obs) <= max_age and (vx != 0.0 or vy != 0.0 or vz != 0.0):
                         dn = vx * dt_obs
                         de = vy * dt_obs
@@ -686,8 +704,9 @@ class PerceptionPipeline:
         """
         Re-evaluates buffered deferred detections against newly arrived peer positions
         dead-reckoned to the detection's observation timestamp.
-        Treats unpositioned active peers as unknown with bounded deferral instead
-        of dropping or permanently blocking genuine detections.
+        On deadline expiry, accepts only detections deferred because an active peer never
+        reported a position. If a peer was stale (has a position but old telemetry),
+        drops the detection to prevent false alerts (never confirmed).
         """
         accepted: List[GeoreferencedDetection] = []
         still_buffered: List[Dict[str, Any]] = []
@@ -717,12 +736,12 @@ class PerceptionPipeline:
 
             if is_peer:
                 logger.info("Deferred detection matches peer %s upon telemetry update; excluding.", reason)
-            elif decision == "ACCEPTED" or is_deadline_expired:
+            elif decision == "ACCEPTED":
                 logger.info(
-                    "Deferred detection at (%.6f, %.6f) confirmed %s.",
+                    "Deferred detection at (%.6f, %.6f) accepted (%s).",
                     item["glat"],
                     item["glon"],
-                    "after peer telemetry update" if decision == "ACCEPTED" else "after bounded deferral window elapsed",
+                    "after bounded deferral window for unpositioned peer" if is_deadline_expired else "after peer telemetry update",
                 )
                 accepted.append(
                     GeoreferencedDetection(
@@ -734,6 +753,14 @@ class PerceptionPipeline:
                         drone_lat=item["drone_lat"],
                         drone_lon=item["drone_lon"],
                     )
+                )
+            elif is_deadline_expired:
+                # Deadline expired but peer is still stale (or uncertain) -> drop it, never confirm!
+                logger.warning(
+                    "Dropping deferred detection at (%.6f, %.6f): deferral deadline expired but peer telemetry remains stale (%s).",
+                    item["glat"],
+                    item["glon"],
+                    reason,
                 )
             else:
                 still_buffered.append(item)

@@ -205,6 +205,7 @@ async def test_production_network_stack_and_gcs_v8_execution():
 @pytest.mark.asyncio
 async def test_truthful_offline_reporting_contract():
     """Verify validation script truthfully reports BLOCKED when AirSim RPC is offline (no fake success)."""
+    pytest.importorskip("airsim", reason="airsim not installed")
     from scripts.validate_single_drone_airsim import execute_genuine_airsim_validation
 
     # Port 41459 is not listening
@@ -604,12 +605,13 @@ async def test_pipeline_safety_gates_rejection_diagnostics():
 
     # Gate 9: Aggregation no emission on 1st hit when min_hits=2
     cur_time = [now]
+    cur_lat = [47.641468]
     frame1 = Frame(image=np.zeros((720, 1280, 3), dtype=np.uint8), timestamp=now)
     frame2 = Frame(image=np.zeros((720, 1280, 3), dtype=np.uint8), timestamp=now + 2.5)
     fs_advancing = MagicMock()
     fs_advancing.get_frame = AsyncMock(side_effect=[frame1, frame2])
     fc_advancing = MagicMock()
-    fc_advancing.get_telemetry = AsyncMock(side_effect=lambda: make_telem(timestamp=cur_time[0]))
+    fc_advancing.get_telemetry = AsyncMock(side_effect=lambda: make_telem(timestamp=cur_time[0], latitude=cur_lat[0]))
 
     pipe = PerceptionPipeline(drone_id="drone1", frame_source=fs_advancing, detector=detector, flight_controller=fc_advancing, network_adapter=net_mock, config=config)
     await pipe._step()
@@ -624,8 +626,9 @@ async def test_pipeline_safety_gates_rejection_diagnostics():
     assert track.confirmed is False
     assert track.hits == 1
 
-    # Step 2: 2nd hit with advancing time confirms track and emits!
+    # Step 2: 2nd hit with advancing time and displaced position confirms track and emits!
     cur_time[0] = now + 2.5
+    cur_lat[0] = 47.641468 + (2.2 / 111139.0)
     await pipe._step()
     assert pipe.last_rejection_reason is None
     assert pipe.last_step_stats["emitted_items"] == 1

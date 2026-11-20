@@ -1,24 +1,10 @@
 #!/usr/bin/env python3
 """
-Evaluate multi-frame temporal confirmation configurations for DroneSwarm.
+Synthetic Monte Carlo evaluation of multi-frame temporal confirmation configurations for DroneSwarm.
 
-Evaluates 5 configurations across multi-frame sequence data:
-- Baseline: conf = 0.35, min_hits = 1
-- Config A: conf = 0.50, min_hits = 1
-- Config B: conf = 0.55, min_hits = 2
-- Config C: conf = 0.60, min_hits = 2
-- Config D: conf = 0.60, min_hits = 3
-
-Computes:
-- Precision after confirmation
-- Recall after confirmation
-- F1 score
-- Confirmation delay (frames / seconds at 1 FPS)
-- False alerts per minute (at 1 FPS flight rate)
-- Duplicate event rate
-- Missed detections count
-
-Exports results to CSV, JSON, and visual charts.
+Models sequence data using empirical single-frame detection probabilities and false alarm rates
+derived from the UAVVaste validation split. NOTE: This is a synthetic Monte Carlo simulation;
+multi-frame confirmation on continuous live video streams remains unvalidated (unverified).
 """
 
 import argparse
@@ -290,8 +276,12 @@ def export_and_plot(results: List[Dict], out_dir: Path):
     with open(json_file, "w", encoding="utf-8") as f:
         json.dump(
             {
-                "description": "Multi-frame temporal confirmation evaluation across DroneSwarm configurations",
+                "description": "Synthetic Monte Carlo multi-frame sequence simulation based on static UAVVaste error rates",
+                "simulation_type": "synthetic_monte_carlo",
+                "live_video_validated": False,
+                "note": "Evaluation is based on a synthetic Monte Carlo simulation modeling static UAVVaste validation split error rates. Default confidence 0.55 with min_hits=2 was selected by optimizing F1 (82.7%) and minimizing false alerts per minute (0.00/min). Confirmation on continuous live video streams remains unvalidated (unverified).",
                 "configurations_evaluated": len(results),
+                "recommended_configuration": "Config B (conf=0.55, min_hits=2, selected for highest F1 among low false-alert configurations)",
                 "results": results,
             },
             f,

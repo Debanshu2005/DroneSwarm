@@ -43,9 +43,24 @@ class PeerStateManager:
         self.lat: Optional[float] = None
         self.lon: Optional[float] = None
         self.alt: Optional[float] = None
+        self.velocity_x: Optional[float] = None
+        self.velocity_y: Optional[float] = None
+        self.velocity_z: Optional[float] = None
         self.position_valid: bool = False
         self.last_position_time: Optional[float] = None
         self.battery_level: Optional[float] = None
+
+    @property
+    def vx(self) -> Optional[float]:
+        return self.velocity_x
+
+    @property
+    def vy(self) -> Optional[float]:
+        return self.velocity_y
+
+    @property
+    def vz(self) -> Optional[float]:
+        return self.velocity_z
 
 class SwarmRegistry:
     def __init__(self, my_id: Optional[str] = None):
@@ -211,16 +226,21 @@ class PeerSynchronization:
         pos_updated = False
         pos_ts = None
 
+        ts = getattr(t, 'timestamp', None) or getattr(msg, 'timestamp', None) or time.time()
         if peer:
             peer.telemetry = t
-            peer.last_seen = time.time()
+            peer.last_seen = ts
+            if t:
+                peer.velocity_x = getattr(t, "velocity_x", getattr(t, "vx", None))
+                peer.velocity_y = getattr(t, "velocity_y", getattr(t, "vy", None))
+                peer.velocity_z = getattr(t, "velocity_z", getattr(t, "vz", None))
             # Also update position fields used by FormationEngine anchor checks
             if t and gps_valid and has_coords:
                 peer.lat = lat
                 peer.lon = lon
                 peer.alt = alt
                 peer.position_valid = True
-                peer.last_position_time = time.time()
+                peer.last_position_time = ts
                 pos_updated = True
                 pos_ts = peer.last_position_time
 

@@ -1,6 +1,10 @@
 {
-  "description": "Multi-frame temporal confirmation evaluation across DroneSwarm configurations",
+  "description": "Synthetic Monte Carlo multi-frame sequence simulation based on static UAVVaste error rates",
+  "simulation_type": "synthetic_monte_carlo",
+  "live_video_validated": false,
+  "note": "Evaluation is based on a synthetic Monte Carlo simulation modeling static UAVVaste validation split error rates. Default confidence 0.55 with min_hits=2 was selected by optimizing F1 (82.7%) and minimizing false alerts per minute (0.00/min). Confirmation on continuous live video streams remains unvalidated (unverified).",
   "configurations_evaluated": 5,
+  "recommended_configuration": "Config B (conf=0.55, min_hits=2, selected for highest F1 among low false-alert configurations)",
   "results": [
     {
       "experiment": "Baseline",

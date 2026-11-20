@@ -21,7 +21,7 @@ deferred_buffer_window_s: 3.0
 unknown_peer_deferral_max_s: 3.0
 min_temporal_separation_s: 2.0
 min_drone_displacement_m: 1.5
-gps_sigma_m: 0.6
+gps_sigma_m: 0.5
 min_hits: 2
 update_interval_s: 10.0
 max_tracks: 2000

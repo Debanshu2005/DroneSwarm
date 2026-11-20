@@ -99,7 +99,7 @@ The confidence threshold trade-off was evaluated systematically across the valid
 
 > [!TIP]
 > **Why `0.55` is the Production Swarm Standard:**  
-> At `conf = 0.55`, the model achieves **93.99% precision**, reducing false positive alarms by **56.9%** while maintaining over 71% single-frame recall. When paired with multi-drone track aggregation and temporal voting (requiring $\ge 2$ sightings), false-alarm rates drop to near zero.
+> At `conf = 0.55`, the model achieves **93.99% precision** on single frames (96.3% on deployed test split), reducing false positive alarms by **56.9%** while maintaining over 71% single-frame recall. When paired with multi-drone track aggregation and temporal confirmation (requiring $\ge 2$ sightings separated by viewpoint/displacement), synthetic Monte Carlo simulation indicates false alerts drop to near zero. Note: continuous live video stream confirmation remains unvalidated (unverified).
 
 ---
 

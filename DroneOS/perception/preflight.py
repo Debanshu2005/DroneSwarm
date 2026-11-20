@@ -44,14 +44,12 @@ def run_perception_preflight(
         repo_root = Path(__file__).resolve().parent.parent.parent
 
     missing_deps = []
-    try:
-        import numpy
-    except ImportError:
+    import importlib.util
+
+    if importlib.util.find_spec("numpy") is None:
         missing_deps.append("numpy")
 
-    try:
-        import cv2
-    except ImportError:
+    if importlib.util.find_spec("cv2") is None:
         missing_deps.append("opencv-python-headless")
 
     raw_weights = getattr(perception_cfg, "weights", "models/garbage.pt")
@@ -61,14 +59,10 @@ def run_perception_preflight(
 
     is_onnx = weights_path.suffix.lower() == ".onnx"
     if is_onnx:
-        try:
-            import onnxruntime
-        except (ImportError, ModuleNotFoundError):
+        if importlib.util.find_spec("onnxruntime") is None:
             missing_deps.append("onnxruntime")
     else:
-        try:
-            import ultralytics
-        except (ImportError, ModuleNotFoundError):
+        if importlib.util.find_spec("ultralytics") is None:
             missing_deps.append("ultralytics")
 
     if missing_deps:

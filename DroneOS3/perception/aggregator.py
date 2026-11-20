@@ -33,6 +33,7 @@ class AggregatedTrack:
     last_distinct_hit_time: float = 0.0
     last_distinct_drone_lat: Optional[float] = None
     last_distinct_drone_lon: Optional[float] = None
+    last_distinct_bearing_deg: Optional[float] = None
 
 
 @dataclass
@@ -79,7 +80,8 @@ class TrackAggregator:
         unconfirmed_ttl_s: float = 30.0,
         min_temporal_separation_s: float = 2.0,
         min_drone_displacement_m: float = 1.5,
-        gps_sigma_m: float = 0.6,
+        gps_sigma_m: float = 0.5,
+        min_viewpoint_angle_deg: float = 5.0,
     ):
         self.drone_id = drone_id
         self.merge_radius_m = merge_radius_m
@@ -90,6 +92,7 @@ class TrackAggregator:
         self.min_temporal_separation_s = min_temporal_separation_s
         self.min_drone_displacement_m = min_drone_displacement_m
         self.gps_sigma_m = gps_sigma_m
+        self.min_viewpoint_angle_deg = min_viewpoint_angle_deg
 
         self._seq = 0
         self.tracks: Dict[str, AggregatedTrack] = {}
@@ -130,29 +133,66 @@ class TrackAggregator:
                 matched_track_ids.add(best_track_id)
                 track = self.tracks[best_track_id]
 
-                # Check observation distinctness for temporal confirmation (Requirement 8):
-                # Requires either >= min_temporal_separation_s OR >= max(min_drone_displacement_m, 3 * gps_sigma_m)
-                # to ensure robustness against civil GPS noise on stationary hovering drones.
+                # Check observation distinctness for temporal confirmation:
+                # Requires drone displacement >= max(min_drone_displacement_m, 3 * sigma_diff)
+                # OR viewpoint angle change >= min_viewpoint_angle_deg.
+                # Stationary hovering drone with GPS jitter must NOT confirm on time separation alone.
                 if not track.confirmed:
-                    dt = now - track.last_distinct_hit_time
-                    disp_m = 0.0
-                    if (
+                    has_drone_coords = (
                         det.drone_lat is not None
                         and det.drone_lon is not None
                         and track.last_distinct_drone_lat is not None
                         and track.last_distinct_drone_lon is not None
-                    ):
-                        d_dn, d_de = lat_lon_to_meters(det.drone_lat, det.drone_lon, track.last_distinct_drone_lat, track.last_distinct_drone_lon)
+                    )
+
+                    disp_m = 0.0
+                    delta_bearing_deg = 0.0
+                    if has_drone_coords:
+                        d_dn, d_de = lat_lon_to_meters(
+                            det.drone_lat, det.drone_lon,
+                            track.last_distinct_drone_lat, track.last_distinct_drone_lon
+                        )
                         disp_m = math.hypot(d_dn, d_de)
 
-                    required_disp = max(self.min_drone_displacement_m, 3.0 * self.gps_sigma_m)
-                    if dt >= self.min_temporal_separation_s or disp_m >= required_disp:
+                        t_dn, t_de = lat_lon_to_meters(track.lat, track.lon, det.drone_lat, det.drone_lon)
+                        current_bearing = math.degrees(math.atan2(t_de, t_dn)) % 360.0
+
+                        if track.last_distinct_bearing_deg is not None:
+                            diff = abs(current_bearing - track.last_distinct_bearing_deg) % 360.0
+                            delta_bearing_deg = 360.0 - diff if diff > 180.0 else diff
+                        else:
+                            delta_bearing_deg = 0.0
+
+                    sigma_diff = math.sqrt(2.0) * self.gps_sigma_m
+                    required_disp = max(self.min_drone_displacement_m, 3.0 * sigma_diff)
+
+                    dt = now - track.last_distinct_hit_time
+                    time_advanced = (now > track.last_seen)
+
+                    # Stationary drone must NOT confirm on time separation alone.
+                    # Requires drone displacement >= 3*sigma_diff OR viewpoint change exceeding GPS noise cone.
+                    if has_drone_coords:
+                        t_dn, t_de = lat_lon_to_meters(track.lat, track.lon, det.drone_lat, det.drone_lon)
+                        range_to_target = max(1.0, math.hypot(t_dn, t_de))
+                        # 3-sigma angular noise cone from GPS jitter at current range
+                        angle_threshold_deg = max(
+                            self.min_viewpoint_angle_deg,
+                            math.degrees(3.0 * sigma_diff / range_to_target)
+                        )
+                        viewpoint_or_disp_ok = (disp_m >= required_disp) or (delta_bearing_deg >= angle_threshold_deg)
+                        is_distinct = time_advanced and viewpoint_or_disp_ok
+                    else:
+                        is_distinct = (dt >= self.min_temporal_separation_s)
+
+                    if is_distinct:
                         track.hits += 1
                         track.distinct_hits += 1
                         track.last_distinct_hit_time = now
                         if det.drone_lat is not None and det.drone_lon is not None:
                             track.last_distinct_drone_lat = det.drone_lat
                             track.last_distinct_drone_lon = det.drone_lon
+                            t_dn, t_de = lat_lon_to_meters(track.lat, track.lon, det.drone_lat, det.drone_lon)
+                            track.last_distinct_bearing_deg = math.degrees(math.atan2(t_de, t_dn)) % 360.0
                 else:
                     if now > track.last_seen:
                         track.hits += 1
@@ -175,6 +215,11 @@ class TrackAggregator:
                 # Create a new candidate track
                 self._seq += 1
                 new_id = f"{self.drone_id}-g{self._seq:04d}"
+                init_bearing = None
+                if det.drone_lat is not None and det.drone_lon is not None:
+                    t_dn, t_de = lat_lon_to_meters(det.lat, det.lon, det.drone_lat, det.drone_lon)
+                    init_bearing = math.degrees(math.atan2(t_de, t_dn)) % 360.0
+
                 track = AggregatedTrack(
                     id=new_id,
                     label=det.label,
@@ -194,6 +239,7 @@ class TrackAggregator:
                     last_distinct_hit_time=now,
                     last_distinct_drone_lat=det.drone_lat,
                     last_distinct_drone_lon=det.drone_lon,
+                    last_distinct_bearing_deg=init_bearing,
                     last_emitted_time=0.0,
                     last_emitted_hits=0,
                     confirmed=False,

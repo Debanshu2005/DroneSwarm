@@ -3,6 +3,7 @@
 import pytest
 
 from DroneOS.perception.aggregator import GeoreferencedDetection, TrackAggregator
+from DroneOS.perception.geolocate import meters_to_lat_lon
 
 
 def test_aggregator_new_and_update_emission():
@@ -20,9 +21,11 @@ def test_aggregator_new_and_update_emission():
     items1 = agg.update([det1], now=t0)
     assert len(items1) == 0  # min_hits is 2, not yet confirmed
 
-    # Frame 2: second sighting after min_temporal_separation_s (2.0s)
+    # Frame 2: second sighting after min_temporal_separation_s (2.0s) with drone flight displacement
     # Confidence-weighted mean: (0.8*lat1 + 0.6*lat2) / (0.8 + 0.6)
-    det2 = GeoreferencedDetection(label="rubbish", confidence=0.6, lat=22.314008, lon=87.310008, drone_lat=22.314, drone_lon=87.310)
+    from DroneOS.perception.geolocate import meters_to_lat_lon
+    d2_lat, d2_lon = meters_to_lat_lon(3.0, 0.0, 22.314, 87.310)
+    det2 = GeoreferencedDetection(label="rubbish", confidence=0.6, lat=22.314008, lon=87.310008, drone_lat=d2_lat, drone_lon=d2_lon)
     items2 = agg.update([det2], now=t0 + 2.0)
     assert len(items2) == 1
     new_item = items2[0]
@@ -126,9 +129,18 @@ def test_stationary_drone_cannot_self_confirm_in_consecutive_frames():
     assert track.hits == 1, "Hits must not increment when stationary and dt < min_temporal_separation_s"
     assert not track.confirmed
 
-    # Frame 3 arriving after min_temporal_separation_s (>= 2.0s from frame 1)
+    # Frame 3 arriving after min_temporal_separation_s (>= 2.0s from frame 1):
+    # Still stationary -> MUST NOT self-confirm by time separation alone!
     res3 = agg.update([det2], now=t0 + 2.0)
-    assert len(res3) == 1, "Should confirm once temporal separation threshold is satisfied"
+    assert len(res3) == 0, "Stationary drone must NOT self-confirm on time separation alone"
+    assert track.hits == 1
+    assert not track.confirmed
+
+    # Frame 4 arriving after drone displaces along flight path (>= 3*sigma_diff) -> confirms!
+    d4_lat, d4_lon = meters_to_lat_lon(2.3, 0.0, 22.314, 87.310)
+    det4 = GeoreferencedDetection(label="rubbish", confidence=0.8, lat=22.314, lon=87.310, drone_lat=d4_lat, drone_lon=d4_lon)
+    res4 = agg.update([det4], now=t0 + 2.5)
+    assert len(res4) == 1, "Drone confirms once displaced by >= 3*sigma_diff"
     assert track.hits == 2
     assert track.confirmed is True
 

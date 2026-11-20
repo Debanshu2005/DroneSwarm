@@ -70,11 +70,8 @@ def test_onnx_vs_pt_parity():
     if not pt_path.exists() or not onnx_path.exists():
         pytest.skip("Model weights models/garbage.pt or models/garbage.onnx not found")
 
-    try:
-        import ultralytics
-        import onnxruntime
-    except ImportError:
-        pytest.skip("ultralytics or onnxruntime not installed")
+    pytest.importorskip("ultralytics", reason="ultralytics not installed")
+    pytest.importorskip("onnxruntime", reason="onnxruntime not installed")
 
     det_pt = GarbageDetector(weights_path=str(pt_path), confidence=0.25, imgsz=640)
     det_onnx = GarbageDetector(weights_path=str(onnx_path), confidence=0.25, imgsz=640)

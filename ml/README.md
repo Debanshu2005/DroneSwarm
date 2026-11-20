@@ -114,6 +114,10 @@ The production model weights are installed at:
 python ml/uavvaste/export_onnx.py --weights models/garbage.pt --imgsz 640 --opset 17
 ```
 
+### Multi-Frame Temporal Confirmation & Default Threshold (0.55):
+- The default confidence of **0.55** with `min_hits = 2` was selected to maximize F1 score while eliminating swarm false alerts (0.00 false alerts/min in simulation vs 27.8/min at 0.35, and 96.3% single-frame precision on the official test split).
+- **Synthetic Status Note**: Temporal confirmation metrics in `ml/reports/temporal_confirmation_results.json` are produced by a synthetic Monte Carlo simulation modeling single-frame UAVVaste error rates. Multi-frame confirmation on continuous live video streams remains unvalidated (unverified).
+
 ### Running Threshold Evaluation:
 ```bash
 python ml/uavvaste/evaluate_thresholds.py --split val --device cuda:0

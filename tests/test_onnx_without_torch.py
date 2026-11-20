@@ -105,6 +105,8 @@ def test_letterbox_preprocessing_aspect_ratio_preservation():
 
 def test_pure_onnxruntime_anchor_inference(tmp_path):
     """Verify pure ONNX Runtime inference parses anchor format, metadata, and keeps float bounds."""
+    pytest.importorskip("onnx", reason="onnx not installed")
+    pytest.importorskip("onnxruntime", reason="onnxruntime not installed")
     onnx_file = tmp_path / "test_anchor.onnx"
     create_synthetic_anchor_onnx(onnx_file)
 
@@ -140,6 +142,8 @@ def test_pure_onnxruntime_anchor_inference(tmp_path):
 
 def test_pure_onnxruntime_end_to_end_inference(tmp_path):
     """Verify pure ONNX Runtime handles end-to-end NMS output format [1, N, 6]."""
+    pytest.importorskip("onnx", reason="onnx not installed")
+    pytest.importorskip("onnxruntime", reason="onnxruntime not installed")
     onnx_file = tmp_path / "test_e2e.onnx"
     create_synthetic_e2e_onnx(onnx_file)
 

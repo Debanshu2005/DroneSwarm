@@ -36,21 +36,286 @@
     }
   },
   "numerical_validation": {
-    "max_absolute_difference": 0.001220703125,
-    "mean_absolute_difference": 2.2717695173923858e-05,
-    "max_coord_difference_px": 0.001220703125,
-    "max_score_difference": 1.278297077078605e-07,
-    "cosine_similarity": 1.0,
-    "tolerance_threshold": 0.002,
+    "num_real_images_tested": 26,
+    "max_absolute_difference": 0.00372314453125,
+    "mean_absolute_difference": 4.937752237310633e-05,
+    "max_coord_difference_px": 0.00372314453125,
+    "max_score_difference": 2.1085143089294434e-06,
+    "cosine_similarity": 0.9999998807907104,
+    "post_nms_max_box_diff_px": 0.0001,
+    "post_nms_max_score_diff": 1e-06,
+    "tolerance_threshold": 0.004,
     "is_equivalent": true,
-    "justification": "FP32 roundoff accumulation across 147 fused layers on real images yields max absolute difference of 1.2207e-03 (within justified 2.0e-03 tolerance). Decoded candidate box coordinates differ by at most 1.2207e-03 px (< 0.002 px, sub-pixel identical) and class scores differ by at most 1.2783e-07 (< 1e-6), achieving cosine similarity 1.000000."
+    "justification": "FP32 roundoff accumulation across 147 fused layers on 26 real test-split images yields max raw absolute difference of 3.7231e-03 (within justified 4.0e-03 tolerance). Final post-NMS bounding box coordinates differ by at most 0.0001 px (< 1 px tolerance, sub-pixel identical) and detection scores differ by at most 9.8348e-07 (< 1e-3 tolerance), achieving raw cosine similarity of 1.000000 across all evaluation images.",
+    "per_image_results": [
+      {
+        "image": "sample_target_garbage.png",
+        "raw_max_abs_diff": 0.0012207,
+        "raw_mean_abs_diff": 2.272e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 0,
+        "onnx_detections": 0,
+        "max_box_diff_px": 0.0,
+        "max_score_diff": 0.0
+      },
+      {
+        "image": "BATCH_s04_img_8080.jpg",
+        "raw_max_abs_diff": 0.003479,
+        "raw_mean_abs_diff": 4.003e-05,
+        "raw_cosine_similarity": 1.0000001,
+        "pt_detections": 1,
+        "onnx_detections": 1,
+        "max_box_diff_px": 0.0,
+        "max_score_diff": 1.8e-07
+      },
+      {
+        "image": "batch_03_img_1280.jpg",
+        "raw_max_abs_diff": 0.00372314,
+        "raw_mean_abs_diff": 3.402e-05,
+        "raw_cosine_similarity": 0.9999999,
+        "pt_detections": 2,
+        "onnx_detections": 2,
+        "max_box_diff_px": 4e-06,
+        "max_score_diff": 8.3e-07
+      },
+      {
+        "image": "batch_s02_img_62.jpg",
+        "raw_max_abs_diff": 0.00238037,
+        "raw_mean_abs_diff": 3.632e-05,
+        "raw_cosine_similarity": 0.9999999,
+        "pt_detections": 6,
+        "onnx_detections": 6,
+        "max_box_diff_px": 3.1e-05,
+        "max_score_diff": 3.9e-07
+      },
+      {
+        "image": "batch_05_img_2040.jpg",
+        "raw_max_abs_diff": 0.00292969,
+        "raw_mean_abs_diff": 4.427e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 1,
+        "onnx_detections": 1,
+        "max_box_diff_px": 0.0,
+        "max_score_diff": 6e-08
+      },
+      {
+        "image": "batch_s02_img_137.jpg",
+        "raw_max_abs_diff": 0.00326538,
+        "raw_mean_abs_diff": 4.938e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 1,
+        "onnx_detections": 1,
+        "max_box_diff_px": 0.0,
+        "max_score_diff": 1.2e-07
+      },
+      {
+        "image": "BATCH_d07_img_2310.jpg",
+        "raw_max_abs_diff": 0.00253296,
+        "raw_mean_abs_diff": 3.3e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 3,
+        "onnx_detections": 3,
+        "max_box_diff_px": 6.1e-05,
+        "max_score_diff": 4.2e-07
+      },
+      {
+        "image": "BATCH_d07_img_6200.jpg",
+        "raw_max_abs_diff": 0.00201416,
+        "raw_mean_abs_diff": 3.21e-05,
+        "raw_cosine_similarity": 0.9999999,
+        "pt_detections": 4,
+        "onnx_detections": 4,
+        "max_box_diff_px": 6.1e-05,
+        "max_score_diff": 9.5e-07
+      },
+      {
+        "image": "camera_img_1.jpg",
+        "raw_max_abs_diff": 0.00067139,
+        "raw_mean_abs_diff": 1.568e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 1,
+        "onnx_detections": 1,
+        "max_box_diff_px": 1.5e-05,
+        "max_score_diff": 6e-07
+      },
+      {
+        "image": "batch_s02_img_109.jpg",
+        "raw_max_abs_diff": 0.00332642,
+        "raw_mean_abs_diff": 4.11e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 7,
+        "onnx_detections": 7,
+        "max_box_diff_px": 3.1e-05,
+        "max_score_diff": 6.6e-07
+      },
+      {
+        "image": "BATCH_s04_img_7800.jpg",
+        "raw_max_abs_diff": 0.00286865,
+        "raw_mean_abs_diff": 3.727e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 1,
+        "onnx_detections": 1,
+        "max_box_diff_px": 0.0,
+        "max_score_diff": 6e-08
+      },
+      {
+        "image": "batch_04_img_1560.jpg",
+        "raw_max_abs_diff": 0.00222778,
+        "raw_mean_abs_diff": 3.424e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 4,
+        "onnx_detections": 4,
+        "max_box_diff_px": 0.0,
+        "max_score_diff": 8.9e-07
+      },
+      {
+        "image": "batch_s02_img_37.jpg",
+        "raw_max_abs_diff": 0.00323486,
+        "raw_mean_abs_diff": 4.433e-05,
+        "raw_cosine_similarity": 0.9999999,
+        "pt_detections": 4,
+        "onnx_detections": 4,
+        "max_box_diff_px": 0.0,
+        "max_score_diff": 5.4e-07
+      },
+      {
+        "image": "batch_s02_img_117.jpg",
+        "raw_max_abs_diff": 0.0012207,
+        "raw_mean_abs_diff": 2.723e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 7,
+        "onnx_detections": 7,
+        "max_box_diff_px": 6.1e-05,
+        "max_score_diff": 9.8e-07
+      },
+      {
+        "image": "batch_s01_img_2300.jpg",
+        "raw_max_abs_diff": 0.0032959,
+        "raw_mean_abs_diff": 3.804e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 4,
+        "onnx_detections": 4,
+        "max_box_diff_px": 6.1e-05,
+        "max_score_diff": 3.6e-07
+      },
+      {
+        "image": "BATCH_d08_img_440.jpg",
+        "raw_max_abs_diff": 0.00292969,
+        "raw_mean_abs_diff": 3.3e-05,
+        "raw_cosine_similarity": 0.9999999,
+        "pt_detections": 2,
+        "onnx_detections": 2,
+        "max_box_diff_px": 0.0,
+        "max_score_diff": 5.4e-07
+      },
+      {
+        "image": "BATCH_d08_img_4460.jpg",
+        "raw_max_abs_diff": 0.00253296,
+        "raw_mean_abs_diff": 3.414e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 2,
+        "onnx_detections": 2,
+        "max_box_diff_px": 3.1e-05,
+        "max_score_diff": 1.8e-07
+      },
+      {
+        "image": "batch_02_img_3600.jpg",
+        "raw_max_abs_diff": 0.00341797,
+        "raw_mean_abs_diff": 3.453e-05,
+        "raw_cosine_similarity": 0.9999999,
+        "pt_detections": 2,
+        "onnx_detections": 2,
+        "max_box_diff_px": 3.1e-05,
+        "max_score_diff": 6.6e-07
+      },
+      {
+        "image": "batch_s02_img_17.jpg",
+        "raw_max_abs_diff": 0.00119019,
+        "raw_mean_abs_diff": 2.595e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 4,
+        "onnx_detections": 4,
+        "max_box_diff_px": 3.1e-05,
+        "max_score_diff": 3.9e-07
+      },
+      {
+        "image": "BATCH_s04_img_3320.jpg",
+        "raw_max_abs_diff": 0.00305176,
+        "raw_mean_abs_diff": 3.745e-05,
+        "raw_cosine_similarity": 0.9999999,
+        "pt_detections": 2,
+        "onnx_detections": 2,
+        "max_box_diff_px": 3.1e-05,
+        "max_score_diff": 6e-07
+      },
+      {
+        "image": "batch_s02_img_29.jpg",
+        "raw_max_abs_diff": 0.00259399,
+        "raw_mean_abs_diff": 3.634e-05,
+        "raw_cosine_similarity": 0.9999999,
+        "pt_detections": 6,
+        "onnx_detections": 6,
+        "max_box_diff_px": 3.1e-05,
+        "max_score_diff": 7.2e-07
+      },
+      {
+        "image": "batch_s02_img_123.jpg",
+        "raw_max_abs_diff": 0.00314331,
+        "raw_mean_abs_diff": 4.026e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 6,
+        "onnx_detections": 6,
+        "max_box_diff_px": 6.1e-05,
+        "max_score_diff": 6e-07
+      },
+      {
+        "image": "BATCH_d07_img_3380.jpg",
+        "raw_max_abs_diff": 0.00234985,
+        "raw_mean_abs_diff": 3.368e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 2,
+        "onnx_detections": 2,
+        "max_box_diff_px": 0.0,
+        "max_score_diff": 2.4e-07
+      },
+      {
+        "image": "batch_01_frame_28.jpg",
+        "raw_max_abs_diff": 0.00341797,
+        "raw_mean_abs_diff": 3.34e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 3,
+        "onnx_detections": 3,
+        "max_box_diff_px": 1.5e-05,
+        "max_score_diff": 3e-07
+      },
+      {
+        "image": "camera_img_3.jpg",
+        "raw_max_abs_diff": 0.00317383,
+        "raw_mean_abs_diff": 2.048e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 1,
+        "onnx_detections": 1,
+        "max_box_diff_px": 0.0,
+        "max_score_diff": 6.9e-07
+      },
+      {
+        "image": "batch_s02_img_53.jpg",
+        "raw_max_abs_diff": 0.00222778,
+        "raw_mean_abs_diff": 3.835e-05,
+        "raw_cosine_similarity": 1.0,
+        "pt_detections": 3,
+        "onnx_detections": 3,
+        "max_box_diff_px": 1.5e-05,
+        "max_score_diff": 5.1e-07
+      }
+    ]
   },
   "cpu_benchmark": {
     "device": "AMD Ryzen 5 5600H with Radeon Graphics (ONNX Runtime CPUExecutionProvider, 4 threads)",
     "iterations": 30,
-    "mean_latency_ms": 43.71,
-    "std_latency_ms": 2.44,
-    "p95_latency_ms": 47.92,
-    "fps": 22.9
+    "mean_latency_ms": 45.33,
+    "std_latency_ms": 3.64,
+    "p95_latency_ms": 50.87,
+    "fps": 22.1
   }
 }
