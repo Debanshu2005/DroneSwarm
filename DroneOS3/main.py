@@ -148,9 +148,14 @@ class DroneOSApp:
             self.perception_cfg = PerceptionConfig(enabled=False)
 
         import os
-        env_perc = os.environ.get("DRONEOS_PERCEPTION")
-        if env_perc is not None:
-            self.perception_cfg.enabled = env_perc.strip().lower() in ("1", "true", "yes")
+        if "--no-perception" in sys.argv:
+            self.perception_cfg.enabled = False
+        elif "--perception" in sys.argv:
+            self.perception_cfg.enabled = True
+        else:
+            env_perc = os.environ.get("DRONEOS_PERCEPTION")
+            if env_perc is not None:
+                self.perception_cfg.enabled = env_perc.strip().lower() in ("1", "true", "yes")
 
         # Perception Preflight Check
         repo_root = Path(__file__).resolve().parent.parent
@@ -295,11 +300,13 @@ class DroneOSApp:
             telemetry_interval=self.network_cfg.telemetry_interval,
             heartbeat_interval=self.network_cfg.heartbeat_interval,
             swarm_manager=self.swarm_manager,
-            state_store=self.state_store
+            state_store=self.state_store,
+            perception_status_fn=self.get_perception_status,
         )
         
         # Perception Pipeline Wiring
         self.perception_pipeline = None
+        self._perception_init_error = None
         if getattr(self, 'perception_cfg', None) and self.perception_cfg.enabled:
             try:
                 from DroneOS3.perception.detector import GarbageDetector
@@ -359,9 +366,17 @@ class DroneOSApp:
                     session_generation=self.session_generation,
                     swarm_manager=self.swarm_manager,
                 )
-                logger.info("Perception pipeline initialized.")
+                logger.info("Perception pipeline initialized on %s (%s).", self.node_id, self.drone_cfg.vehicle_name)
             except Exception as e:
-                logger.exception("Failed to initialize perception pipeline: %s", e)
+                self._perception_init_error = f"Pipeline initialization failed: {e}"
+                logger.error(
+                    "ERROR: Failed to initialize perception pipeline on %s (%s): %s. "
+                    "Fix: Verify model weights exist at '%s', camera source is reachable, and ML dependencies (ultralytics/onnxruntime) are installed.",
+                    self.node_id,
+                    self.drone_cfg.vehicle_name,
+                    e,
+                    self.perception_cfg.weights,
+                )
                 self.perception_pipeline = None
 
         self.diagnostics = SystemHealthReporter(
@@ -407,6 +422,12 @@ class DroneOSApp:
         from DroneOS3.perception.preflight import PerceptionStatus
         if not getattr(self, "perception_cfg", None) or not self.perception_cfg.enabled:
             return PerceptionStatus("DISABLED", "perception disabled in configuration")
+
+        if getattr(self, "_perception_init_error", None):
+            return PerceptionStatus("DEGRADED", self._perception_init_error)
+
+        if getattr(self, "_perception_preflight_status", "OK") != "OK":
+            return PerceptionStatus(self._perception_preflight_status, self._perception_preflight_reason)
 
         pipeline = getattr(self, "perception_pipeline", None)
         if pipeline is not None:

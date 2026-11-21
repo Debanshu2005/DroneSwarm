@@ -6,19 +6,19 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/Projects/PhoneOS
-Environment="PYTHONPATH=/home/pi/Projects/PhoneOS"
+WorkingDirectory=/home/pi/DroneSwarm
+Environment="PYTHONPATH=/home/pi/DroneSwarm"
 Environment="DRONEOS_PERCEPTION=1"
 
-# Resource constraints to prevent SSH lockout
-CPUQuota=70%
-MemoryMax=1500M
-MemoryHigh=1200M
-IOWeight=50
-OOMScoreAdjust=500
-Nice=5
+# Resource constraints for Raspberry Pi
+CPUQuota=250%
+MemoryMax=2500M
+MemoryHigh=2000M
+IOWeight=100
+OOMScoreAdjust=0
+Nice=-2
 
-ExecStart=/home/pi/Projects/PhoneOS/venv/bin/python start_drone1.py
+ExecStart=/home/pi/DroneSwarm/venv/bin/python start_drone1.py
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal

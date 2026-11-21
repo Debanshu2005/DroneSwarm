@@ -5,18 +5,20 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi4
-WorkingDirectory=/home/pi4/DroneSwarm
-Environment="PYTHONPATH=/home/pi4/DroneSwarm"
+User=pi
+WorkingDirectory=/home/pi/DroneSwarm
+Environment="PYTHONPATH=/home/pi/DroneSwarm"
 Environment="DRONEOS_PERCEPTION=1"
 
-# Resource constraints for Pi 3B (1GB RAM)
-CPUQuota=80%
-MemoryMax=750M
-MemoryHigh=600M
-OOMScoreAdjust=500
-Nice=5
-ExecStart=/home/pi4/DroneSwarm/venv/bin/python start_drone3.py
+# Resource constraints for Raspberry Pi
+CPUQuota=250%
+MemoryMax=2500M
+MemoryHigh=2000M
+IOWeight=100
+OOMScoreAdjust=0
+Nice=-2
+
+ExecStart=/home/pi/DroneSwarm/venv/bin/python start_drone3.py
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal

@@ -33,13 +33,8 @@ fi
 
 START_SCRIPT="start_drone${DRONE_NUM}.py"
 if [ ! -f "$WORK_DIR/$START_SCRIPT" ]; then
-    echo "Warning: $START_SCRIPT not found in $WORK_DIR. Checking start_drone.py..."
-    if [ -f "$WORK_DIR/start_drone.py" ]; then
-        START_SCRIPT="start_drone.py"
-    else
-        echo "Error: Neither $START_SCRIPT nor start_drone.py exists in $WORK_DIR."
-        exit 1
-    fi
+    echo "Error: $START_SCRIPT not found in $WORK_DIR. Please specify drone number 1-4."
+    exit 1
 fi
 
 echo "Configuration:"

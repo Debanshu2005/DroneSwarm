@@ -91,6 +91,7 @@ class TelemetryData(BaseModel):
     mission_state: str = "IDLE"      # Added for decentralized mission awareness
     future_intent: str = "NONE"      # Added for collision avoidance and swarm intent
     active_injections: List[str] = Field(default_factory=list) # Marks injected states
+    perception_status: Optional[Dict[str, Any]] = None
 
 class TelemetryMessage(BaseMessage):
     msg_type: MessageType = MessageType.TELEMETRY

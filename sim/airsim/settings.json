@@ -59,21 +59,75 @@
       "X": 15,
       "Y": 0,
       "Z": -1,
-      "EnableApiControl": true
+      "EnableApiControl": true,
+      "Cameras": {
+        "bottom_center": {
+          "CaptureSettings": [
+            {
+              "ImageType": 0,
+              "Width": 1280,
+              "Height": 720,
+              "FOV_Degrees": 90
+            }
+          ],
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.1,
+          "Pitch": -90.0,
+          "Roll": 0.0,
+          "Yaw": 0.0
+        }
+      }
     },
     "Drone3": {
       "VehicleType": "SimpleFlight",
       "X": 7.5,
       "Y": 13,
       "Z": -1,
-      "EnableApiControl": true
+      "EnableApiControl": true,
+      "Cameras": {
+        "bottom_center": {
+          "CaptureSettings": [
+            {
+              "ImageType": 0,
+              "Width": 1280,
+              "Height": 720,
+              "FOV_Degrees": 90
+            }
+          ],
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.1,
+          "Pitch": -90.0,
+          "Roll": 0.0,
+          "Yaw": 0.0
+        }
+      }
     },
     "Drone4": {
       "VehicleType": "SimpleFlight",
       "X": 22.5,
       "Y": 13,
       "Z": -1,
-      "EnableApiControl": true
+      "EnableApiControl": true,
+      "Cameras": {
+        "bottom_center": {
+          "CaptureSettings": [
+            {
+              "ImageType": 0,
+              "Width": 1280,
+              "Height": 720,
+              "FOV_Degrees": 90
+            }
+          ],
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.1,
+          "Pitch": -90.0,
+          "Roll": 0.0,
+          "Yaw": 0.0
+        }
+      }
     }
   }
 }

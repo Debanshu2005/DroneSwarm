@@ -1,4 +1,4 @@
-enabled: false
+enabled: true
 source: "airsim"
 weights: "models/garbage.pt"
 imgsz: 640

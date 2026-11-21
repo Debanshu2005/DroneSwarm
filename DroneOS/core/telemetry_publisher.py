@@ -17,13 +17,14 @@ class TelemetryPublisher:
     """
     def __init__(self, node_id, network_adapter, flight_controller, flight_manager, mission_manager,
                  health_monitor=None, telemetry_interval: float = 0.5, heartbeat_interval: float = 1.0,
-                 swarm_manager=None, state_store=None):
+                 swarm_manager=None, state_store=None, perception_status_fn=None):
         self.node_id = node_id
         self.network = network_adapter
         self.fc = flight_controller
         self.fm = flight_manager
         self.mission = mission_manager
         self.health_monitor = health_monitor
+        self.perception_status_fn = perception_status_fn
         self.telemetry_interval = _SIM_TELEMETRY_INTERVAL if os.environ.get("DRONEOS_PROFILE") in ("sim", "test") else telemetry_interval
         self.heartbeat_interval = heartbeat_interval
         self.swarm_manager = swarm_manager
@@ -48,6 +49,12 @@ class TelemetryPublisher:
                     telemetry.heartbeat_age = time.time() - self.health_monitor.last_heartbeat_time
                 else:
                     telemetry.heartbeat_age = None
+                
+                if self.perception_status_fn:
+                    try:
+                        telemetry.perception_status = dict(self.perception_status_fn())
+                    except Exception:
+                        pass
                 
                 msg = TelemetryMessage(
                     sender_id=self.node_id,

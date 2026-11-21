@@ -93,7 +93,21 @@ class PerceptionPipeline:
     async def run_loop(self) -> None:
         """Main periodic perception processing loop."""
         self._running = True
-        logger.info("Perception pipeline loop started (max_fps=%.1f).", self.config.max_fps)
+        logger.info("Perception pipeline loop started on %s (max_fps=%.1f).", self.drone_id, self.config.max_fps)
+
+        # Stagger startup by drone index to avoid synchronized inference CPU bursts across drones
+        import re
+        drone_idx = 0
+        m = re.search(r'\d+', str(self.drone_id))
+        if m:
+            drone_idx = max(0, int(m.group(0)) - 1)
+        stagger_s = drone_idx * 0.25
+        if stagger_s > 0:
+            try:
+                await asyncio.sleep(stagger_s)
+            except asyncio.CancelledError:
+                return
+
         interval = 1.0 / max(0.1, self.config.max_fps)
 
         while self._running:
@@ -267,6 +281,7 @@ class PerceptionPipeline:
 
         # 4. Inference
         self.last_step_stats["reached_inference"] = True
+        t_infer_start = time.perf_counter()
         try:
             detections = await self.detector.detect(frame.image)
         except Exception as e:
@@ -274,6 +289,10 @@ class PerceptionPipeline:
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
             logger.error("Detector inference failed: %s", e)
             return
+
+        infer_latency_ms = (time.perf_counter() - t_infer_start) * 1000.0
+        self.last_step_stats["inference_latency_ms"] = round(infer_latency_ms, 2)
+        logger.debug("[%s] Inference latency: %.2f ms (raw: %d)", self.drone_id, infer_latency_ms, len(detections) if detections else 0)
 
         self.last_step_stats["raw_detections"] = len(detections) if detections else 0
         now_curr = time.time()

@@ -28,6 +28,17 @@ class PerceptionStatus(dict):
         return super().__eq__(other)
 
 
+def _is_module_available(mod_name: str) -> bool:
+    import sys
+    if mod_name in sys.modules:
+        return sys.modules[mod_name] is not None
+    import importlib.util
+    try:
+        return importlib.util.find_spec(mod_name) is not None
+    except (ValueError, AttributeError):
+        return True
+
+
 def run_perception_preflight(
     perception_cfg,
     repo_root: Optional[Path] = None,
@@ -44,12 +55,11 @@ def run_perception_preflight(
         repo_root = Path(__file__).resolve().parent.parent.parent
 
     missing_deps = []
-    import importlib.util
 
-    if importlib.util.find_spec("numpy") is None:
+    if not _is_module_available("numpy"):
         missing_deps.append("numpy")
 
-    if importlib.util.find_spec("cv2") is None:
+    if not _is_module_available("cv2"):
         missing_deps.append("opencv-python-headless")
 
     raw_weights = getattr(perception_cfg, "weights", "models/garbage.pt")
@@ -59,10 +69,10 @@ def run_perception_preflight(
 
     is_onnx = weights_path.suffix.lower() == ".onnx"
     if is_onnx:
-        if importlib.util.find_spec("onnxruntime") is None:
+        if not _is_module_available("onnxruntime"):
             missing_deps.append("onnxruntime")
     else:
-        if importlib.util.find_spec("ultralytics") is None:
+        if not _is_module_available("ultralytics"):
             missing_deps.append("ultralytics")
 
     if missing_deps:

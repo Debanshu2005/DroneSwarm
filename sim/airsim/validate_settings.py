@@ -75,7 +75,38 @@ def main():
         
     pass_check(f"Exact vehicle match between repo and settings.json ({repo_vnames})")
 
-    # 4. Check VehicleType and duplicate coords
+    # 4. Check explicit camera configuration for every vehicle
+    for vname, vdata in settings_vehicles.items():
+        pkg = repo_vehicles[vname]
+        perc_yaml = os.path.join(project_root, pkg, "configs", "perception.yaml")
+        if not os.path.exists(perc_yaml):
+            fail(f"Missing perception.yaml for {pkg}")
+        with open(perc_yaml, "r") as f:
+            p_cfg = yaml.safe_load(f)
+        cam_name = p_cfg.get("camera", {}).get("airsim_camera", "bottom_center")
+        
+        cams = vdata.get("Cameras", {})
+        if cam_name not in cams:
+            fail(f"Vehicle {vname} ({pkg}) is missing required camera '{cam_name}' in settings.json")
+        cam_info = cams[cam_name]
+        
+        # Verify pitch is nadir (-90 degrees)
+        pitch = cam_info.get("Pitch")
+        if pitch != -90.0:
+            fail(f"Vehicle {vname} camera '{cam_name}' Pitch is {pitch}, expected -90.0")
+            
+        captures = cam_info.get("CaptureSettings", [])
+        if not captures:
+            fail(f"Vehicle {vname} camera '{cam_name}' has no CaptureSettings in settings.json")
+        cap0 = captures[0]
+        if cap0.get("Width") != 1280 or cap0.get("Height") != 720:
+            fail(f"Vehicle {vname} camera '{cam_name}' resolution {cap0.get('Width')}x{cap0.get('Height')} != 1280x720")
+        if cap0.get("FOV_Degrees") != 90:
+            fail(f"Vehicle {vname} camera '{cam_name}' FOV {cap0.get('FOV_Degrees')} != 90")
+            
+    pass_check("Every vehicle defines explicit nadir bottom_center camera (FOV 90, Pitch -90, 1280x720).")
+
+    # 5. Check VehicleType and duplicate coords
     coords = set()
     for vname, vdata in settings_vehicles.items():
         vtype = vdata.get("VehicleType")

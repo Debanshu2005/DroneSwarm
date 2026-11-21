@@ -40,6 +40,7 @@ def sync_perception(repo_root: Path, check_only: bool = False) -> bool:
         source_root / "main.py",
         source_root / "core" / "swarm_manager.py",
         source_root / "core" / "diagnostics.py",
+        source_root / "core" / "telemetry_publisher.py",
     ]
     files_to_sync.extend([p for p in shared_files if p.exists()])
 
