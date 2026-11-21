@@ -121,10 +121,6 @@ class UdpWebsocketRelay:
 
     async def _authenticate_websocket(self, websocket) -> bool:
         if not self.auth_token:
-            try:
-                await websocket.send(json.dumps({"type": "AUTH_ACK", "status": "ok", "auth_required": False}))
-            except Exception:
-                pass
             return True
         try:
             raw = await asyncio.wait_for(websocket.recv(), timeout=5.0)

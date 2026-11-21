@@ -98,8 +98,8 @@ The confidence threshold trade-off was evaluated systematically across the valid
 | 0.65 | 95.96% | 61.69% | 0.7510 | 380 | 16 | 236 | -75.4% | Ultra-Clean Inspection |
 
 > [!TIP]
-> **Why `0.55` is the Production Swarm Standard:**  
-> On the real test split at `imgsz = 640`, single-frame F1 is **0.7195** at `conf = 0.35` (59.96% recall, 89.94% precision) versus **0.6222** at `conf = 0.55` (45.96% recall, 96.28% precision). Confidence `0.55` is a **precision-first choice** for swarm operations rather than an F1-maximizing choice. When paired with multi-drone track aggregation and temporal confirmation (requiring $\ge 2$ sightings separated by viewpoint angle or displacement), synthetic Monte Carlo simulation indicates false alerts drop to near zero. Note: continuous live video stream confirmation remains unvalidated (unverified).
+> **Why `0.55` is the Production Swarm Standard (Precision-First Trade-Off):**  
+> On the real test split at `imgsz = 640`, single-frame F1 is **0.7195** at `conf = 0.35` (59.96% recall, 89.94% precision) versus **0.6222** at `conf = 0.55` (45.96% recall, 96.28% precision). Confidence `0.55` is a **precision-first choice** for swarm operations rather than an F1-maximizing choice: single-frame recall is traded for high precision (96.28% at 640) so that four concurrent airborne detectors do not flood the GCS with false alerts. When paired with multi-drone track aggregation and temporal confirmation (requiring $\ge 2$ sightings separated by viewpoint angle or displacement), synthetic Monte Carlo simulation indicates false alerts drop to near zero. Note that this multi-frame false-alarm reduction is only validated in synthetic simulation; continuous live video stream confirmation on real hardware remains unverified.
 
 ---
 

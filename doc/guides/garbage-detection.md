@@ -79,7 +79,9 @@ The confidence threshold trade-off was evaluated systematically on the **validat
 | 0.70 | 97.19% | 50.49% | 0.6645 | 311 | 9 | 305 | -86.2% |
 
 > [!NOTE]
-> Increasing confidence from `0.35` to `0.50` reduces false positives by **41.5%** while retaining 94.6% of all true rubbish detections (73.70% recall vs 77.89%). For missions requiring even lower false-alarm rates, `0.55` achieves **93.99% precision** with 71.10% recall.
+> Increasing confidence from `0.35` to `0.50` reduces false positives by **41.5%** while retaining 94.6% of all true rubbish detections (73.70% recall vs 77.89%). For missions requiring even lower false-alarm rates, `0.55` achieves **93.99% precision** with 71.10% recall on the validation set at `imgsz = 1280`.
+> 
+> On the real test split at `imgsz = 640`, single-frame F1 is **0.7195** at `conf = 0.35` (59.96% recall, 89.94% precision) versus **0.6222** at `conf = 0.55` (45.96% recall, 96.28% precision). Confidence `0.55` is an intentional **precision-first choice** to minimize false alerts across concurrent swarm perception pipelines rather than an F1-maximizing choice. Note that its false-alarm reduction is only validated in synthetic simulation; continuous live video stream confirmation remains unverified.
 
 ---
 

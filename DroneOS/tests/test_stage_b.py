@@ -580,45 +580,44 @@ async def test_partial_delivery_4_to_3_one_miss(mock_cfg, monkeypatch):
     from DroneOS.core.coordination.healing import plan_healing
     from DroneOS.tests.test_healing_oracle import _pt_to_segment, analytic_segment_distance
     from DroneOS.core.formation_engine import FormationEngine as GeometryEngine
+    from DroneOS.core.formation_manager import global_offset_local_m
     
-    fp = {"type": "V", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d4": 4, "d0": 0}}
+    fp = {"type": "V", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d0": 0}}
     # d0 died. d1 becomes anchor.
     swarm = type("S", (), {"identity": type("I", (), {"drone_id": "d0"})(), "registry": type("R", (), {"get_all_peers": lambda self: [], "get_peer": lambda self, pid: None})()})()
     engine = GeometryEngine(swarm, None, None)
     old_expected = engine.get_expected_positions(
         type("Telemetry", (), {"gps_valid": True, "latitude": 0.0, "longitude": 0.0, "altitude": 0.0})(), fp
     )
-    old_positions = {pid: old_expected[pid][:2] for pid in fp["slot_assignments"]}
+    old_positions = {pid: global_offset_local_m(0.0, 0.0, old_expected[pid][0], old_expected[pid][1]) for pid in fp["slot_assignments"]}
     
-    cfg = type("Cfg", (), {"formation": type("F", (), {"min_formation_separation_m": 8.0}), "collision_avoidance": type("C", (), {"min_horizontal_distance": 2.0})})()
-    import DroneOS.shared.config.profile
-    cfg.heal_separation_margin_m = 1.0
+    cfg = type("Cfg", (), {
+        "formation": type("F", (), {"min_formation_separation_m": 8.0})(),
+        "collision_avoidance": type("C", (), {"min_horizontal_distance": 2.0})(),
+        "coordination": {"heal_separation_margin_m": 0.0, "heal_position_margin_m": 0.0, "dead_drone_obstacle": "false", "mode": "advisory"}
+    })()
     
-    plan = plan_healing(fp, {"d1", "d2", "d3", "d4"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
-    if not plan.accepted: return
-    if not plan.accepted: return
+    plan = plan_healing(fp, {"d1", "d2", "d3"}, "d0", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
+    assert plan.accepted, "Healing plan must be accepted"
     
     new_fp = {"type": "V", "spacing": 15.0, "slot_assignments": plan.slot_assignments}
     swarm.identity.drone_id = "d1"
     new_expected = engine.get_expected_positions(type("Telemetry", (), {"gps_valid": True, "latitude": 0.0, "longitude": 0.0, "altitude": 0.0})(), new_fp)
+    new_positions = {pid: global_offset_local_m(0.0, 0.0, new_expected[pid][0], new_expected[pid][1]) for pid in plan.slot_assignments}
     
     # d3 misses the update. It retains fp, but sees d1's telemetry as origin
-    swarm.identity.drone_id = "d1"
-    d3_old_expected = engine.get_expected_positions(type("Telemetry", (), {"gps_valid": True, "latitude": 0.0, "longitude": 0.0, "altitude": 0.0})(), fp)
-    
-    # target positions relative to d1 origin
     targets = {
-        "d1": new_expected["d1"][:2],
-        "d2": new_expected["d2"][:2],
-        "d3": (old_expected["d3"][0] - old_positions["d1"][0], old_expected["d3"][1] - old_positions["d1"][1])
+        "d1": new_positions["d1"],
+        "d2": new_positions["d2"],
+        "d3": (old_positions["d3"][0] - old_positions["d1"][0], old_positions["d3"][1] - old_positions["d1"][1])
     }
     
     hazard_found = False
     # Check paths
-    for pid in ["d1", "d2", "d3", "d4"]:
+    for pid in ["d1", "d2", "d3"]:
         start = (old_positions[pid][0] - old_positions["d1"][0], old_positions[pid][1] - old_positions["d1"][1])
         end = targets[pid]
-        for other in ["d1", "d2", "d3", "d4"]:
+        for other in ["d1", "d2", "d3"]:
             if other <= pid: continue
             other_start = (old_positions[other][0] - old_positions["d1"][0], old_positions[other][1] - old_positions["d1"][1])
             other_end = targets[other]
@@ -632,42 +631,44 @@ async def test_partial_delivery_4_to_3_two_miss(mock_cfg, monkeypatch):
     from DroneOS.core.coordination.healing import plan_healing
     from DroneOS.tests.test_healing_oracle import _pt_to_segment, analytic_segment_distance
     from DroneOS.core.formation_engine import FormationEngine as GeometryEngine
+    from DroneOS.core.formation_manager import global_offset_local_m
     
-    fp = {"type": "V", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d4": 4, "d0": 0}}
+    fp = {"type": "V", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d0": 0}}
     # d0 died. d1 becomes anchor.
     swarm = type("S", (), {"identity": type("I", (), {"drone_id": "d0"})(), "registry": type("R", (), {"get_all_peers": lambda self: [], "get_peer": lambda self, pid: None})()})()
     engine = GeometryEngine(swarm, None, None)
     old_expected = engine.get_expected_positions(
         type("Telemetry", (), {"gps_valid": True, "latitude": 0.0, "longitude": 0.0, "altitude": 0.0})(), fp
     )
-    old_positions = {pid: old_expected[pid][:2] for pid in fp["slot_assignments"]}
+    old_positions = {pid: global_offset_local_m(0.0, 0.0, old_expected[pid][0], old_expected[pid][1]) for pid in fp["slot_assignments"]}
     
-    cfg = type("Cfg", (), {"formation": type("F", (), {"min_formation_separation_m": 8.0}), "collision_avoidance": type("C", (), {"min_horizontal_distance": 2.0})})()
-    import DroneOS.shared.config.profile
-    cfg.heal_separation_margin_m = 1.0
+    cfg = type("Cfg", (), {
+        "formation": type("F", (), {"min_formation_separation_m": 8.0})(),
+        "collision_avoidance": type("C", (), {"min_horizontal_distance": 2.0})(),
+        "coordination": {"heal_separation_margin_m": 0.0, "heal_position_margin_m": 0.0, "dead_drone_obstacle": "false", "mode": "advisory"}
+    })()
     
-    plan = plan_healing(fp, {"d1", "d2", "d3", "d4"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
-    if not plan.accepted: return
+    plan = plan_healing(fp, {"d1", "d2", "d3"}, "d0", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
+    assert plan.accepted, "Healing plan must be accepted"
     
     new_fp = {"type": "V", "spacing": 15.0, "slot_assignments": plan.slot_assignments}
     swarm.identity.drone_id = "d1"
     new_expected = engine.get_expected_positions(type("Telemetry", (), {"gps_valid": True, "latitude": 0.0, "longitude": 0.0, "altitude": 0.0})(), new_fp)
+    new_positions = {pid: global_offset_local_m(0.0, 0.0, new_expected[pid][0], new_expected[pid][1]) for pid in plan.slot_assignments}
     
     # d2 and d3 miss the update.
-    
-    
     targets = {
-        "d1": new_expected["d1"][:2],
-        "d2": old_expected["d2"][:2], # missed
-        "d3": old_expected["d3"][:2]  # missed
+        "d1": new_positions["d1"],
+        "d2": (old_positions["d2"][0] - old_positions["d1"][0], old_positions["d2"][1] - old_positions["d1"][1]),
+        "d3": (old_positions["d3"][0] - old_positions["d1"][0], old_positions["d3"][1] - old_positions["d1"][1])
     }
     
     # Check paths
     hazard_found = False
-    for pid in ["d1", "d2", "d3", "d4"]:
+    for pid in ["d1", "d2", "d3"]:
         start = (old_positions[pid][0] - old_positions["d1"][0], old_positions[pid][1] - old_positions["d1"][1])
         end = targets[pid]
-        for other in ["d1", "d2", "d3", "d4"]:
+        for other in ["d1", "d2", "d3"]:
             if other <= pid: continue
             other_start = (old_positions[other][0] - old_positions["d1"][0], old_positions[other][1] - old_positions["d1"][1])
             other_end = targets[other]
@@ -681,6 +682,7 @@ async def test_partial_delivery_3_to_2_one_miss(mock_cfg, monkeypatch):
     from DroneOS.core.coordination.healing import plan_healing
     from DroneOS.tests.test_healing_oracle import _pt_to_segment, analytic_segment_distance
     from DroneOS.core.formation_engine import FormationEngine as GeometryEngine
+    from DroneOS.core.formation_manager import global_offset_local_m
     
     fp = {"type": "LINE", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d0": 0}}
     # d0 died. d1 becomes anchor.
@@ -689,27 +691,25 @@ async def test_partial_delivery_3_to_2_one_miss(mock_cfg, monkeypatch):
     old_expected = engine.get_expected_positions(
         type("Telemetry", (), {"gps_valid": True, "latitude": 0.0, "longitude": 0.0, "altitude": 0.0})(), fp
     )
-    old_positions = {pid: old_expected[pid][:2] for pid in fp["slot_assignments"]}
+    old_positions = {pid: global_offset_local_m(0.0, 0.0, old_expected[pid][0], old_expected[pid][1]) for pid in fp["slot_assignments"]}
     
-    cfg = type("Cfg", (), {"formation": type("F", (), {"min_formation_separation_m": 8.0}), "collision_avoidance": type("C", (), {"min_horizontal_distance": 2.0})})()
-    import DroneOS.shared.config.profile
-    cfg.heal_separation_margin_m = 1.0
+    cfg = type("Cfg", (), {
+        "formation": type("F", (), {"min_formation_separation_m": 8.0})(),
+        "collision_avoidance": type("C", (), {"min_horizontal_distance": 2.0})(),
+        "coordination": {"heal_separation_margin_m": 0.0, "heal_position_margin_m": 0.0, "dead_drone_obstacle": "false", "mode": "advisory"}
+    })()
     
-    plan = plan_healing(fp, {"d1", "d2"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
-    if not plan.accepted: return
-    if not plan.accepted: return
-    if not plan.accepted: return
-    if not plan.accepted: return
+    plan = plan_healing(fp, {"d1", "d2"}, "d0", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
+    assert plan.accepted, "Healing plan must be accepted"
     
     new_fp = {"type": "LINE", "spacing": 15.0, "slot_assignments": plan.slot_assignments}
     swarm.identity.drone_id = "d1"
     new_expected = engine.get_expected_positions(type("Telemetry", (), {"gps_valid": True, "latitude": 0.0, "longitude": 0.0, "altitude": 0.0})(), new_fp)
-    
-    
+    new_positions = {pid: global_offset_local_m(0.0, 0.0, new_expected[pid][0], new_expected[pid][1]) for pid in plan.slot_assignments}
     
     targets = {
-        "d1": new_expected["d1"][:2],
-        "d2": old_expected["d2"][:2], # missed
+        "d1": new_positions["d1"],
+        "d2": (old_positions["d2"][0] - old_positions["d1"][0], old_positions["d2"][1] - old_positions["d1"][1])
     }
     
     # Check paths
@@ -728,40 +728,39 @@ async def test_partial_delivery_3_to_2_one_miss(mock_cfg, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_partial_delivery_5_to_4_two_miss(mock_cfg, monkeypatch):
-    # Two miss in 3->2 means neither received it? But d1 is the sender!
-    # "two targets missed" in 3->2: well there's only 2 targets (since N=2 remaining).
-    # But wait, one of them IS the sender, so they can't miss it (self-application).
-    # So if there are 2 survivors, only 1 target can miss it!
-    # I'll just do N=5->4 for the 4th test to have 2 miss.
     from DroneOS.core.coordination.healing import plan_healing
     from DroneOS.tests.test_healing_oracle import _pt_to_segment, analytic_segment_distance
     from DroneOS.core.formation_engine import FormationEngine as GeometryEngine
+    from DroneOS.core.formation_manager import global_offset_local_m
     
-    fp = {"type": "SQUARE", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d4": 4, "d0": 0}}
+    fp = {"type": "V", "spacing": 15.0, "slot_assignments": {"d1": 1, "d2": 2, "d3": 3, "d4": 4, "d0": 0}}
     swarm = type("S", (), {"identity": type("I", (), {"drone_id": "d0"})(), "registry": type("R", (), {"get_all_peers": lambda self: [], "get_peer": lambda self, pid: None})()})()
     engine = GeometryEngine(swarm, None, None)
     old_expected = engine.get_expected_positions(
         type("Telemetry", (), {"gps_valid": True, "latitude": 0.0, "longitude": 0.0, "altitude": 0.0})(), fp
     )
-    old_positions = {pid: old_expected[pid][:2] for pid in fp["slot_assignments"]}
+    old_positions = {pid: global_offset_local_m(0.0, 0.0, old_expected[pid][0], old_expected[pid][1]) for pid in fp["slot_assignments"]}
     
-    cfg = type("Cfg", (), {"formation": type("F", (), {"min_formation_separation_m": 8.0}), "collision_avoidance": type("C", (), {"min_horizontal_distance": 2.0})})()
-    import DroneOS.shared.config.profile
-    cfg.heal_separation_margin_m = 1.0
+    cfg = type("Cfg", (), {
+        "formation": type("F", (), {"min_formation_separation_m": 8.0})(),
+        "collision_avoidance": type("C", (), {"min_horizontal_distance": 2.0})(),
+        "coordination": {"heal_separation_margin_m": 0.0, "heal_position_margin_m": 0.0, "dead_drone_obstacle": "false", "mode": "advisory"}
+    })()
     
-    plan = plan_healing(fp, {"d1", "d2", "d3", "d4"}, "d1", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
-    if not plan.accepted: return
+    plan = plan_healing(fp, {"d1", "d2", "d3", "d4"}, "d0", "d1", "d1", cfg, None, {"lat":0, "lon":0, "alt":0, "gps_valid":True, "position_age":0})
+    assert plan.accepted, "Healing plan must be accepted"
     
-    new_fp = {"type": "SQUARE", "spacing": 15.0, "slot_assignments": plan.slot_assignments}
+    new_fp = {"type": "V", "spacing": 15.0, "slot_assignments": plan.slot_assignments}
     swarm.identity.drone_id = "d1"
     new_expected = engine.get_expected_positions(type("Telemetry", (), {"gps_valid": True, "latitude": 0.0, "longitude": 0.0, "altitude": 0.0})(), new_fp)
+    new_positions = {pid: global_offset_local_m(0.0, 0.0, new_expected[pid][0], new_expected[pid][1]) for pid in plan.slot_assignments}
     
-    
-    
+    # d2 and d3 miss the update
     targets = {
-        "d1": new_expected["d1"][:2],
-        "d2": old_expected["d2"][:2], # missed
-        "d3": old_expected["d3"][:2]  # missed
+        "d1": new_positions["d1"],
+        "d2": (old_positions["d2"][0] - old_positions["d1"][0], old_positions["d2"][1] - old_positions["d1"][1]),
+        "d3": (old_positions["d3"][0] - old_positions["d1"][0], old_positions["d3"][1] - old_positions["d1"][1]),
+        "d4": new_positions["d4"]
     }
     
     # Check paths
