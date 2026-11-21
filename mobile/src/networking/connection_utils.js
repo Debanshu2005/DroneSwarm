@@ -7,15 +7,42 @@ export const isCapacitorPlatform = () => {
   return false;
 };
 
-export const shouldAutoConnectSimRelays = (currentWsUrl, searchString = '', env = {}) => {
+export const shouldAutoConnectSimRelays = (currentWsUrl, searchString = '', env = {}, hostnameOverride = null) => {
+  // Never auto-connect sims on Capacitor (the phone app)
   if (isCapacitorPlatform()) return false;
 
-  const isBuiltInDefault = !currentWsUrl || currentWsUrl === BUILT_IN_DEFAULT_WS_URL;
-  if (!isBuiltInDefault) return false;
+  // A user-entered custom URL must never be treated as the default.
+  // Only the exact built-in default or an unset URL counts.
+  const isDefaultOrUnset = (
+    !currentWsUrl ||
+    currentWsUrl === BUILT_IN_DEFAULT_WS_URL ||
+    currentWsUrl === "ws://localhost:8080"
+  );
+  if (!isDefaultOrUnset) {
+    return false;
+  }
 
+  // Check page hostname: localhost, 127.0.0.1, "", 192.168.*, or 10.*
+  let hostname = hostnameOverride;
+  if (hostname === null && typeof window !== 'undefined' && window.location) {
+    hostname = window.location.hostname;
+  }
+  if (hostname === null || hostname === undefined) {
+    hostname = '';
+  }
+
+  const isLocalOrLan = (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '' ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('10.')
+  );
+
+  // Extra triggers: ?sim=1 and VITE_SIM_MODE
   let hasSimQuery = false;
   try {
-    const search = searchString !== undefined ? searchString : (typeof window !== 'undefined' ? window.location.search : '');
+    const search = searchString !== undefined ? searchString : (typeof window !== 'undefined' && window.location ? window.location.search : '');
     const params = new URLSearchParams(search);
     hasSimQuery = params.get('sim') === '1' || params.get('sim') === 'true';
   } catch (_) {}
@@ -25,5 +52,5 @@ export const shouldAutoConnectSimRelays = (currentWsUrl, searchString = '', env 
     (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_SIM_MODE === 'true' || import.meta.env.VITE_SIM_MODE === true))
   );
 
-  return hasSimQuery || isEnvSim;
+  return isLocalOrLan || hasSimQuery || isEnvSim;
 };

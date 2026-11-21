@@ -274,7 +274,16 @@ function App() {
             zIndex: 9999, padding: '20px'
           }}>
             <div className="glass-panel" style={{maxWidth: '460px', width: '100%', padding: '24px', background: 'var(--panel-bg, #1a1a1a)', borderRadius: '12px', border: '1px solid var(--border)'}}>
-              <h3 style={{marginBottom: '12px'}}>Connect to Raspberry Pi</h3>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px'}}>
+                <h3 style={{margin: 0}}>Connect to Raspberry Pi</h3>
+                <button
+                  onClick={() => dismissFirstRunPrompt()}
+                  style={{background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px'}}
+                  title="Dismiss"
+                >
+                  <X size={20} />
+                </button>
+              </div>
               <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>
                 Enter the Raspberry Pi IP address or WebSocket relay URL to connect to your drone swarm:
               </p>
@@ -311,6 +320,13 @@ function App() {
                   }}
                 >
                   🖥 Simulation Mode (localhost:8081-8084)
+                </button>
+                <button
+                  className="secondary-btn"
+                  style={{padding: '6px', fontSize: '11px', opacity: 0.8}}
+                  onClick={() => dismissFirstRunPrompt()}
+                >
+                  Skip / Dismiss
                 </button>
               </div>
             </div>

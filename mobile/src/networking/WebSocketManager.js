@@ -9,6 +9,7 @@ export class WebSocketManager {
         this.onConnectionChange = null;
         this.intentionallyClosed = false;
         this.connectionTimeout = null;
+        this.authGraceTimer = null;
         this.isConnecting = false;
         this.lastCloseCode = null;
         this.lastCloseReason = "";
@@ -18,19 +19,39 @@ export class WebSocketManager {
     setAuthToken(authToken = "") {
         const changed = this.authToken !== authToken;
         this.authToken = authToken || "";
-        if (changed && !this.connected) {
-            // Allow retry after token is changed: clear previous auth errors and connect
+        if (changed) {
+            // Allow retry after token is changed: clear previous auth errors and connect/reconnect
             this.lastError = "";
             this.lastCloseReason = "";
             this.lastCloseCode = null;
             if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
             this.reconnectAttempts = 0;
-            this.connect();
+            if (this.ws) {
+                this.ws.close();
+            } else {
+                this.connect();
+            }
+        }
+    }
+
+    _markConnected() {
+        if (this.authGraceTimer) {
+            clearTimeout(this.authGraceTimer);
+            this.authGraceTimer = null;
+        }
+        if (!this.connected) {
+            this.connected = true;
+            this.reconnectAttempts = 0;
+            if (this.onConnectionChange) this.onConnectionChange("CONNECTED");
         }
     }
 
     connect() {
-        if (this.isConnecting || (this.ws && (this.ws.readyState === (typeof WebSocket !== 'undefined' ? WebSocket.OPEN : 1) || this.ws.readyState === (typeof WebSocket !== 'undefined' ? WebSocket.CONNECTING : 0)))) {
+        const WS = typeof WebSocket !== 'undefined' ? WebSocket : (globalThis.WebSocket || null);
+        const openState = WS ? WS.OPEN : 1;
+        const connectingState = WS ? WS.CONNECTING : 0;
+
+        if (this.isConnecting || (this.ws && (this.ws.readyState === openState || this.ws.readyState === connectingState))) {
             console.log("WebSocket connection already in progress or established.");
             return;
         }
@@ -49,7 +70,6 @@ export class WebSocketManager {
         if (this.onConnectionChange) this.onConnectionChange("CONNECTING");
 
         try {
-            const WS = typeof WebSocket !== 'undefined' ? WebSocket : (globalThis.WebSocket || null);
             if (!WS) throw new Error("WebSocket implementation not found");
             this.ws = new WS(this.url);
         } catch (e) {
@@ -60,8 +80,9 @@ export class WebSocketManager {
 
         // Connection timeout
         this.connectionTimeout = setTimeout(() => {
-            const openState = typeof WebSocket !== 'undefined' ? WebSocket.OPEN : 1;
-            if (this.ws && this.ws.readyState !== openState) {
+            const currentWS = typeof WebSocket !== 'undefined' ? WebSocket : (globalThis.WebSocket || null);
+            const currentOpen = currentWS ? currentWS.OPEN : 1;
+            if (this.ws && this.ws.readyState !== currentOpen) {
                 console.error("WebSocket connection timeout.");
                 this.ws.close();
             }
@@ -70,11 +91,25 @@ export class WebSocketManager {
         this.ws.onopen = () => {
             clearTimeout(this.connectionTimeout);
             this.isConnecting = false;
-            console.log("WebSocket open; authenticating or waiting for first message...");
-            if (this.authToken) {
+            console.log(`WebSocket open: ${this.url}`);
+            if (!this.authToken) {
+                // Without a token: onopen must set connected = true and fire onConnectionChange("CONNECTED") immediately
+                this._markConnected();
+            } else {
+                // With a token: send AUTH on open.
                 this.ws.send(JSON.stringify({ type: "AUTH", token: this.authToken }));
+                
+                // (c) ~1500 ms after open with the socket still OPEN and no close event: mark CONNECTED
+                if (this.authGraceTimer) clearTimeout(this.authGraceTimer);
+                this.authGraceTimer = setTimeout(() => {
+                    const currentWS = typeof WebSocket !== 'undefined' ? WebSocket : (globalThis.WebSocket || null);
+                    const currentOpen = currentWS ? currentWS.OPEN : 1;
+                    if (this.ws && this.ws.readyState === currentOpen && !this.connected) {
+                        console.log("Auth grace timer expired with socket open; marking CONNECTED");
+                        this._markConnected();
+                    }
+                }, 1500);
             }
-            // Do NOT immediately report CONNECTED. Wait for auth ACK or first message.
         };
 
         this.ws.onmessage = (event) => {
@@ -84,17 +119,17 @@ export class WebSocketManager {
                     throw new Error("Invalid message format: missing msg_type or type");
                 }
                 const msgType = message.msg_type || message.type;
+                const isAuthAck = msgType === "AUTH_ACK" || message.type === "AUTH_ACK";
+
+                // Mark CONNECTED on the first of:
+                // (a) an AUTH_ACK message
+                // (b) any other valid message
                 if (!this.connected) {
-                    // Report CONNECTED only after auth succeeds (ACK received, or first message when no token)
-                    const isAuthAck = msgType === "AUTH_ACK" || message.type === "AUTH_ACK";
-                    const noTokenNeeded = !this.authToken;
-                    if (isAuthAck || noTokenNeeded) {
-                        this.connected = true;
-                        this.reconnectAttempts = 0;
-                        if (this.onConnectionChange) this.onConnectionChange("CONNECTED");
-                    }
+                    this._markConnected();
                 }
-                if (msgType !== "AUTH_ACK") {
+
+                // (a) an AUTH_ACK message (consume it, don't dispatch it to handlers)
+                if (!isAuthAck) {
                     this._dispatch(message);
                 }
             } catch (e) {
@@ -103,6 +138,10 @@ export class WebSocketManager {
         };
 
         this.ws.onclose = (event) => {
+            if (this.authGraceTimer) {
+                clearTimeout(this.authGraceTimer);
+                this.authGraceTimer = null;
+            }
             const reason = event.reason || "";
             const isAuthFailure = event.code === 4001 || reason.toLowerCase().includes("auth");
             console.log(`WebSocket disconnected${event.code ? ` (${event.code})` : ""}${reason ? `: ${reason}` : ""}`);
@@ -115,12 +154,20 @@ export class WebSocketManager {
 
         this.ws.onerror = (err) => {
             console.error("WebSocket error:", err);
+            if (this.authGraceTimer) {
+                clearTimeout(this.authGraceTimer);
+                this.authGraceTimer = null;
+            }
             // DO NOT THROW HERE. Browser will close the socket and trigger onclose.
         };
     }
     
     handleDisconnect(state = "DISCONNECTED", detail = {}) {
         clearTimeout(this.connectionTimeout);
+        if (this.authGraceTimer) {
+            clearTimeout(this.authGraceTimer);
+            this.authGraceTimer = null;
+        }
         this.isConnecting = false;
         this.connected = false;
         this.lastCloseCode = detail.code || null;
@@ -154,6 +201,10 @@ export class WebSocketManager {
         this.intentionallyClosed = true;
         this.isConnecting = false;
         clearTimeout(this.connectionTimeout);
+        if (this.authGraceTimer) {
+            clearTimeout(this.authGraceTimer);
+            this.authGraceTimer = null;
+        }
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         if (this.ws) {
             this.ws.close();
@@ -192,7 +243,9 @@ export class WebSocketManager {
     }
 
     send(message) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        const WS = typeof WebSocket !== 'undefined' ? WebSocket : (globalThis.WebSocket || null);
+        const openState = WS ? WS.OPEN : 1;
+        if (this.ws && this.ws.readyState === openState) {
             try {
                 this.ws.send(JSON.stringify(message));
                 return true;
