@@ -12,7 +12,11 @@ export class MultiWebSocketManager {
     setAuthToken(authToken = "") {
         this.authToken = authToken || "";
         Object.values(this.connections).forEach(ws => {
-            ws.authToken = this.authToken;
+            if (typeof ws.setAuthToken === 'function') {
+                ws.setAuthToken(this.authToken);
+            } else {
+                ws.authToken = this.authToken;
+            }
         });
     }
 
@@ -182,5 +186,21 @@ export class MultiWebSocketManager {
         Object.keys(this.connectionStates).forEach(url => {
             this.connectionStates[url] = { state: 'OFFLINE', detail: {} };
         });
+    }
+
+    resetConnections() {
+        this.disconnectAll();
+        this.connections = {};
+        this.connectionStates = {};
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.removeItem("PhoneOS_Swarm_Connections");
+            }
+        } catch (e) {
+            console.warn("Failed to remove PhoneOS_Swarm_Connections", e);
+        }
+        if (this.onConnectionChange) {
+            this.onConnectionChange("", 'DISCONNECTED', {});
+        }
     }
 }

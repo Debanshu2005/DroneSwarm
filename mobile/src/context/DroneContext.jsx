@@ -15,6 +15,10 @@ const DroneContext = createContext();
 
 export const useDroneContext = () => useContext(DroneContext);
 
+import { BUILT_IN_DEFAULT_WS_URL, isCapacitorPlatform, shouldAutoConnectSimRelays } from '../networking/connection_utils';
+
+export { BUILT_IN_DEFAULT_WS_URL, isCapacitorPlatform, shouldAutoConnectSimRelays };
+
 const GS_ID = "gs_mobile_01";
 
 const safeStorageGet = (key, fallback) => {
@@ -45,17 +49,82 @@ export const DroneProvider = ({ children }) => {
   const [selectedDrones, setSelectedDrones] = useState(new Set());
   const [swarmState, setSwarmState] = useState({});
 
+  const [showFirstRunPrompt, setShowFirstRunPrompt] = useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window.location) {
+        const urlWs = new URLSearchParams(window.location.search).get('ws');
+        if (urlWs) return false;
+      }
+      return !safeStorageGet("PhoneOS_WsUrl", null);
+    } catch (_) {
+      return false;
+    }
+  });
+
   const [wsUrl, setWsUrl] = useState(() => {
     try {
       const urlWs = new URLSearchParams(window.location.search).get('ws');
       if (urlWs) return urlWs;
     } catch (_) { }
-    return safeStorageGet("PhoneOS_WsUrl", "ws://swarmos-pi.local:8080");
+    return safeStorageGet("PhoneOS_WsUrl", BUILT_IN_DEFAULT_WS_URL);
   });
   const [relayAuthToken, setRelayAuthToken] = useState(() => safeStorageGet("PhoneOS_RelayAuthToken", ""));
   const [testMode, setTestMode] = useState(() => safeStorageGet("PhoneOS_TestMode", "false") === "true");
   const [indoorMode, setIndoorMode] = useState(() => safeStorageGet("PhoneOS_IndoorMode", "false") === "true");
   const [eventLog, setEventLog] = useState([]);
+
+  const updateWsUrl = (newUrl) => {
+    const trimmed = String(newUrl || '').trim();
+    if (!trimmed) return;
+    const formatted = trimmed.includes('://') ? trimmed : `ws://${trimmed}`;
+    setWsUrl(formatted);
+    safeStorageSet("PhoneOS_WsUrl", formatted);
+    setShowFirstRunPrompt(false);
+    if (wsManager) {
+      wsManager.addConnection(formatted);
+    }
+  };
+
+  const dismissFirstRunPrompt = (fallbackUrl = BUILT_IN_DEFAULT_WS_URL) => {
+    safeStorageSet("PhoneOS_WsUrl", fallbackUrl);
+    setShowFirstRunPrompt(false);
+  };
+
+  const resetConnections = () => {
+    if (wsManager) {
+      wsManager.resetConnections();
+    }
+    setWsUrl(BUILT_IN_DEFAULT_WS_URL);
+    safeStorageSet("PhoneOS_WsUrl", BUILT_IN_DEFAULT_WS_URL);
+    addLog("Connections reset to default", "INFO", "PHONEOS", null, "CONNECTIONS_RESET");
+  };
+
+  const getSwarmMLStatus = () => {
+    const droneList = Object.values(drones || {});
+    if (droneList.length === 0) return { text: "ML: --", color: "var(--text-muted)", okCount: 0, total: 0 };
+    let okCount = 0;
+    let degradedCount = 0;
+    let disabledCount = 0;
+    let total = droneList.length;
+    for (const d of droneList) {
+      const ps = d.telemetry?.perception_status?.status || (d.diagnostics?.perception_status?.status);
+      if (ps === 'OK') okCount++;
+      else if (ps === 'DEGRADED') degradedCount++;
+      else if (ps === 'DISABLED') disabledCount++;
+    }
+    const color = okCount === total && total > 0 ? "var(--good, #22c55e)" : (degradedCount > 0 ? "var(--warning, #eab308)" : "var(--danger, #ef4444)");
+    let detail = "";
+    if (degradedCount > 0) detail = ` (${degradedCount} DEGRADED)`;
+    else if (disabledCount > 0) detail = ` (${disabledCount} OFF)`;
+    return {
+      text: `ML: ${okCount}/${total} OK${detail}`,
+      color,
+      okCount,
+      total,
+      degradedCount,
+      disabledCount
+    };
+  };
 
   // Garbage Detection State
   const [garbage, setGarbage] = useState(() => {
@@ -242,30 +311,19 @@ export const DroneProvider = ({ children }) => {
     manager.loadSavedConnections();
 
     // Add default configured connection for backward compatibility or dev (if no others exist)
-    if (wsUrl && Object.keys(manager.connections).length === 0) {
-      const isDefaultPiUrl = wsUrl.includes('swarmos-pi.local') || wsUrl.endsWith(':8080');
-      const isLocalHost = typeof window !== 'undefined' && (
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1' ||
-        window.location.hostname === '' ||
-        window.location.hostname.startsWith('192.168.') ||
-        window.location.hostname.startsWith('10.')
-      );
-      if (isDefaultPiUrl && isLocalHost) {
-        // Running locally against sim/dev: auto-connect to 4 drone relays (8081-8084)
-        // and enable test/sim mode so the header shows SIMULATION/SITL correctly
-        [8081, 8082, 8083, 8084].forEach(port => manager.addConnection('127.0.0.1', port));
-        setTestMode(true);
-      } else {
-        const [ip, portStr] = wsUrl.replace('ws://', '').split(':');
-        manager.addConnection(ip, portStr ? parseInt(portStr) : 8080);
-      }
-    } else if (wsUrl) {
-      const urlWs = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ws') : null;
-      if (urlWs) {
-        const [ip, portStr] = urlWs.replace('ws://', '').split(':');
-        manager.addConnection(ip, portStr ? parseInt(portStr) : 8080);
-      }
+    const searchStr = typeof window !== 'undefined' ? window.location.search : '';
+    const envObj = typeof import.meta !== 'undefined' ? import.meta.env : {};
+
+    if (shouldAutoConnectSimRelays(wsUrl, searchStr, envObj)) {
+      // Running against sim/dev: auto-connect to 4 drone relays (8081-8084)
+      // and enable test/sim mode so the header shows SIMULATION/SITL correctly
+      [8081, 8082, 8083, 8084].forEach(port => manager.addConnection('127.0.0.1', port));
+      setTestMode(true);
+    } else if (wsUrl && wsUrl !== BUILT_IN_DEFAULT_WS_URL) {
+      // User has configured a custom wsUrl: add that connection (and keep it) even if saved connections exist
+      manager.addConnection(wsUrl);
+    } else if (Object.keys(manager.connections).length === 0 && wsUrl) {
+      manager.addConnection(wsUrl);
     }
 
     manager.onConnectionChange = (url, status, detail = {}) => {
@@ -776,7 +834,8 @@ export const DroneProvider = ({ children }) => {
 
   const value = {
     wsManager, isConnected, drones, selectedDrones, swarmState,
-    wsUrl, setWsUrl, relayAuthToken, setRelayAuthToken, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs, connectionError,
+    wsUrl, setWsUrl, updateWsUrl, resetConnections, showFirstRunPrompt, dismissFirstRunPrompt, getSwarmMLStatus,
+    relayAuthToken, setRelayAuthToken, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs, connectionError,
     sendCommand, sendTerminalCommand, sendParamRequest, toggleSelect, selectAll, selectNone, selectOnly, addLog,
     testOverrides, setTestOverride, clearTestOverrides, injectFailure, testSessionLog, clearTestSessionLog,
     garbage, dismissGarbage, clearGarbage

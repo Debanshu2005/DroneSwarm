@@ -26,7 +26,20 @@ import TerminalView from './views/TerminalView';
 import FindMyDroneView from './views/FindMyDroneView';
 
 function App() {
-  const { isConnected, connectionError, testMode, indoorMode, nowMs, wsManager, drones } = useDroneContext();
+  const {
+    isConnected,
+    connectionError,
+    testMode,
+    indoorMode,
+    nowMs,
+    wsManager,
+    drones,
+    showFirstRunPrompt,
+    updateWsUrl,
+    dismissFirstRunPrompt,
+    getSwarmMLStatus
+  } = useDroneContext();
+  const [firstRunIp, setFirstRunIp] = useState('');
   const [currentView, setCurrentView] = useState(() => {
     try {
       const urlView = new URLSearchParams(window.location.search).get('view');
@@ -230,9 +243,14 @@ function App() {
              <div style={{color: isConnected === 'CONNECTED' ? 'var(--success)' : 'var(--danger)', fontWeight: 600, marginBottom: '6px'}}>
                 {getConnectionText()}
              </div>
-             <div style={{color: getHardwareIdentityStatus().color, fontWeight: 600}}>
+             <div style={{color: getHardwareIdentityStatus().color, fontWeight: 600, marginBottom: '6px'}}>
                 {getHardwareIdentityStatus().text}
              </div>
+             {getSwarmMLStatus && (
+               <div style={{color: getSwarmMLStatus().color, fontWeight: 600}}>
+                  {getSwarmMLStatus().text}
+               </div>
+             )}
           </div>
         </aside>
         )}
@@ -248,6 +266,56 @@ function App() {
           {testMode && <div className="test-mode-banner">DEMO / TEST MODE</div>}
           {indoorMode && !testMode && <div className="test-mode-banner">INDOOR / BENCH TEST (NO GPS REQ)</div>}
         </div>
+
+        {showFirstRunPrompt && (
+          <div className="modal-overlay" style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, padding: '20px'
+          }}>
+            <div className="glass-panel" style={{maxWidth: '460px', width: '100%', padding: '24px', background: 'var(--panel-bg, #1a1a1a)', borderRadius: '12px', border: '1px solid var(--border)'}}>
+              <h3 style={{marginBottom: '12px'}}>Connect to Raspberry Pi</h3>
+              <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>
+                Enter the Raspberry Pi IP address or WebSocket relay URL to connect to your drone swarm:
+              </p>
+              <input
+                type="text"
+                placeholder="e.g. 192.168.1.100 or ws://192.168.1.100:8080"
+                value={firstRunIp}
+                onChange={e => setFirstRunIp(e.target.value)}
+                style={{width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid var(--border)', marginBottom: '8px', boxSizing: 'border-box'}}
+              />
+              <div style={{fontSize: '11px', color: 'var(--warning, #eab308)', marginBottom: '16px', lineHeight: 1.4}}>
+                ⚠️ Note: .local hostnames (like swarmos-pi.local) may not resolve on Android devices. Enter the Raspberry Pi's IP address directly.
+              </div>
+              <div style={{display: 'flex', gap: '8px', flexDirection: 'column'}}>
+                <button
+                  className="primary-btn"
+                  style={{padding: '10px'}}
+                  onClick={() => {
+                    const val = firstRunIp.trim();
+                    if (val) {
+                      updateWsUrl(val);
+                    } else {
+                      dismissFirstRunPrompt();
+                    }
+                  }}
+                >
+                  {firstRunIp.trim() ? "CONNECT" : "USE DEFAULT (swarmos-pi.local)"}
+                </button>
+                <button
+                  className="secondary-btn"
+                  style={{padding: '8px', fontSize: '12px'}}
+                  onClick={() => {
+                    updateWsUrl("ws://127.0.0.1:8081");
+                  }}
+                >
+                  🖥 Simulation Mode (localhost:8081-8084)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {currentView === 'FLIGHT' ? (
            <div style={{ flex: 1, position: 'relative', overflow: 'hidden', zIndex: 10 }}>

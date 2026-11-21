@@ -15,8 +15,22 @@ export class WebSocketManager {
         this.lastError = "";
     }
 
+    setAuthToken(authToken = "") {
+        const changed = this.authToken !== authToken;
+        this.authToken = authToken || "";
+        if (changed && !this.connected) {
+            // Allow retry after token is changed: clear previous auth errors and connect
+            this.lastError = "";
+            this.lastCloseReason = "";
+            this.lastCloseCode = null;
+            if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+            this.reconnectAttempts = 0;
+            this.connect();
+        }
+    }
+
     connect() {
-        if (this.isConnecting || (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING))) {
+        if (this.isConnecting || (this.ws && (this.ws.readyState === (typeof WebSocket !== 'undefined' ? WebSocket.OPEN : 1) || this.ws.readyState === (typeof WebSocket !== 'undefined' ? WebSocket.CONNECTING : 0)))) {
             console.log("WebSocket connection already in progress or established.");
             return;
         }
@@ -27,7 +41,7 @@ export class WebSocketManager {
         this.lastError = "";
         
         // Android / Capacitor / Secure context check
-        const isSecureContext = window.location.protocol === 'https:';
+        const isSecureContext = typeof window !== 'undefined' && window.location?.protocol === 'https:';
         if (isSecureContext && this.url.startsWith('ws://') && !this.url.includes('localhost') && !this.url.includes('127.0.0.1')) {
             console.warn("Insecure WebSocket might be blocked in secure context");
         }
@@ -35,7 +49,9 @@ export class WebSocketManager {
         if (this.onConnectionChange) this.onConnectionChange("CONNECTING");
 
         try {
-            this.ws = new WebSocket(this.url);
+            const WS = typeof WebSocket !== 'undefined' ? WebSocket : (globalThis.WebSocket || null);
+            if (!WS) throw new Error("WebSocket implementation not found");
+            this.ws = new WS(this.url);
         } catch (e) {
             console.error("Failed to initialize WebSocket:", e);
             this.handleDisconnect();
@@ -44,7 +60,8 @@ export class WebSocketManager {
 
         // Connection timeout
         this.connectionTimeout = setTimeout(() => {
-            if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
+            const openState = typeof WebSocket !== 'undefined' ? WebSocket.OPEN : 1;
+            if (this.ws && this.ws.readyState !== openState) {
                 console.error("WebSocket connection timeout.");
                 this.ws.close();
             }
@@ -53,13 +70,11 @@ export class WebSocketManager {
         this.ws.onopen = () => {
             clearTimeout(this.connectionTimeout);
             this.isConnecting = false;
-            console.log("WebSocket connected");
+            console.log("WebSocket open; authenticating or waiting for first message...");
             if (this.authToken) {
                 this.ws.send(JSON.stringify({ type: "AUTH", token: this.authToken }));
             }
-            this.connected = true;
-            this.reconnectAttempts = 0;
-            if (this.onConnectionChange) this.onConnectionChange("CONNECTED");
+            // Do NOT immediately report CONNECTED. Wait for auth ACK or first message.
         };
 
         this.ws.onmessage = (event) => {
@@ -68,18 +83,33 @@ export class WebSocketManager {
                 if (!message || typeof message !== 'object' || (!message.msg_type && !message.type)) {
                     throw new Error("Invalid message format: missing msg_type or type");
                 }
-                this._dispatch(message);
+                const msgType = message.msg_type || message.type;
+                if (!this.connected) {
+                    // Report CONNECTED only after auth succeeds (ACK received, or first message when no token)
+                    const isAuthAck = msgType === "AUTH_ACK" || message.type === "AUTH_ACK";
+                    const noTokenNeeded = !this.authToken;
+                    if (isAuthAck || noTokenNeeded) {
+                        this.connected = true;
+                        this.reconnectAttempts = 0;
+                        if (this.onConnectionChange) this.onConnectionChange("CONNECTED");
+                    }
+                }
+                if (msgType !== "AUTH_ACK") {
+                    this._dispatch(message);
+                }
             } catch (e) {
                 console.error("Failed to parse incoming WebSocket message:", e, event.data);
             }
         };
 
         this.ws.onclose = (event) => {
-            const isAuthFailure = event.code === 4001 || (event.reason || "").toLowerCase().includes("auth");
-            console.log(`WebSocket disconnected${event.code ? ` (${event.code})` : ""}${event.reason ? `: ${event.reason}` : ""}`);
+            const reason = event.reason || "";
+            const isAuthFailure = event.code === 4001 || reason.toLowerCase().includes("auth");
+            console.log(`WebSocket disconnected${event.code ? ` (${event.code})` : ""}${reason ? `: ${reason}` : ""}`);
+            const failureReason = isAuthFailure ? (reason || "Relay authentication rejected") : reason;
             this.handleDisconnect(isAuthFailure ? "AUTH_FAILED" : "DISCONNECTED", {
                 code: event.code,
-                reason: event.reason
+                reason: failureReason
             });
         };
 

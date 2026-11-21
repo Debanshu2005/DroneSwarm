@@ -1,12 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDroneContext } from '../context/DroneContext';
-import { Settings, RefreshCw, Network, Trash, Play, Activity } from 'lucide-react';
+import { Settings, RefreshCw, Network, Trash, Play, Activity, RotateCcw } from 'lucide-react';
 
 export default function SettingsView() {
-  const { testMode, setTestMode, indoorMode, setIndoorMode, relayAuthToken, setRelayAuthToken, isConnected, connectionError, wsManager, setWsUrl, drones } = useDroneContext();
+  const {
+    testMode,
+    setTestMode,
+    indoorMode,
+    setIndoorMode,
+    relayAuthToken,
+    setRelayAuthToken,
+    isConnected,
+    connectionError,
+    wsManager,
+    wsUrl,
+    updateWsUrl,
+    resetConnections,
+    drones
+  } = useDroneContext();
+
+  const [primaryUrl, setPrimaryUrl] = useState(wsUrl || "");
   const [newId, setNewId] = useState("drone1");
   const [newIp, setNewIp] = useState("192.168.1.100");
   const [newPort, setNewPort] = useState("8080");
+
+  useEffect(() => {
+    if (wsUrl) setPrimaryUrl(wsUrl);
+  }, [wsUrl]);
 
   const handleConnectAll = () => {
      if (!wsManager) return;
@@ -16,6 +36,11 @@ export default function SettingsView() {
   const handleDisconnectAll = () => {
      if (!wsManager) return;
      Object.values(wsManager.connections).forEach(c => c.disconnect());
+  };
+
+  const handleSavePrimaryUrl = () => {
+    if (!primaryUrl.trim()) return;
+    updateWsUrl(primaryUrl.trim());
   };
 
   return (
@@ -29,24 +54,61 @@ export default function SettingsView() {
          {/* Network Settings */}
          <div className="glass-panel">
             <h3 style={{marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px'}}><Network size={18} /> MULTI-DRONE CONNECTIONS</h3>
-            <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Configure connections to multiple PhoneOS Relays (Swarm).</p>
+            <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Configure connections to PhoneOS Swarm Relays.</p>
 
-            <div style={{display: 'flex', gap: '8px', marginBottom: '16px'}}>
-               <button className="primary-btn" style={{flex: 1}} onClick={handleConnectAll}>CONNECT ALL</button>
-               <button className="secondary-btn" style={{flex: 1, borderColor: 'var(--danger)', color: 'var(--danger)'}} onClick={handleDisconnectAll}>DISCONNECT ALL</button>
+            <div style={{display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap'}}>
+               <button className="primary-btn" style={{flex: 1, minWidth: '100px'}} onClick={handleConnectAll}>CONNECT ALL</button>
+               <button className="secondary-btn" style={{flex: 1, minWidth: '100px'}} onClick={handleDisconnectAll}>DISCONNECT ALL</button>
+               <button className="secondary-btn" style={{flex: 1, minWidth: '140px', borderColor: 'var(--danger)', color: 'var(--danger)'}} onClick={resetConnections}>
+                  <RotateCcw size={14} style={{marginRight: '4px', verticalAlign: 'middle'}}/> RESET CONNECTIONS
+               </button>
+            </div>
+
+            {/* Default Pi / Relay WS URL */}
+            <div style={{display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px', background: 'var(--bg-color)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)'}}>
+               <div style={{fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)'}}>DEFAULT RELAY / PI WS URL</div>
+               <div style={{display: 'flex', gap: '8px'}}>
+                  <input
+                     type="text"
+                     placeholder="ws://192.168.1.100:8080 or swarmos-pi.local:8080"
+                     value={primaryUrl}
+                     onChange={e => setPrimaryUrl(e.target.value)}
+                     style={{flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid var(--border)'}}
+                  />
+                  <button
+                     className="primary-btn"
+                     style={{padding: '10px 14px', fontSize: '12px', whiteSpace: 'nowrap'}}
+                     onClick={handleSavePrimaryUrl}
+                  >
+                     SAVE & CONNECT
+                  </button>
+               </div>
+               <div style={{fontSize: '11px', color: 'var(--warning)', marginTop: '4px'}}>
+                  ⚠️ Note: .local hostnames (e.g. swarmos-pi.local) may not resolve on Android devices. Enter the Raspberry Pi's IP address directly.
+               </div>
             </div>
 
             <div style={{display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px'}}>
                {isConnected === 'AUTH_FAILED' && (
-                  <div style={{fontSize: '12px', color: 'var(--danger)', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: '6px', padding: '10px'}}>
-                     Relay authentication failed{connectionError ? `: ${connectionError}` : ''}.
+                  <div style={{fontSize: '12px', color: 'var(--danger)', background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', borderRadius: '6px', padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                     <span>Relay authentication failed{connectionError ? `: ${connectionError}` : ''}.</span>
+                     <button
+                        className="action-btn"
+                        style={{padding: '4px 10px', fontSize: '11px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer'}}
+                        onClick={() => { if (wsManager) wsManager.setAuthToken(relayAuthToken); }}
+                     >
+                        RETRY
+                     </button>
                   </div>
                )}
                <input
                   type="password"
                   placeholder="OPTIONAL RELAY AUTH TOKEN"
                   value={relayAuthToken}
-                  onChange={e => setRelayAuthToken(e.target.value)}
+                  onChange={e => {
+                     setRelayAuthToken(e.target.value);
+                     if (wsManager) wsManager.setAuthToken(e.target.value);
+                  }}
                   style={{padding: '10px', borderRadius: '6px', border: '1px solid var(--border)'}}
                />
                <div style={{display: 'flex', gap: '8px'}}>

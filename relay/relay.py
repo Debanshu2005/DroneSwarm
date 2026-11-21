@@ -121,6 +121,10 @@ class UdpWebsocketRelay:
 
     async def _authenticate_websocket(self, websocket) -> bool:
         if not self.auth_token:
+            try:
+                await websocket.send(json.dumps({"type": "AUTH_ACK", "status": "ok", "auth_required": False}))
+            except Exception:
+                pass
             return True
         try:
             raw = await asyncio.wait_for(websocket.recv(), timeout=5.0)
@@ -139,6 +143,10 @@ class UdpWebsocketRelay:
             await websocket.close(code=4001, reason="Relay authentication rejected")
             return False
         logger.info(f"WebSocket client authenticated from {websocket.remote_address}")
+        try:
+            await websocket.send(json.dumps({"type": "AUTH_ACK", "status": "ok"}))
+        except Exception:
+            pass
         return True
 
     class UdpProtocol(asyncio.DatagramProtocol):
