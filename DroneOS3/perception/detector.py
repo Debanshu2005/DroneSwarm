@@ -3,6 +3,7 @@
 import asyncio
 import concurrent.futures
 import math
+import os
 from pathlib import Path
 import time
 from typing import List, Optional, Tuple, Union
@@ -13,6 +14,80 @@ from DroneOS3.perception.types import Detection
 from DroneOS3.shared.utils.logger import setup_logger
 
 logger = setup_logger("GarbageDetector")
+
+
+def resolve_device_and_provider(
+    requested_device: Optional[str] = None,
+    is_onnx: bool = False,
+) -> Tuple[str, str, str]:
+    """
+    Resolve device ('cpu' or 'cuda') and execution provider given a requested device or env override.
+
+    Resolution order:
+    1. DRONEOS_PERCEPTION_DEVICE environment variable (source='env')
+    2. requested_device parameter / yaml config (source='yaml')
+    3. Default 'auto' (source='auto')
+
+    Returns:
+        (resolved_device, provider, source)
+    """
+    env_override = os.getenv("DRONEOS_PERCEPTION_DEVICE")
+    if env_override is not None and env_override.strip():
+        source = "env"
+        req = env_override.strip().lower()
+    elif requested_device is not None and str(requested_device).strip().lower() not in ("", "auto", "none", "null"):
+        source = "yaml"
+        req = str(requested_device).strip().lower()
+    else:
+        source = "auto"
+        req = "auto"
+
+    providers_available: List[str] = []
+    cuda_available = False
+    if is_onnx:
+        try:
+            import onnxruntime as ort
+            if hasattr(ort, "get_available_providers"):
+                providers_available = list(ort.get_available_providers())
+            cuda_available = any("cuda" in p.lower() or "tensorrt" in p.lower() for p in providers_available)
+        except Exception as e:
+            logger.debug("Failed checking onnxruntime providers: %s", e)
+            providers_available = []
+            cuda_available = False
+    else:
+        try:
+            import torch
+            cuda_available = bool(torch.cuda.is_available()) if hasattr(torch, "cuda") and hasattr(torch.cuda, "is_available") else False
+        except Exception as e:
+            logger.debug("Failed checking torch.cuda availability: %s", e)
+            cuda_available = False
+
+    if req == "auto":
+        resolved_device = "cuda" if cuda_available else "cpu"
+    elif "cuda" in req:
+        if cuda_available:
+            resolved_device = "cuda"
+        else:
+            logger.warning("CUDA device '%s' requested but CUDA is not available; falling back to CPU", req)
+            resolved_device = "cpu"
+    else:
+        resolved_device = "cpu"
+
+    if is_onnx:
+        if resolved_device == "cuda":
+            if "TensorrtExecutionProvider" in providers_available:
+                provider = "TensorrtExecutionProvider"
+            elif "CUDAExecutionProvider" in providers_available:
+                provider = "CUDAExecutionProvider"
+            else:
+                provider = "CPUExecutionProvider"
+        else:
+            provider = "CPUExecutionProvider"
+    else:
+        provider = "torch.cuda" if resolved_device == "cuda" else "torch.cpu"
+
+    logger.info("perception device=%s provider=%s source=%s", resolved_device, provider, source)
+    return (resolved_device, provider, source)
 
 
 class GarbageDetector:
@@ -46,6 +121,10 @@ class GarbageDetector:
         self.max_aspect_ratio = max_aspect_ratio
 
         self.is_onnx = self.weights_path.suffix.lower() == ".onnx"
+        self.resolved_device = "cpu"
+        self.resolved_provider = "CPUExecutionProvider" if self.is_onnx else "torch.cpu"
+        self.device_source = "auto"
+        self.fp16 = False
         self._model = None
         self._ort_session = None
         self._cached_onnx_input_shape = None
@@ -61,6 +140,12 @@ class GarbageDetector:
         self._current_backoff_s = 0.0
         self._last_attempt_time = 0.0
         self._last_error = ""
+        self.last_timing = {
+            "preprocess_ms": 0.0,
+            "inference_ms": 0.0,
+            "postprocess_filter_ms": 0.0,
+            "max_raw_conf": 0.0,
+        }
 
     def load(self) -> bool:
         """
@@ -93,6 +178,12 @@ class GarbageDetector:
         if self.is_onnx:
             self._enforce_onnx_input_shape()
 
+        # Resolve device, provider and source
+        self.resolved_device, self.resolved_provider, self.device_source = resolve_device_and_provider(
+            self.device, is_onnx=self.is_onnx
+        )
+        self.fp16 = (self.resolved_device == "cuda")
+
         # Attempt loading through Ultralytics or ONNX Runtime
         try:
             if self.is_onnx:
@@ -107,8 +198,9 @@ class GarbageDetector:
                     self._retry_count = 0
                     self._last_error = ""
                     logger.info(
-                        "ONNX detector loaded via Ultralytics from %s (attempt #%d).",
+                        "ONNX detector loaded via Ultralytics from %s on %s (attempt #%d).",
                         self.weights_path,
+                        self.resolved_device,
                         attempt,
                     )
                     return True
@@ -116,9 +208,9 @@ class GarbageDetector:
                     # Fallback to pure ONNX Runtime
                     import onnxruntime as ort
 
-                    providers = ["CPUExecutionProvider"]
-                    if self.device and "cuda" in str(self.device).lower():
-                        providers.insert(0, "CUDAExecutionProvider")
+                    providers = [self.resolved_provider]
+                    if "CPUExecutionProvider" not in providers:
+                        providers.append("CPUExecutionProvider")
                     self._ort_session = ort.InferenceSession(str(self.weights_path), providers=providers)
                     self._load_ort_metadata()
                     attempt = self._retry_count
@@ -127,8 +219,9 @@ class GarbageDetector:
                     self._retry_count = 0
                     self._last_error = ""
                     logger.info(
-                        "ONNX detector loaded via ONNX Runtime from %s (attempt #%d).",
+                        "ONNX detector loaded via ONNX Runtime from %s with provider %s (attempt #%d).",
                         self.weights_path,
+                        self.resolved_provider,
                         attempt,
                     )
                     return True
@@ -364,19 +457,32 @@ class GarbageDetector:
         """
         import cv2
 
+        t_pre_start = time.perf_counter()
         img_h, img_w = image.shape[:2]
         target_h, target_w = (self.imgsz, self.imgsz) if isinstance(self.imgsz, int) else self.imgsz
 
         padded_img, r, (pad_left, pad_top) = self._letterbox_image(image, (target_h, target_w))
         rgb = cv2.cvtColor(padded_img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         blob = np.transpose(rgb, (2, 0, 1))[np.newaxis, ...]
+        preprocess_ms = (time.perf_counter() - t_pre_start) * 1000.0
 
         input_name = self._ort_session.get_inputs()[0].name
+        t_inf_start = time.perf_counter()
         raw_outputs = self._ort_session.run(None, {input_name: blob})
+        inference_ms = (time.perf_counter() - t_inf_start) * 1000.0
+
         if not raw_outputs:
+            self.last_timing = {
+                "preprocess_ms": round(preprocess_ms, 2),
+                "inference_ms": round(inference_ms, 2),
+                "postprocess_filter_ms": 0.0,
+                "max_raw_conf": 0.0,
+            }
             return []
 
+        t_post_start = time.perf_counter()
         out = raw_outputs[0]
+        max_raw_conf = 0.0
 
         # Check for end-to-end NMS output format [1, N, 6] or [N, 6]
         if (out.ndim == 3 and out.shape[2] == 6) or (out.ndim == 2 and out.shape[1] == 6):
@@ -384,6 +490,8 @@ class GarbageDetector:
             detections: List[Detection] = []
             for row in rows:
                 score = float(row[4])
+                if score > max_raw_conf:
+                    max_raw_conf = score
                 if score < self.confidence:
                     continue
                 cls_id = int(row[5])
@@ -398,6 +506,13 @@ class GarbageDetector:
                 )
                 if det is not None:
                     detections.append(det)
+            postprocess_filter_ms = (time.perf_counter() - t_post_start) * 1000.0
+            self.last_timing = {
+                "preprocess_ms": round(preprocess_ms, 2),
+                "inference_ms": round(inference_ms, 2),
+                "postprocess_filter_ms": round(postprocess_filter_ms, 2),
+                "max_raw_conf": round(max_raw_conf, 4),
+            }
             return detections
 
         # Shape is (1, 4 + num_classes, num_anchors) e.g. (1, 5, 8400)
@@ -422,6 +537,8 @@ class GarbageDetector:
                 continue
             cls_id = int(np.argmax(classes_scores))
             score = float(classes_scores[cls_id])
+            if score > max_raw_conf:
+                max_raw_conf = score
             if score >= self.confidence:
                 cx, cy, bw, bh = float(row[0]), float(row[1]), float(row[2]), float(row[3])
                 # Unletterbox candidate center and bounds to original image space
@@ -441,11 +558,25 @@ class GarbageDetector:
 
         detections: List[Detection] = []
         if not boxes_ltrb:
+            postprocess_filter_ms = (time.perf_counter() - t_post_start) * 1000.0
+            self.last_timing = {
+                "preprocess_ms": round(preprocess_ms, 2),
+                "inference_ms": round(inference_ms, 2),
+                "postprocess_filter_ms": round(postprocess_filter_ms, 2),
+                "max_raw_conf": round(max_raw_conf, 4),
+            }
             return detections
 
         nms_boxes = [[int(x1), int(y1), int(x2 - x1), int(y2 - y1)] for x1, y1, x2, y2 in boxes_ltrb]
         indices = cv2.dnn.NMSBoxes(nms_boxes, confidences, self.confidence, self.iou)
         if len(indices) == 0:
+            postprocess_filter_ms = (time.perf_counter() - t_post_start) * 1000.0
+            self.last_timing = {
+                "preprocess_ms": round(preprocess_ms, 2),
+                "inference_ms": round(inference_ms, 2),
+                "postprocess_filter_ms": round(postprocess_filter_ms, 2),
+                "max_raw_conf": round(max_raw_conf, 4),
+            }
             return detections
 
         for idx in indices.flatten():
@@ -460,6 +591,13 @@ class GarbageDetector:
             if det is not None:
                 detections.append(det)
 
+        postprocess_filter_ms = (time.perf_counter() - t_post_start) * 1000.0
+        self.last_timing = {
+            "preprocess_ms": round(preprocess_ms, 2),
+            "inference_ms": round(inference_ms, 2),
+            "postprocess_filter_ms": round(postprocess_filter_ms, 2),
+            "max_raw_conf": round(max_raw_conf, 4),
+        }
         return detections
 
     def _sync_predict(self, image) -> List[Detection]:
@@ -476,25 +614,29 @@ class GarbageDetector:
         predict_kwargs = {
             "source": image,
             "imgsz": self.imgsz,
-            "conf": self.confidence,
+            "conf": min(0.05, float(self.confidence)),
             "iou": self.iou,
             "verbose": False,
+            "device": self.resolved_device,
+            "half": self.fp16,
         }
-        if self.device is not None:
-            predict_kwargs["device"] = self.device
 
+        t_call_start = time.perf_counter()
         try:
             results = self._model.predict(**predict_kwargs)
         except Exception as e:
             # Fallback to CPU if CUDA initialization or memory fails
-            if self.device is not None and "cuda" in str(self.device).lower():
+            if self.resolved_device == "cuda":
                 logger.warning(
                     "YOLO inference failed on device '%s' (%s); falling back to CPU",
-                    self.device,
+                    self.resolved_device,
                     e,
                 )
                 try:
+                    self.resolved_device = "cpu"
+                    self.fp16 = False
                     predict_kwargs["device"] = "cpu"
+                    predict_kwargs["half"] = False
                     results = self._model.predict(**predict_kwargs)
                 except Exception as inner_e:
                     logger.exception("YOLO inference failed on CPU fallback: %s", inner_e)
@@ -502,40 +644,63 @@ class GarbageDetector:
             else:
                 logger.exception("YOLO inference failed: %s", e)
                 return []
+        t_call_end = time.perf_counter()
 
+        preprocess_ms = 0.0
+        inference_ms = (t_call_end - t_call_start) * 1000.0
+        yolo_post_ms = 0.0
+        if results and hasattr(results[0], "speed"):
+            speed = getattr(results[0], "speed", {}) or {}
+            preprocess_ms = float(speed.get("preprocess", 0.0) or 0.0)
+            inference_ms = float(speed.get("inference", 0.0) or (t_call_end - t_call_start) * 1000.0)
+            yolo_post_ms = float(speed.get("postprocess", 0.0) or 0.0)
+
+        t_filt_start = time.perf_counter()
         detections: List[Detection] = []
-        if not results:
-            return detections
+        max_raw_conf = 0.0
 
-        result = results[0]
-        boxes = getattr(result, "boxes", None)
-        if boxes is None or len(boxes) == 0:
-            return detections
+        if results:
+            result = results[0]
+            boxes = getattr(result, "boxes", None)
+            if boxes is not None and len(boxes) > 0:
+                for box in boxes:
+                    c = float(box.conf[0])
+                    if c > max_raw_conf:
+                        max_raw_conf = c
 
-        names = getattr(result, "names", {})
-        img_h, img_w = getattr(image, "shape", (None, None))[:2]
+                names = getattr(result, "names", {})
+                img_h, img_w = getattr(image, "shape", (None, None))[:2]
 
-        for box in boxes:
-            conf = float(box.conf[0])
-            cls_id = int(box.cls[0])
-            label = names.get(cls_id, str(cls_id))
+                for box in boxes:
+                    conf = float(box.conf[0])
+                    if conf < self.confidence:
+                        continue
+                    cls_id = int(box.cls[0])
+                    label = names.get(cls_id, str(cls_id))
 
-            xyxy = box.xyxy[0]
-            if hasattr(xyxy, "tolist"):
-                xyxy = xyxy.tolist()
+                    xyxy = box.xyxy[0]
+                    if hasattr(xyxy, "tolist"):
+                        xyxy = xyxy.tolist()
 
-            try:
-                x1, y1, x2, y2 = float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3])
-            except (ValueError, IndexError, TypeError):
-                continue
+                    try:
+                        x1, y1, x2, y2 = float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3])
+                    except (ValueError, IndexError, TypeError):
+                        continue
 
-            det = self.filter_candidate_box(
-                x1, y1, x2, y2, conf, label, cls_id=cls_id, img_w=img_w, img_h=img_h
-            )
-            if det is not None:
-                detections.append(det)
+                    det = self.filter_candidate_box(
+                        x1, y1, x2, y2, conf, label, cls_id=cls_id, img_w=img_w, img_h=img_h
+                    )
+                    if det is not None:
+                        detections.append(det)
 
-        return detections
+        filter_ms = (time.perf_counter() - t_filt_start) * 1000.0
+        postprocess_filter_ms = yolo_post_ms + filter_ms
+        self.last_timing = {
+            "preprocess_ms": round(preprocess_ms, 2),
+            "inference_ms": round(inference_ms, 2),
+            "postprocess_filter_ms": round(postprocess_filter_ms, 2),
+            "max_raw_conf": round(max_raw_conf, 4),
+        }
 
         return detections
 

@@ -118,7 +118,7 @@ class PerceptionConfig(BaseModel):
     min_area_ratio: float = 0.00005
     max_area_ratio: float = 0.40
     max_aspect_ratio: float = 8.0
-    device: Optional[str] = None
+    device: Optional[str] = "auto"
     classes: Optional[List[str]] = None
     max_fps: float = 1.0
     min_altitude_m: float = 2.0
