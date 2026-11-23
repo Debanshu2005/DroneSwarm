@@ -60,7 +60,7 @@ export class WebSocketManager {
         this.intentionallyClosed = false;
         this.isConnecting = true;
         this.lastError = "";
-        
+
         // Android / Capacitor / Secure context check
         const isSecureContext = typeof window !== 'undefined' && window.location?.protocol === 'https:';
         if (isSecureContext && this.url.startsWith('ws://') && !this.url.includes('localhost') && !this.url.includes('127.0.0.1')) {
@@ -98,7 +98,7 @@ export class WebSocketManager {
             } else {
                 // With a token: send AUTH on open.
                 this.ws.send(JSON.stringify({ type: "AUTH", token: this.authToken }));
-                
+
                 // (c) ~1500 ms after open with the socket still OPEN and no close event: mark CONNECTED
                 if (this.authGraceTimer) clearTimeout(this.authGraceTimer);
                 this.authGraceTimer = setTimeout(() => {
@@ -161,7 +161,7 @@ export class WebSocketManager {
             // DO NOT THROW HERE. Browser will close the socket and trigger onclose.
         };
     }
-    
+
     handleDisconnect(state = "DISCONNECTED", detail = {}) {
         clearTimeout(this.connectionTimeout);
         if (this.authGraceTimer) {
@@ -176,15 +176,15 @@ export class WebSocketManager {
             this.lastError = this.lastCloseReason || "Relay authentication failed";
         }
         this.ws = null;
-        
+
         if (this.onConnectionChange) this.onConnectionChange(state, {
             code: this.lastCloseCode,
             reason: this.lastCloseReason,
             error: this.lastError
         });
-        
+
         if (this.intentionallyClosed || state === "AUTH_FAILED") return;
-        
+
         // Reconnect logic with exponential backoff (max 10s)
         let timeout = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 10000);
         console.log(`Will attempt reconnect in ${timeout}ms (Attempt ${this.reconnectAttempts + 1})`);

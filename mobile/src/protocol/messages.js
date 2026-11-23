@@ -51,16 +51,16 @@ export const CommandAction = {
 };
 
 export class CommandLifecycleMessage {
-  constructor(sender_id, target_id, action, stage, reason = null, cmd_id = null) {
-    this.msg_type = MessageType.COMMAND_LIFECYCLE;
-    this.sender_id = sender_id;
-    this.target_id = target_id;
-    this.timestamp = Date.now() / 1000;
-    this.action = action;
-    this.stage = stage;
-    this.reason = reason;
-    this.cmd_id = cmd_id;
-  }
+    constructor(sender_id, target_id, action, stage, reason = null, cmd_id = null) {
+        this.msg_type = MessageType.COMMAND_LIFECYCLE;
+        this.sender_id = sender_id;
+        this.target_id = target_id;
+        this.timestamp = Date.now() / 1000;
+        this.action = action;
+        this.stage = stage;
+        this.reason = reason;
+        this.cmd_id = cmd_id;
+    }
 }
 
 export class BaseMessage {
@@ -114,9 +114,9 @@ export class TestInjectMessage extends BaseMessage {
 }
 
 export class TerminalCommandMessage extends BaseMessage {
-  constructor(sender_id, text, target_id = null, broadcast = false) {
-    super(MessageType.TERMINAL_COMMAND, sender_id, target_id);
-    this.text = text;
-    this.broadcast = broadcast;
-  }
+    constructor(sender_id, text, target_id = null, broadcast = false) {
+        super(MessageType.TERMINAL_COMMAND, sender_id, target_id);
+        this.text = text;
+        this.broadcast = broadcast;
+    }
 }
