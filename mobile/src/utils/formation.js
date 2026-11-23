@@ -10,14 +10,18 @@
  * @param {number}   spacing - Desired spacing in metres
  * @returns {{ type: string, spacing: number, members: string[], slot_assignments: Object }}
  */
+export function normalizeDroneId(droneId) {
+  return String(droneId).trim().toLowerCase();
+}
+
 export function buildFormationParams(drones, type, spacing) {
   // Only include drones that are reachable
   const online = drones.filter(
     (d) => d.status === 'CONNECTED' || d.status === 'DEGRADED'
   );
 
-  // Sort IDs - must match Python: sorted(set(drone_ids))
-  const members = online.map((d) => d.id).sort();
+  // Sort IDs - must match Python: sorted(set(normalize_drone_id(d) for d in drone_ids))
+  const members = Array.from(new Set(online.map((d) => normalizeDroneId(d.id)))).sort();
 
   const slot_assignments = {};
   members.forEach((id, idx) => {

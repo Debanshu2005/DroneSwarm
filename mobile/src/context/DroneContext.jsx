@@ -72,6 +72,14 @@ export const DroneProvider = ({ children }) => {
   const [testMode, setTestMode] = useState(() => safeStorageGet("PhoneOS_TestMode", "false") === "true");
   const [indoorMode, setIndoorMode] = useState(() => safeStorageGet("PhoneOS_IndoorMode", "false") === "true");
   const [eventLog, setEventLog] = useState([]);
+  const [terminalLog, setTerminalLog] = useState([]);
+
+  const appendTerminalLog = (entry) => {
+    setTerminalLog(prev => {
+      const next = [...prev, entry];
+      return next.length > 200 ? next.slice(next.length - 200) : next;
+    });
+  };
 
   const updateWsUrl = (newUrl) => {
     const trimmed = String(newUrl || '').trim();
@@ -766,15 +774,16 @@ export const DroneProvider = ({ children }) => {
     });
   };
 
-  const sendTerminalCommand = (text, targetIds = null) => {
-    if (!wsManager || isConnected !== "CONNECTED") return;
+  const sendTerminalCommand = (text, targetIds = null, broadcast = false) => {
+    if (!wsManager || isConnected !== "CONNECTED") return false;
 
     const targets = targetIds || Array.from(selectedDrones);
-    if (targets.length === 0) return;
+    if (targets.length === 0) return false;
 
     targets.forEach(id => {
-      wsManager.send(new TerminalCommandMessage(GS_ID, text, id));
+      wsManager.send(new TerminalCommandMessage(GS_ID, text, id, broadcast));
     });
+    return true;
   };
 
   const sendParamRequest = (action, param_name = null, param_value = null, param_type = null, targetId = null) => {
@@ -838,7 +847,7 @@ export const DroneProvider = ({ children }) => {
     relayAuthToken, setRelayAuthToken, testMode, setTestMode, indoorMode, setIndoorMode, eventLog, nowMs, connectionError,
     sendCommand, sendTerminalCommand, sendParamRequest, toggleSelect, selectAll, selectNone, selectOnly, addLog,
     testOverrides, setTestOverride, clearTestOverrides, injectFailure, testSessionLog, clearTestSessionLog,
-    garbage, dismissGarbage, clearGarbage
+    garbage, dismissGarbage, clearGarbage, terminalLog, setTerminalLog, appendTerminalLog
   };
 
   return <DroneContext.Provider value={value}>{children}</DroneContext.Provider>;

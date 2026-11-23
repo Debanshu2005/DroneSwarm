@@ -114,8 +114,9 @@ export class TestInjectMessage extends BaseMessage {
 }
 
 export class TerminalCommandMessage extends BaseMessage {
-  constructor(sender_id, text, target_id = null) {
+  constructor(sender_id, text, target_id = null, broadcast = false) {
     super(MessageType.TERMINAL_COMMAND, sender_id, target_id);
     this.text = text;
+    this.broadcast = broadcast;
   }
 }

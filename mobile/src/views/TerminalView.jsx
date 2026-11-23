@@ -4,13 +4,12 @@ import { Terminal, Send, ArrowLeft } from 'lucide-react';
 import { MessageType } from '../protocol/messages';
 
 export default function TerminalView({ setView }) {
-  const { drones, sendTerminalCommand, wsManager } = useDroneContext();
+  const { drones, sendTerminalCommand, wsManager, terminalLog, appendTerminalLog } = useDroneContext();
   
   const [targetMode, setTargetMode] = useState('ALL');
   const [targetDroneId, setTargetDroneId] = useState(null);
   
   const [inputText, setInputText] = useState('');
-  const [outputLog, setOutputLog] = useState([]);
   const outputRef = useRef(null);
   
   const droneIds = Object.keys(drones || {});
@@ -30,21 +29,36 @@ export default function TerminalView({ setView }) {
     return targetMode === 'ALL' ? droneIds : (targetDroneId ? [targetDroneId] : []);
   };
 
+  // Stable ref for targets so listeners don't re-subscribe on target changes
+  const targetsRef = useRef(getTargetArray());
+  useEffect(() => {
+    targetsRef.current = getTargetArray();
+  }, [targetMode, targetDroneId, droneIds]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const text = inputText.trim();
     if (!text) return;
     
     const targets = getTargetArray();
-    if (targets.length === 0) {
-      setOutputLog(prev => [...prev, { type: 'error', text: 'No targets selected or available.', time: new Date().toLocaleTimeString() }]);
+    const isBroadcast = targetMode === 'ALL';
+    const success = sendTerminalCommand(text, targets, isBroadcast);
+
+    if (!success) {
+      appendTerminalLog({ 
+        type: 'error', 
+        text: 'Not connected; command not sent', 
+        time: new Date().toLocaleTimeString() 
+      });
       return;
     }
 
-    // Local echo
-    setOutputLog(prev => [...prev, { type: 'input', text: `> ${text}`, time: new Date().toLocaleTimeString() }]);
-    
-    sendTerminalCommand(text, targets);
+    // Local echo on success
+    appendTerminalLog({ 
+      type: 'input', 
+      text: `> ${text}`, 
+      time: new Date().toLocaleTimeString() 
+    });
     setInputText('');
   };
 
@@ -52,47 +66,47 @@ export default function TerminalView({ setView }) {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
-  }, [outputLog]);
+  }, [terminalLog]);
 
   useEffect(() => {
     if (!wsManager) return;
 
     const handleStatus = (msg) => {
-      const targets = getTargetArray();
+      const targets = targetsRef.current;
       if (targets.includes(msg.sender_id) || targets.includes(msg.target_id)) {
-         setOutputLog(prev => [...prev, { 
+         appendTerminalLog({ 
              type: 'status', 
+             severity: msg.severity,
              source: msg.sender_id,
              text: msg.status_text, 
              time: new Date().toLocaleTimeString() 
-         }]);
+         });
       }
     };
 
     const handleLifecycle = (msg) => {
-      const targets = getTargetArray();
+      const targets = targetsRef.current;
       if (targets.includes(msg.sender_id) || targets.includes(msg.target_id)) {
          const reasonText = msg.reason ? ` (${msg.reason})` : '';
-         setOutputLog(prev => [...prev, { 
+         appendTerminalLog({ 
              type: 'lifecycle', 
              source: msg.sender_id,
              text: `[${msg.action.toUpperCase()}] ${msg.stage}${reasonText}`, 
              time: new Date().toLocaleTimeString() 
-         }]);
+         });
       }
     };
 
     // Subscribing creates listeners in wsManager.
-    // We cannot easily unsubscribe with this simple pattern, but the component stays mounted mostly.
+    // Subscribe once on mount with stable handlers using targetsRef; unsubscribe on unmount.
     wsManager.subscribe(MessageType.STATUS, handleStatus);
     wsManager.subscribe(MessageType.COMMAND_LIFECYCLE, handleLifecycle);
 
     return () => {
-       // Since the framework doesn't provide an unsubscribe ID, we rely on the object reference 
-       // but MultiWebSocketManager.subscribe doesn't return anything.
-       // We accept the slight memory leak of listeners on unmount as instructed by the "subscribe via manager.subscribe pattern".
+       wsManager.unsubscribe(MessageType.STATUS, handleStatus);
+       wsManager.unsubscribe(MessageType.COMMAND_LIFECYCLE, handleLifecycle);
     };
-  }, [wsManager, targetMode, targetDroneId, droneIds.length]); // Intentionally omitting full dependencies to avoid re-subscribing too often
+  }, [wsManager, appendTerminalLog]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: 'monospace', background: '#1e1e1e', color: '#00ff00', borderRadius: '8px', overflow: 'hidden' }}>
@@ -113,14 +127,14 @@ export default function TerminalView({ setView }) {
        </div>
        
        <div ref={outputRef} style={{ flex: 1, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '13px' }}>
-          {outputLog.length === 0 && <div style={{ color: '#888', fontStyle: 'italic' }}>Terminal ready. Type a command like "takeoff to 5m" or "circle with 3m radius".</div>}
-          {outputLog.map((log, i) => (
+          {(!terminalLog || terminalLog.length === 0) && <div style={{ color: '#888', fontStyle: 'italic' }}>Terminal ready. Type a command like "takeoff to 5m" or "circle with 3m radius".</div>}
+          {(terminalLog || []).map((log, i) => (
              <div key={i} style={{ display: 'flex', gap: '8px', lineHeight: '1.4' }}>
                 <span style={{ color: '#888', minWidth: '75px' }}>[{log.time}]</span>
                 {log.source && <span style={{ color: '#569cd6' }}>{log.source}:</span>}
                 <span style={{ 
                    color: log.type === 'input' ? '#fff' : 
-                          log.type === 'error' ? '#f44336' : 
+                          (log.type === 'error' || log.severity === 'error' || log.severity === 'critical') ? '#f44336' : 
                           log.type === 'status' ? '#4caf50' : 
                           '#ffeb3b' 
                 }}>
