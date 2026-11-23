@@ -70,6 +70,99 @@ class PerceptionPipeline:
         self.last_step_stats: dict = {}
         self._deferred_buffer: List[Dict[str, Any]] = []
 
+        # Profiling window metrics (~5 s periodic reporting)
+        self._profile_window_start = time.monotonic()
+        self._profile_frames = 0
+        self._profile_sim_get_images_ms: List[float] = []
+        self._profile_capture_ms: List[float] = []
+        self._profile_preprocess_ms: List[float] = []
+        self._profile_inference_ms: List[float] = []
+        self._profile_postprocess_ms: List[float] = []
+        self._profile_tracker_ms: List[float] = []
+        self._profile_e2e_ms: List[float] = []
+        self._profile_max_raw_conf = 0.0
+
+    def _record_profile_sample(
+        self,
+        sim_get_images_ms: float,
+        capture_ms: float,
+        preprocess_ms: float,
+        inference_ms: float,
+        postprocess_ms: float,
+        tracker_ms: float,
+        e2e_ms: float,
+        raw_conf: float,
+    ) -> None:
+        """Record timing metrics for one processed frame and log summary every ~5 seconds."""
+        self._profile_frames += 1
+        self._profile_sim_get_images_ms.append(sim_get_images_ms)
+        self._profile_capture_ms.append(capture_ms)
+        self._profile_preprocess_ms.append(preprocess_ms)
+        self._profile_inference_ms.append(inference_ms)
+        self._profile_postprocess_ms.append(postprocess_ms)
+        self._profile_tracker_ms.append(tracker_ms)
+        self._profile_e2e_ms.append(e2e_ms)
+        if raw_conf > self._profile_max_raw_conf:
+            self._profile_max_raw_conf = raw_conf
+
+        now_m = time.monotonic()
+        dt = now_m - self._profile_window_start
+        if dt >= 5.0 and self._profile_frames > 0:
+            mean_sim = sum(self._profile_sim_get_images_ms) / len(self._profile_sim_get_images_ms)
+            mean_cap = sum(self._profile_capture_ms) / len(self._profile_capture_ms)
+            mean_pre = sum(self._profile_preprocess_ms) / len(self._profile_preprocess_ms)
+            mean_inf = sum(self._profile_inference_ms) / len(self._profile_inference_ms)
+            mean_post = sum(self._profile_postprocess_ms) / len(self._profile_postprocess_ms)
+            mean_trk = sum(self._profile_tracker_ms) / len(self._profile_tracker_ms)
+            mean_e2e = sum(self._profile_e2e_ms) / len(self._profile_e2e_ms)
+            fps = self._profile_frames / dt
+
+            logger.info(
+                "[%s][PROFILE ~5s] e2e=%.1fms (effective_fps=%.2f) | capture=%.1fms (simGetImages=%.1fms) | "
+                "preprocess=%.1fms | inference=%.1fms | postprocess+filter=%.1fms | tracker=%.1fms | "
+                "max_raw_conf=%.4f (frames=%d)",
+                self.drone_id,
+                mean_e2e,
+                fps,
+                mean_cap,
+                mean_sim,
+                mean_pre,
+                mean_inf,
+                mean_post,
+                mean_trk,
+                self._profile_max_raw_conf,
+                self._profile_frames,
+            )
+
+            self._profile_window_start = now_m
+            self._profile_frames = 0
+            self._profile_sim_get_images_ms.clear()
+            self._profile_capture_ms.clear()
+            self._profile_preprocess_ms.clear()
+            self._profile_inference_ms.clear()
+            self._profile_postprocess_ms.clear()
+            self._profile_tracker_ms.clear()
+            self._profile_e2e_ms.clear()
+            self._profile_max_raw_conf = 0.0
+
+    def _flush_confirmed_alerts(self) -> None:
+        """Log any newly confirmed track events with frames and latency to confirm."""
+        if hasattr(self.aggregator, "last_confirmed_events"):
+            while self.aggregator.last_confirmed_events:
+                evt = self.aggregator.last_confirmed_events.pop(0)
+                logger.info(
+                    "[%s][ALERT CONFIRMED] id=%s label=%s conf=%.3f lat=%.6f lon=%.6f | "
+                    "confirmed in %d frames, %.2f s",
+                    self.drone_id,
+                    evt.get("id"),
+                    evt.get("label"),
+                    evt.get("confidence", 0.0),
+                    evt.get("lat", 0.0),
+                    evt.get("lon", 0.0),
+                    evt.get("frames", 0),
+                    evt.get("seconds", 0.0),
+                )
+
     async def start(self) -> None:
         """Start perception loop as an isolated asyncio task."""
         if self._running:
@@ -130,6 +223,7 @@ class PerceptionPipeline:
 
     async def _step(self) -> None:
         """Single frame iteration: gate, acquire, infer, geolocate, aggregate, broadcast."""
+        t_step_start = time.perf_counter()
         self.last_rejection_reason = None
         self.last_step_stats = {
             "reached_camera": False,
@@ -220,6 +314,12 @@ class PerceptionPipeline:
             return
 
         self.last_step_stats["reached_camera"] = True
+        self._frame_id += 1
+        frame_meta = getattr(frame, "metadata", {})
+        if not isinstance(frame_meta, dict):
+            frame_meta = {}
+        sim_get_images_ms = float(frame_meta.get("sim_get_images_ms", 0.0) or 0.0)
+        capture_ms = float(frame_meta.get("capture_ms", 0.0) or 0.0)
 
         # 4. Fresh telemetry snapshot immediately after capture for geolocation
         telem = await self.fc.get_telemetry()
@@ -290,6 +390,14 @@ class PerceptionPipeline:
             logger.error("Detector inference failed: %s", e)
             return
 
+        timing = getattr(self.detector, "last_timing", {})
+        if not isinstance(timing, dict):
+            timing = {}
+        preprocess_ms = float(timing.get("preprocess_ms", 0.0) or 0.0)
+        inference_ms = float(timing.get("inference_ms", 0.0) or 0.0)
+        postprocess_ms = float(timing.get("postprocess_filter_ms", 0.0) or 0.0)
+        raw_conf = float(timing.get("max_raw_conf", 0.0) or 0.0)
+
         infer_latency_ms = (time.perf_counter() - t_infer_start) * 1000.0
         self.last_step_stats["inference_latency_ms"] = round(infer_latency_ms, 2)
         logger.debug("[%s] Inference latency: %.2f ms (raw: %d)", self.drone_id, infer_latency_ms, len(detections) if detections else 0)
@@ -304,10 +412,23 @@ class PerceptionPipeline:
             self.last_rejection_reason = "ZERO_DETECTIONS"
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
             # Fix ZERO_DETECTIONS path: aggregator still gets a prune/tick call with empty list
-            self.aggregator.update([], now=frame.timestamp)
+            t_agg_start = time.perf_counter()
+            self.aggregator.update([], now=frame.timestamp, frame_id=self._frame_id)
+            agg_ms = (time.perf_counter() - t_agg_start) * 1000.0
+            e2e_ms = (time.perf_counter() - t_step_start) * 1000.0
+            self._record_profile_sample(
+                sim_get_images_ms=sim_get_images_ms,
+                capture_ms=capture_ms,
+                preprocess_ms=preprocess_ms,
+                inference_ms=inference_ms,
+                postprocess_ms=postprocess_ms,
+                tracker_ms=agg_ms,
+                e2e_ms=e2e_ms,
+                raw_conf=raw_conf,
+            )
+            self._flush_confirmed_alerts()
             return
 
-        self._frame_id += 1
         h, w = frame.image.shape[:2]
         cam_cfg = self.config.camera
 
@@ -481,11 +602,39 @@ class PerceptionPipeline:
                 self.last_rejection_reason = "GEOLOCATION_ALL_FAILED"
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
             # Tick aggregator with empty list so unconfirmed/stale tracks are pruned
-            self.aggregator.update([], now=frame.timestamp)
+            t_agg_start = time.perf_counter()
+            self.aggregator.update([], now=frame.timestamp, frame_id=self._frame_id)
+            agg_ms = (time.perf_counter() - t_agg_start) * 1000.0
+            e2e_ms = (time.perf_counter() - t_step_start) * 1000.0
+            self._record_profile_sample(
+                sim_get_images_ms=sim_get_images_ms,
+                capture_ms=capture_ms,
+                preprocess_ms=preprocess_ms,
+                inference_ms=inference_ms,
+                postprocess_ms=postprocess_ms,
+                tracker_ms=agg_ms,
+                e2e_ms=e2e_ms,
+                raw_conf=raw_conf,
+            )
+            self._flush_confirmed_alerts()
             return
 
         # 6. Aggregation
-        emitted_items = self.aggregator.update(geo_dets, now=frame.timestamp)
+        t_agg_start = time.perf_counter()
+        emitted_items = self.aggregator.update(geo_dets, now=frame.timestamp, frame_id=self._frame_id)
+        agg_ms = (time.perf_counter() - t_agg_start) * 1000.0
+        e2e_ms = (time.perf_counter() - t_step_start) * 1000.0
+        self._record_profile_sample(
+            sim_get_images_ms=sim_get_images_ms,
+            capture_ms=capture_ms,
+            preprocess_ms=preprocess_ms,
+            inference_ms=inference_ms,
+            postprocess_ms=postprocess_ms,
+            tracker_ms=agg_ms,
+            e2e_ms=e2e_ms,
+            raw_conf=raw_conf,
+        )
+        self._flush_confirmed_alerts()
         self.last_step_stats["emitted_items"] = len(emitted_items) if emitted_items else 0
         if not emitted_items:
             self.last_rejection_reason = "AGGREGATION_NO_EMISSION"

@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 import math
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 from DroneOS1.perception.geolocate import lat_lon_to_meters
 
@@ -34,6 +34,9 @@ class AggregatedTrack:
     last_distinct_drone_lat: Optional[float] = None
     last_distinct_drone_lon: Optional[float] = None
     last_distinct_bearing_deg: Optional[float] = None
+    first_frame_id: int = 0
+    frames_to_confirm: int = 0
+    seconds_to_confirm: float = 0.0
 
 
 @dataclass
@@ -59,6 +62,8 @@ class AggregatorItem:
     hits: int
     status: str  # "new" | "update"
     altitude_agl: Optional[float] = None
+    frames_to_confirm: int = 0
+    seconds_to_confirm: float = 0.0
 
 
 class TrackAggregator:
@@ -95,12 +100,15 @@ class TrackAggregator:
         self.min_viewpoint_angle_deg = min_viewpoint_angle_deg
 
         self._seq = 0
+        self._current_frame_id = 0
         self.tracks: Dict[str, AggregatedTrack] = {}
+        self.last_confirmed_events: List[Dict[str, Any]] = []
 
     def update(
         self,
         detections: List[GeoreferencedDetection],
         now: Optional[float] = None,
+        frame_id: Optional[int] = None,
     ) -> List[AggregatorItem]:
         """
         Process a list of georeferenced detections from a single frame.
@@ -108,6 +116,8 @@ class TrackAggregator:
         """
         if now is None:
             now = time.time()
+        if frame_id is not None:
+            self._current_frame_id = frame_id
 
         # Sort detections by confidence descending for greedy association
         sorted_dets = sorted(detections, key=lambda d: d.confidence, reverse=True)
@@ -237,6 +247,7 @@ class TrackAggregator:
                     last_distinct_drone_lat=det.drone_lat,
                     last_distinct_drone_lon=det.drone_lon,
                     last_distinct_bearing_deg=init_bearing,
+                    first_frame_id=self._current_frame_id,
                     last_emitted_time=0.0,
                     last_emitted_hits=0,
                     confirmed=False,
@@ -249,20 +260,32 @@ class TrackAggregator:
         for track in self.tracks.values():
             if not track.confirmed and track.distinct_hits >= self.min_hits:
                 track.confirmed = True
+                track.frames_to_confirm = max(1, self._current_frame_id - track.first_frame_id + 1)
+                track.seconds_to_confirm = max(0.0, now - track.first_seen)
                 track.last_emitted_time = now
                 track.last_emitted_hits = track.hits
-                emitted_items.append(
-                    AggregatorItem(
-                        id=track.id,
-                        label=track.label,
-                        confidence=track.max_confidence,
-                        lat=track.lat,
-                        lon=track.lon,
-                        hits=track.hits,
-                        status="new",
-                        altitude_agl=track.altitude_agl,
-                    )
+                item = AggregatorItem(
+                    id=track.id,
+                    label=track.label,
+                    confidence=track.max_confidence,
+                    lat=track.lat,
+                    lon=track.lon,
+                    hits=track.hits,
+                    status="new",
+                    altitude_agl=track.altitude_agl,
+                    frames_to_confirm=track.frames_to_confirm,
+                    seconds_to_confirm=track.seconds_to_confirm,
                 )
+                emitted_items.append(item)
+                self.last_confirmed_events.append({
+                    "id": track.id,
+                    "label": track.label,
+                    "confidence": track.max_confidence,
+                    "lat": track.lat,
+                    "lon": track.lon,
+                    "frames": track.frames_to_confirm,
+                    "seconds": round(track.seconds_to_confirm, 3),
+                })
             elif track.confirmed:
                 if (
                     track.hits > track.last_emitted_hits

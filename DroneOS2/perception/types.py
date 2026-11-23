@@ -9,6 +9,11 @@ class Frame:
     """Captured camera frame with timestamp."""
     image: Any  # BGR numpy.ndarray
     timestamp: float
+    metadata: Any = None
+
+    def __post_init__(self):
+        if self.metadata is None:
+            self.metadata = {}
 
 
 @dataclass

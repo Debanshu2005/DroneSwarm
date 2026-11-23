@@ -50,6 +50,8 @@ class AirSimFrameSource(FrameSource):
         self._external_client = (client is not None)
         self._connected = (client is not None)
         self.is_synthetic = False
+        self.last_sim_get_images_ms = 0.0
+        self.last_capture_ms = 0.0
 
     def _discard_client(self) -> None:
         """Safely close and discard client reference before reconnecting or on shutdown."""
@@ -83,6 +85,7 @@ class AirSimFrameSource(FrameSource):
         if not self._ensure_connected():
             return None
 
+        t_cap_start = time.perf_counter()
         try:
             try:
                 import airsim
@@ -104,10 +107,14 @@ class AirSimFrameSource(FrameSource):
                         self.compress = compress
                 request = _GenericImageRequest(self.camera_name, img_type, False, False)
 
+            t_rpc_start = time.perf_counter()
             responses = self._client.simGetImages(
                 [request],
                 vehicle_name=self.vehicle_name,
             )
+            sim_get_images_ms = (time.perf_counter() - t_rpc_start) * 1000.0
+            self.last_sim_get_images_ms = round(sim_get_images_ms, 2)
+
             if not responses or not responses[0].image_data_uint8:
                 return None
 
@@ -125,7 +132,13 @@ class AirSimFrameSource(FrameSource):
             if img is None:
                 return None
 
-            return Frame(image=img, timestamp=time.time())
+            capture_ms = (time.perf_counter() - t_cap_start) * 1000.0
+            self.last_capture_ms = round(capture_ms, 2)
+            meta = {
+                "sim_get_images_ms": self.last_sim_get_images_ms,
+                "capture_ms": self.last_capture_ms,
+            }
+            return Frame(image=img, timestamp=time.time(), metadata=meta)
         except Exception as e:
             logger.error("AirSim image acquisition error: %s", e)
             self._connected = False

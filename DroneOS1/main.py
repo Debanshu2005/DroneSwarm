@@ -148,6 +148,7 @@ class DroneOSApp:
             self.perception_cfg = PerceptionConfig(enabled=False)
 
         import os
+        self._perception_source = "yaml"
         if "--no-perception" in sys.argv:
             self.perception_cfg.enabled = False
         elif "--perception" in sys.argv:
@@ -156,6 +157,7 @@ class DroneOSApp:
             env_perc = os.environ.get("DRONEOS_PERCEPTION")
             if env_perc is not None:
                 self.perception_cfg.enabled = env_perc.strip().lower() in ("1", "true", "yes")
+                self._perception_source = "env"
 
         # Perception Preflight Check
         repo_root = Path(__file__).resolve().parent.parent
@@ -355,6 +357,7 @@ class DroneOSApp:
                     max_area_ratio=getattr(self.perception_cfg, "max_area_ratio", 1.0),
                     max_aspect_ratio=getattr(self.perception_cfg, "max_aspect_ratio", 0.0),
                 )
+                detector.load()
                 self.perception_pipeline = PerceptionPipeline(
                     drone_id=self.node_id,
                     frame_source=frame_src,
@@ -378,6 +381,15 @@ class DroneOSApp:
                     self.perception_cfg.weights,
                 )
                 self.perception_pipeline = None
+
+        # Log perception startup status
+        perc_status = self.get_perception_status()
+        perc_enabled = bool(getattr(self, 'perception_cfg', None) and self.perception_cfg.enabled)
+        perc_log_msg = f"perception: enabled={str(perc_enabled).lower()} source={getattr(self, '_perception_source', 'yaml')} status={perc_status.status}"
+        if perc_status.status == "DEGRADED" and perc_enabled:
+            logger.error("%s (reason: %s)", perc_log_msg, perc_status.reason)
+        else:
+            logger.info(perc_log_msg)
 
         self.diagnostics = SystemHealthReporter(
             self.network,
