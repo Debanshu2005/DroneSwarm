@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node src/utils/garbage.test.js && node src/networking/connection_config.test.js",
+    "test": "node src/utils/garbage.test.js && node src/networking/connection_config.test.js && node src/views/terminal.test.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "android:debug": "npx cap sync android && cd android && export JAVA_HOME=$HOME/jdk/jdk-17.0.12+7 && export ANDROID_HOME=$HOME/Android/Sdk && export PATH=$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH && ./gradlew assembleDebug",

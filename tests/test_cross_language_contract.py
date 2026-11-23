@@ -142,3 +142,70 @@ process.exit(0);
     assert "HEALTH_NETWORK_CONTRACT_OK" in proc.stdout
 
 
+def test_cross_language_terminal_command_and_formation_contract():
+    """Verify TerminalCommandMessage serialization and formation slot contract between Python and Node."""
+    node_exe = shutil.which("node")
+    if not node_exe:
+        pytest.skip("Node.js runtime not found in PATH")
+
+    from DroneOS.shared.protocol.messages import TerminalCommandMessage
+    from DroneOS.core.formation_manager import build_slot_assignments
+
+    import json
+    serializer = JsonSerializer()
+    py_msg = TerminalCommandMessage(
+        sender_id="GS_PHONE",
+        target_id="drone1",
+        text="form v spacing 15m",
+        broadcast=True,
+        timestamp=1700000000.0,
+    )
+    json_bytes = serializer.serialize(py_msg)
+    json_str = json_bytes.decode("utf-8")
+
+    py_slots = build_slot_assignments(["Drone1", "drone2", "Drone3"])
+    py_slots_json = json.dumps(py_slots)
+
+    node_script = f"""
+import fs from 'fs';
+import {{ TerminalCommandMessage }} from './mobile/src/protocol/messages.js';
+import {{ buildFormationParams, normalizeDroneId }} from './mobile/src/utils/formation.js';
+
+const raw = JSON.parse(fs.readFileSync(0, 'utf-8'));
+if (raw.msg_type !== 'terminal_command') throw new Error('Wrong msg_type: ' + raw.msg_type);
+if (raw.broadcast !== true) throw new Error('Broadcast flag must be true');
+if (raw.text !== 'form v spacing 15m') throw new Error('Text mismatch: ' + raw.text);
+
+// Test JS TerminalCommandMessage constructor
+const jsMsg = new TerminalCommandMessage('GS_PHONE', 'form v spacing 15m', 'drone1', true);
+if (jsMsg.broadcast !== true) throw new Error('JS TerminalCommandMessage missing broadcast flag');
+
+// Test formation parity
+const drones = [
+  {{ id: 'Drone1', status: 'CONNECTED' }},
+  {{ id: 'drone2', status: 'CONNECTED' }},
+  {{ id: 'Drone3', status: 'CONNECTED' }}
+];
+const fp = buildFormationParams(drones, 'v', 15);
+const expectedSlots = {py_slots_json};
+
+if (JSON.stringify(fp.slot_assignments) !== JSON.stringify(expectedSlots)) {{
+  throw new Error(`Slot mismatch: JS ${{JSON.stringify(fp.slot_assignments)}} vs Python ${{JSON.stringify(expectedSlots)}}`);
+}}
+
+console.log('TERMINAL_FORMATION_CONTRACT_OK');
+process.exit(0);
+"""
+
+    proc = subprocess.run(
+        [node_exe, "--input-type=module", "-e", node_script],
+        input=json_str,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert proc.returncode == 0, f"Node process failed:\nSTDOUT: {proc.stdout}\nSTDERR: {proc.stderr}"
+    assert "TERMINAL_FORMATION_CONTRACT_OK" in proc.stdout
+
+
+
