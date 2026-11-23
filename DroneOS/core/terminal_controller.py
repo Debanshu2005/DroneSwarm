@@ -15,8 +15,7 @@ from DroneOS.shared.nlp.trajectory_engine import (
     GlobalTarget,
     global_distance_m,
     TargetFrame,
-    LocalTarget,
-    local_distance_m
+    LocalTarget
 )
 from DroneOS.shared.nlp.telemetry_bridge import build_nav_context
 
@@ -28,6 +27,20 @@ class TerminalController:
         self.flight_controller = flight_controller
         self.node_id = node_id
         self.network = None
+        self.last_error_reason: str = ""
+
+    def _send_status(self, text: str, severity: str, target_id: str) -> None:
+        if self.network is not None:
+            msg = StatusMessage(
+                sender_id=self.node_id, 
+                target_id=target_id, 
+                status_text=text, 
+                severity=severity, 
+                timestamp=time.time()
+            )
+            res = self.network.broadcast_message(msg)
+            if asyncio.iscoroutine(res):
+                asyncio.create_task(res)
 
     async def run_repl(self) -> None:
         logger.info("Starting Terminal Controller REPL...")
@@ -69,32 +82,30 @@ class TerminalController:
             except Exception as e:
                 logger.error(f"Error in REPL loop: {e}")
 
-    async def process_text(self, text: str, sender_id: str) -> None:
+    async def process_text(self, text: str, sender_id: str, broadcast: bool = False) -> None:
         try:
             sequence = parse_task_sequence(text)
         except ValueError as e:
             logger.error(f"Failed to parse command: {e}")
+            self._send_status(f"Could not understand: {text} ({e})", "error", sender_id)
             return
 
-        if self.network is not None:
-            # sequence.action_names works because it was added in parse_mission logic
-            summary = f"Parsed: {', '.join(t.action for t in sequence.tasks)}"
-            echo_msg = StatusMessage(
-                sender_id=self.node_id, 
-                target_id=sender_id, 
-                status_text=summary, 
-                severity="info", 
-                timestamp=time.time()
-            )
-            asyncio.create_task(self.network.broadcast_message(echo_msg))
+        summary = f"Parsed: {', '.join(t.action for t in sequence.tasks)}"
+        self._send_status(summary, "info", sender_id)
 
         for task in sequence.tasks:
-            success = await self._execute_task(task, sender_id)
+            self.last_error_reason = ""
+            success = await self._execute_task(task, sender_id, broadcast=broadcast)
             if not success:
-                logger.warning(f"Task {task.action} failed, aborting sequence.")
-                break
+                action_name = getattr(task.action, "name", str(task.action))
+                reason = getattr(self, "last_error_reason", "") or "command rejected by handler"
+                logger.warning(f"Task {action_name} failed: {reason}, aborting sequence.")
+                self._send_status(f"Task {action_name} failed: {reason}", "error", sender_id)
+                return
 
-    async def _execute_task(self, task: ParsedTask, sender_id: str) -> bool:
+        self._send_status("Done", "info", sender_id)
+
+    async def _execute_task(self, task: ParsedTask, sender_id: str, broadcast: bool = False) -> bool:
         if task.action == TaskAction.TAKEOFF:
             # Check if we need to auto-arm
             telemetry = await self.flight_controller.get_telemetry()
@@ -107,12 +118,14 @@ class TerminalController:
                 )
                 arm_success = await self.command_handler.handle_command(arm_msg)
                 if not arm_success:
+                    self.last_error_reason = "arm command rejected by handler"
                     return False
 
                 start_time = time.monotonic()
                 while True:
                     if time.monotonic() - start_time > getattr(self, 'ARM_TIMEOUT', 10.0):
                         logger.warning("Timed out waiting for armed_state confirmation after ARM.")
+                        self.last_error_reason = "arm timeout waiting for confirmation"
                         return False
                     telemetry = await self.flight_controller.get_telemetry()
                     if getattr(telemetry, 'armed_state', None) == "ARMED":
@@ -125,7 +138,11 @@ class TerminalController:
                 sender_id=sender_id,
                 timestamp=time.time()
             )
-            return await self.command_handler.handle_command(msg)
+            success = await self.command_handler.handle_command(msg)
+            if not success:
+                self.last_error_reason = "command rejected by handler"
+                return False
+            return True
         
         elif task.action == TaskAction.LAND:
             msg = ControlMessage(
@@ -136,6 +153,7 @@ class TerminalController:
             )
             success = await self.command_handler.handle_command(msg)
             if not success:
+                self.last_error_reason = "command rejected by handler"
                 return False
                 
             # Wait for landing to complete before auto-disarming
@@ -157,7 +175,11 @@ class TerminalController:
                 sender_id=sender_id,
                 timestamp=time.time()
             )
-            return await self.command_handler.handle_command(disarm_msg)
+            success = await self.command_handler.handle_command(disarm_msg)
+            if not success:
+                self.last_error_reason = "command rejected by handler"
+                return False
+            return True
             
         elif task.action == TaskAction.RTL:
             msg = ControlMessage(
@@ -166,7 +188,11 @@ class TerminalController:
                 sender_id=sender_id,
                 timestamp=time.time()
             )
-            return await self.command_handler.handle_command(msg)
+            success = await self.command_handler.handle_command(msg)
+            if not success:
+                self.last_error_reason = "command rejected by handler"
+                return False
+            return True
             
         elif task.action == TaskAction.SRTL:
             msg = ControlMessage(
@@ -175,11 +201,16 @@ class TerminalController:
                 sender_id=sender_id,
                 timestamp=time.time()
             )
-            return await self.command_handler.handle_command(msg)
+            success = await self.command_handler.handle_command(msg)
+            if not success:
+                self.last_error_reason = "command rejected by handler"
+                return False
+            return True
             
         elif task.action == TaskAction.FORMATION:
             if not getattr(self, "swarm_manager", None):
                 logger.error("Terminal controller missing swarm_manager reference")
+                self.last_error_reason = "swarm_manager not available"
                 return False
                 
             timeout = getattr(self.swarm_manager.heartbeat_mgr, "timeout_sec", 5.0)
@@ -190,12 +221,29 @@ class TerminalController:
                 if p and (now - p.last_seen) <= timeout:
                     active_peers.add(pid)
                     
-            members = sorted(active_peers | {self.node_id})
-            from DroneOS.core.formation_manager import build_slot_assignments
+            from DroneOS.core.formation_manager import normalize_drone_id, build_slot_assignments, compute_min_formation_spacing
+            members = sorted(set(normalize_drone_id(p) for p in (active_peers | {self.node_id})))
             slot_assignments = build_slot_assignments(members)
             
             f_type = task.params.get("type", "V")
-            spacing = task.params.get("spacing", 10.0)
+            spacing = float(task.params.get("spacing", 10.0))
+            
+            # Early spacing check
+            flight_cfg = getattr(self.command_handler, "flight_manager", None)
+            flight_cfg = getattr(flight_cfg, "_flight_config", None) if flight_cfg else None
+            min_viable = compute_min_formation_spacing(flight_cfg)
+            if spacing < min_viable:
+                reason = f"spacing {spacing:.0f} m is below the minimum {min_viable:.0f} m; try 'form {f_type.lower()} spacing {min_viable:.0f}m'"
+                logger.warning(reason)
+                self.last_error_reason = reason
+                return False
+
+            # Single coordinator check in broadcast mode
+            if broadcast and len(members) > 1:
+                coordinator_id = members[0]
+                if normalize_drone_id(self.node_id) != coordinator_id:
+                    self._send_status(f"formation handled by {coordinator_id}", "info", sender_id)
+                    return True
             
             msg = ControlMessage(
                 action=CommandAction.FORMATION_UPDATE,
@@ -205,7 +253,7 @@ class TerminalController:
             )
             
             for pid in members:
-                if pid != self.node_id:
+                if normalize_drone_id(pid) != normalize_drone_id(self.node_id):
                     remote_msg = ControlMessage(
                         action=CommandAction.FORMATION_UPDATE,
                         params={"type": f_type, "spacing": spacing, "members": members, "slot_assignments": slot_assignments},
@@ -213,9 +261,18 @@ class TerminalController:
                         target_id=pid,
                         timestamp=now
                     )
-                    asyncio.create_task(self.network.broadcast_message(remote_msg))
+                    if self.network is not None:
+                        res = self.network.broadcast_message(remote_msg)
+                        if asyncio.iscoroutine(res):
+                            asyncio.create_task(res)
                     
-            return await self.command_handler.handle_command(msg)
+            success = await self.command_handler.handle_command(msg)
+            if not success:
+                fm = getattr(self.command_handler, "flight_manager", None)
+                reason = getattr(fm, "last_rejection_reason", None) or "command rejected by handler"
+                self.last_error_reason = reason
+                return False
+            return True
             
         elif task.action == TaskAction.HOVER:
             msg = ControlMessage(
@@ -224,7 +281,11 @@ class TerminalController:
                 sender_id=sender_id,
                 timestamp=time.time()
             )
-            return await self.command_handler.handle_command(msg)
+            success = await self.command_handler.handle_command(msg)
+            if not success:
+                self.last_error_reason = "command rejected by handler"
+                return False
+            return True
             
         elif task.action == TaskAction.SET_MODE:
             mode_str = "UNKNOWN"
@@ -236,7 +297,11 @@ class TerminalController:
                 sender_id=sender_id,
                 timestamp=time.time()
             )
-            return await self.command_handler.handle_command(msg)
+            success = await self.command_handler.handle_command(msg)
+            if not success:
+                self.last_error_reason = "command rejected by handler"
+                return False
+            return True
             
         elif task.action == TaskAction.ARM:
             msg = ControlMessage(
@@ -245,7 +310,11 @@ class TerminalController:
                 sender_id=sender_id,
                 timestamp=time.time()
             )
-            return await self.command_handler.handle_command(msg)
+            success = await self.command_handler.handle_command(msg)
+            if not success:
+                self.last_error_reason = "command rejected by handler"
+                return False
+            return True
             
         elif task.action == TaskAction.DISARM:
             msg = ControlMessage(
@@ -254,7 +323,11 @@ class TerminalController:
                 sender_id=sender_id,
                 timestamp=time.time()
             )
-            return await self.command_handler.handle_command(msg)
+            success = await self.command_handler.handle_command(msg)
+            if not success:
+                self.last_error_reason = "command rejected by handler"
+                return False
+            return True
             
         elif task.action == TaskAction.HOLD:
             msg = ControlMessage(
@@ -263,7 +336,11 @@ class TerminalController:
                 sender_id=sender_id,
                 timestamp=time.time()
             )
-            return await self.command_handler.handle_command(msg)
+            success = await self.command_handler.handle_command(msg)
+            if not success:
+                self.last_error_reason = "command rejected by handler"
+                return False
+            return True
             
         elif task.action in [TaskAction.FORWARD, TaskAction.BACKWARD, TaskAction.LEFT, TaskAction.RIGHT, TaskAction.UP, TaskAction.DOWN]:
             vx, vy, vz = 0.0, 0.0, 0.0
@@ -287,6 +364,7 @@ class TerminalController:
                 )
                 success = await self.command_handler.handle_command(msg)
                 if not success:
+                    self.last_error_reason = "command rejected by handler"
                     return False
                 await asyncio.sleep(0.1)
                 
@@ -297,7 +375,11 @@ class TerminalController:
                 sender_id=sender_id,
                 timestamp=time.time()
             )
-            return await self.command_handler.handle_command(hover_msg)
+            success = await self.command_handler.handle_command(hover_msg)
+            if not success:
+                self.last_error_reason = "command rejected by handler"
+                return False
+            return True
             
         elif task.action == TaskAction.TAKEOFF_LAND:
             target_alt = task.params.get("h", 5.0)
@@ -309,6 +391,7 @@ class TerminalController:
             )
             success = await self.command_handler.handle_command(msg1)
             if not success:
+                self.last_error_reason = "command rejected by handler"
                 return False
                 
             start_time = time.monotonic()
@@ -330,7 +413,11 @@ class TerminalController:
                 sender_id=sender_id,
                 timestamp=time.time()
             )
-            return await self.command_handler.handle_command(msg2)
+            success = await self.command_handler.handle_command(msg2)
+            if not success:
+                self.last_error_reason = "command rejected by handler"
+                return False
+            return True
             
         else:
             telemetry = await self.flight_controller.get_telemetry()
@@ -340,6 +427,7 @@ class TerminalController:
                 plan = build_trajectory(task, report, origin)
             except ValueError as e:
                 logger.error(f"Trajectory rejected: {e}")
+                self.last_error_reason = f"trajectory rejected: {e}"
                 return False
                 
             if plan.frame == TargetFrame.LOCAL_NED:
@@ -365,14 +453,14 @@ class TerminalController:
             accepted = await self.command_handler.handle_command(msg)
             if not accepted:
                 logger.error(f"GOTO command rejected for waypoint {target.name}")
+                self.last_error_reason = f"GOTO command rejected for waypoint {target.name}"
                 return False
                 
             start_time = time.monotonic()
-            reached = False
-            
             while True:
                 if time.monotonic() - start_time > timeout_s:
                     logger.error(f"Timeout reaching waypoint {target.name}")
+                    self.last_error_reason = f"Timeout reaching waypoint {target.name}"
                     return False
                     
                 telemetry = await self.flight_controller.get_telemetry()
@@ -382,7 +470,6 @@ class TerminalController:
                         target.lat_deg, target.lon_deg
                     )
                     if dist <= acceptance_radius_m:
-                        reached = True
                         break
                         
                 await asyncio.sleep(0.5)
@@ -416,6 +503,7 @@ class TerminalController:
             accepted = await self.command_handler.handle_command(msg)
             if not accepted:
                 logger.error(f"GOTO_LOCAL command rejected for waypoint {target.name}")
+                self.last_error_reason = f"GOTO_LOCAL command rejected for waypoint {target.name}"
                 return False
                 
             dist = math.sqrt((target.north_m - last_north)**2 + 
