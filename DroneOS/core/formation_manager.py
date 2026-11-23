@@ -14,6 +14,29 @@ class FormationType(str, Enum):
     SQUARE = "SQUARE"
     GRID = "GRID"
 
+def normalize_drone_id(drone_id: str) -> str:
+    """Canonical normalization for drone IDs (lowercase, stripped)."""
+    return str(drone_id).strip().lower()
+
+def compute_min_formation_spacing(flight_cfg: any = None) -> float:
+    """
+    Computes minimum safe formation spacing: 1.5 * max(min_formation_separation_m, min_horizontal_distance).
+    Shared between FlightManager, Healing, and TerminalController.
+    """
+    min_sep = 8.0
+    min_ca = 2.0
+    if flight_cfg is not None:
+        try:
+            formation = getattr(flight_cfg, "formation", None)
+            if formation is not None and hasattr(formation, "min_formation_separation_m"):
+                min_sep = float(formation.min_formation_separation_m)
+            ca = getattr(flight_cfg, "collision_avoidance", None)
+            if ca is not None and hasattr(ca, "min_horizontal_distance"):
+                min_ca = float(ca.min_horizontal_distance)
+        except (TypeError, ValueError):
+            pass
+    return 1.5 * max(min_sep, min_ca)
+
 def convert_local_offset_to_global(anchor_lat: float, anchor_lon: float, anchor_alt: float, dx_north: float, dy_east: float) -> Tuple[float, float, float]:
     """
     Converts a local NED offset (dx_north, dy_east) in meters to global (lat, lon, alt)
@@ -138,6 +161,8 @@ def build_slot_assignments(drone_ids: list[str]) -> dict[str, int]:
 
     MUST stay consistent with mobile/src/utils/formation.js buildFormationParams().
     Both sort IDs and assign slots by ascending sorted index.
+    Normalizes drone IDs to lowercase so casing differences ('Drone1' vs 'drone1')
+    do not cause duplicate entries or slot assignment mismatches.
     """
-    members = sorted(set(drone_ids))
+    members = sorted(set(normalize_drone_id(d) for d in drone_ids))
     return {drone_id: index for index, drone_id in enumerate(members)}

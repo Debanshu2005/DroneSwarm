@@ -632,7 +632,8 @@ class DroneOSApp:
             if target and target.lower() not in [self.node_id.lower(), "all"]:
                 logger.debug(f"Ignoring terminal command meant for {target}")
                 return
-            self._dispatch_task(self.terminal_controller.process_text(msg.text, msg.sender_id))
+            broadcast = bool(getattr(msg, 'broadcast', False))
+            self._dispatch_task(self.terminal_controller.process_text(msg.text, msg.sender_id, broadcast=broadcast))
 
     async def _handle_param_request(self, msg: BaseMessage) -> None:
         from DroneOS.shared.protocol.messages import ParamResponseMessage

@@ -507,14 +507,8 @@ def validate_formation_params(params: dict, flight_cfg: any) -> bool:
         
     try:
         spacing = float(params.get("spacing", 0.0))
-        min_sep = 8.0
-        min_ca = 2.0
-        if flight_cfg is not None:
-            if getattr(flight_cfg, "formation", None):
-                min_sep = float(getattr(flight_cfg.formation, "min_formation_separation_m", min_sep))
-            if getattr(flight_cfg, "collision_avoidance", None):
-                min_ca = float(getattr(flight_cfg.collision_avoidance, "min_horizontal_distance", min_ca))
-        min_viable = 1.5 * max(min_sep, min_ca)
+        from DroneOS.core.formation_manager import compute_min_formation_spacing
+        min_viable = compute_min_formation_spacing(flight_cfg)
         if spacing < min_viable:
             return False
     except (TypeError, ValueError):

@@ -146,8 +146,6 @@ class TrajectoryPlan:
         return len(self.local_targets) if self.frame == TargetFrame.LOCAL_NED else len(self.global_targets)
 
 
-from typing import Optional
-
 def _normalize_distance_m(value: float, unit: Optional[str]) -> float:
     unit = (unit or "m").lower()
     if unit.startswith('c'):
@@ -182,7 +180,18 @@ def parse_mission(
     has_arm = bool(re.search(r'\barm\b', action_text))
     has_disarm = bool(re.search(r'\bdisarm\b', action_text))
     has_goto = bool(re.search(r'\bgoto\b|\bgo\b|\bmove\b|\bfly\b|\bclimb\b|\bascend\b|\bdescend\b|\blower\b', action_text))
-    form_match = re.search(r'\b(?:form|formation)\s+(circle|square|v|line|column|wedge|echelon_left|echelon_right|diamond|grid)\b', normalized)
+
+    SHAPES_REGEX = r'(?:circle|square|v|line|column|wedge|echelon_left|echelon_right|echelon\s+left|echelon\s+right|diamond|grid)'
+    form_shape_match = re.search(rf'\bform\s+(?:(?:a|an|the)\s+)?({SHAPES_REGEX})\b', normalized)
+    is_formation_phrase = bool(re.search(r'\bformation\b', normalized))
+
+    form_match = None
+    if form_shape_match:
+        form_match = form_shape_match.group(1).replace(" ", "_")
+    elif is_formation_phrase:
+        shape_search = re.search(rf'\b({SHAPES_REGEX})\b', normalized)
+        form_match = shape_search.group(1).replace(" ", "_") if shape_search else "v"
+
     shape_match = None
     if not form_match:
         shape_match = re.search(r'\b(circle|square|triangle|spiral|figure-8|grid)\b', normalized)
@@ -233,7 +242,7 @@ def parse_mission(
                 hover_s = float(time_match.group(1))
         tasks.append({'task': 'HOVER', 'time': hover_s if hover_s is not None else default_hover_s})
 
-    if has_goto and not shape_match:
+    if has_goto and not shape_match and not form_match:
         x = kv_matches.get('x', kv_matches.get('north'))
         y = kv_matches.get('y', kv_matches.get('east'))
         alt = kv_matches.get('h', kv_matches.get('altitude', kv_matches.get('height', kv_matches.get('high'))))
@@ -316,10 +325,18 @@ def parse_mission(
         tasks.append(task_dict)
         
     if form_match:
-        shape_name = form_match.group(1)
+        shape_name = form_match if isinstance(form_match, str) else form_match.group(1)
         scale = kv_matches.get('spacing', kv_matches.get('r', kv_matches.get('radius', kv_matches.get('size', kv_matches.get('side')))))
         if scale is None:
             scale = _named_distance_m(normalized, ("spacing", "radius", "size", "side"))
+        if scale is None:
+            spacing_m = re.search(r'(?:spacing|space|distance)\s*(?:of|is)?\s*(\d+(?:\.\d+)?)\s*(?:cm|m|km|meter|meters)?\b', normalized)
+            if spacing_m:
+                scale = float(spacing_m.group(1))
+        if scale is None:
+            spacing_m2 = re.search(r'(\d+(?:\.\d+)?)\s*(?:cm|m|km|meter|meters)?\s*(?:spacing|space)\b', normalized)
+            if spacing_m2:
+                scale = float(spacing_m2.group(1))
         if scale is None:
             scale_match = re.search(
                 r'(\d+(?:\.\d+)?)\s*(cm|m|km|meter|meters|kilometer|kilometers|centimeter|centimeters)\b',
@@ -331,7 +348,7 @@ def parse_mission(
         task_dict = {
             'task': 'SWARM_FORMATION', 
             'shape': shape_name, 
-            'spacing': scale if scale is not None else 5.0, 
+            'spacing': scale if scale is not None else 10.0, 
         }
         tasks.append(task_dict)
 
@@ -426,7 +443,7 @@ def parse_task_sequence(
         elif action_str == 'SWARM_FORMATION':
             action = TaskAction.FORMATION
             params['type'] = d['shape'].upper()
-            params['spacing'] = d.get('spacing', 5.0)
+            params['spacing'] = d.get('spacing', 10.0)
         elif action_str == 'SET_MODE':
             action = TaskAction.SET_MODE
             tasks.append(ParsedTask(action, {}, text, notes=(f"mode={d['mode']}",)))

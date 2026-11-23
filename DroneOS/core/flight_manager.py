@@ -176,7 +176,16 @@ class FlightManager:
             drone_id = getattr(self.swarm_manager, "my_id", "unknown")
 
         slot_assignments = params.get("slot_assignments")
-        if not isinstance(slot_assignments, dict) or not slot_assignments or drone_id not in slot_assignments:
+        slot_key = None
+        if isinstance(slot_assignments, dict) and slot_assignments:
+            if drone_id in slot_assignments:
+                slot_key = drone_id
+            else:
+                for k in slot_assignments:
+                    if str(k).lower() == str(drone_id).lower():
+                        slot_key = k
+                        break
+        if slot_key is None:
             reason = f"formation rejected: no slot for {drone_id}"
             logger.warning(reason)
             self.last_rejection_reason = reason
@@ -199,6 +208,8 @@ class FlightManager:
         try:
             spacing = float(params.get("spacing", 0.0))
             cfg = getattr(self, "_flight_config", None)
+            from DroneOS.core.formation_manager import compute_min_formation_spacing
+            min_viable = compute_min_formation_spacing(cfg)
             min_sep = 8.0
             min_ca = 2.0
             if cfg is not None:
@@ -206,7 +217,6 @@ class FlightManager:
                     min_sep = float(getattr(cfg.formation, "min_formation_separation_m", min_sep))
                 if getattr(cfg, "collision_avoidance", None):
                     min_ca = float(getattr(cfg.collision_avoidance, "min_horizontal_distance", min_ca))
-            min_viable = 1.5 * max(min_sep, min_ca)
             if spacing < min_viable:
                 reason = (
                     f"formation rejected: spacing {spacing:.1f}m is below minimum {min_viable:.1f}m "
@@ -224,7 +234,7 @@ class FlightManager:
         self._active_navigation_frame = "GLOBAL_RELATIVE_ALT"
         self.formation_params = params
         
-        slot = slot_assignments[drone_id]
+        slot = slot_assignments[slot_key]
         logger.info(
             "FORMATION_COMMAND_RECEIVED drone=%s type=%s spacing=%s slot=%s members=%s",
             drone_id, params.get("type"), params.get("spacing"), slot,

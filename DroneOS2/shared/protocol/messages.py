@@ -52,6 +52,7 @@ class TestInjectMessage(BaseMessage):
 class TerminalCommandMessage(BaseMessage):
     msg_type: MessageType = MessageType.TERMINAL_COMMAND
     text: str
+    broadcast: bool = False
 
 class HeartbeatMessage(BaseMessage):
     msg_type: MessageType = MessageType.HEARTBEAT
