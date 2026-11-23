@@ -1,7 +1,5 @@
 """Cross-language contract test between Python DroneOS serializer and Mobile JavaScript client."""
 
-import json
-from pathlib import Path
 import shutil
 import subprocess
 import pytest
@@ -120,17 +118,25 @@ if (u3 !== 'ws://127.0.0.1:8081') throw new Error(`Bad u3: ${u3}`);
 // 3. Saved connections ignores port 8088
 let storedVal = JSON.stringify(['ws://127.0.0.1:8088', 'ws://127.0.0.1:8081']);
 m._safeStorageGet = () => storedVal;
+globalThis.WebSocket = class MockWebSocket {
+    constructor() {
+        this.readyState = 0;
+    }
+    close() {}
+};
 m.loadSavedConnections();
 if (m.connections['ws://127.0.0.1:8088']) throw new Error('Port 8088 must not be connected from saved connections!');
 if (!m.connections['ws://127.0.0.1:8081']) throw new Error('Port 8081 must be connected from saved connections!');
 
 console.log('HEALTH_NETWORK_CONTRACT_OK');
+process.exit(0);
 """
 
     proc = subprocess.run(
         [node_exe, "--input-type=module", "-e", node_script],
         text=True,
         capture_output=True,
+        timeout=10,
     )
     assert proc.returncode == 0, f"Node process failed:\nSTDOUT: {proc.stdout}\nSTDERR: {proc.stderr}"
     assert "HEALTH_NETWORK_CONTRACT_OK" in proc.stdout
