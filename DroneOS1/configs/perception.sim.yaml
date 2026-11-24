@@ -1,0 +1,3 @@
+# Simulation perception overlay
+# Increases startup stagger to 1.0s to serialize PyTorch GPU warmup across 4 drones on GTX 1650
+start_stagger_s: 1.0

@@ -1,8 +1,7 @@
-﻿import os
+import os
 import logging
 import yaml
 from pathlib import Path
-from DroneOS1.shared.config.loader import load_yaml_config
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +74,23 @@ def resolve_network_config(config_dir: Path, network_config_cls):
             logger.warning(f"Profile is 'sim' but {sim_path} not found.")
     return network_config_cls(**network_data)
 
+def resolve_perception_config(config_dir: Path, perception_config_cls):
+    """Load the production perception config, overlaying perception.sim.yaml in sim/test."""
+    config_dir = Path(config_dir)
+    with open(config_dir / "perception.yaml", "r") as f:
+        perc_data = yaml.safe_load(f) or {}
+    if os.environ.get("DRONEOS_PROFILE", "hw") in ("sim", "test"):
+        sim_path = config_dir / "perception.sim.yaml"
+        if sim_path.exists():
+            with open(sim_path, "r") as f:
+                perc_data = deep_merge(perc_data, yaml.safe_load(f) or {})
+        else:
+            logger.debug(f"Profile is 'sim' but {sim_path} not found.")
+    return perception_config_cls(**perc_data)
+
 def log_startup_banner(drone_id: str, vehicle_name: str, adapter_type: str):
     profile = os.environ.get("DRONEOS_PROFILE", "hw")
     msg = f"BACKEND={adapter_type} PROFILE={profile} drone={drone_id} vehicle={vehicle_name}"
     print(msg)
     logger.info(msg)
-
 

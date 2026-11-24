@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import re
 import sys
-from typing import List, Tuple
+from typing import List
 
 TARGET_INSTANCES = [1, 2, 3]
 
@@ -37,14 +37,13 @@ def sync_perception(repo_root: Path, check_only: bool = False) -> bool:
         source_root / "shared" / "protocol" / "messages.py",
         source_root / "shared" / "communication" / "serializers.py",
         source_root / "shared" / "config" / "models.py",
+        source_root / "shared" / "config" / "profile.py",
         source_root / "main.py",
         source_root / "core" / "swarm_manager.py",
         source_root / "core" / "diagnostics.py",
         source_root / "core" / "telemetry_publisher.py",
     ]
     files_to_sync.extend([p for p in shared_files if p.exists()])
-
-    perception_yaml_src = source_root / "configs" / "perception.yaml"
 
     drift_found = False
     files_written = 0
@@ -55,27 +54,28 @@ def sync_perception(repo_root: Path, check_only: bool = False) -> bool:
         if not target_root.exists():
             continue
 
-        # 1. Sync perception.yaml
-        if perception_yaml_src.exists():
-            dst_yaml = target_root / "configs" / "perception.yaml"
-            dst_yaml.parent.mkdir(parents=True, exist_ok=True)
-            yaml_content = perception_yaml_src.read_text(encoding="utf-8")
-            if dst_yaml.exists():
-                existing_yaml = dst_yaml.read_text(encoding="utf-8")
-                if existing_yaml != yaml_content:
+        # 1. Sync perception.yaml and perception.sim.yaml
+        for yaml_name in ["perception.yaml", "perception.sim.yaml"]:
+            src_y = source_root / "configs" / yaml_name
+            if src_y.exists():
+                dst_y = target_root / "configs" / yaml_name
+                dst_y.parent.mkdir(parents=True, exist_ok=True)
+                y_content = src_y.read_text(encoding="utf-8")
+                if dst_y.exists():
+                    if dst_y.read_text(encoding="utf-8") != y_content:
+                        if check_only:
+                            print(f"[DRIFT] {dst_y.relative_to(repo_root)} differs from source")
+                            drift_found = True
+                        else:
+                            dst_y.write_text(y_content, encoding="utf-8")
+                            files_written += 1
+                else:
                     if check_only:
-                        print(f"[DRIFT] {dst_yaml.relative_to(repo_root)} differs from source")
+                        print(f"[MISSING] {dst_y.relative_to(repo_root)}")
                         drift_found = True
                     else:
-                        dst_yaml.write_text(yaml_content, encoding="utf-8")
+                        dst_y.write_text(y_content, encoding="utf-8")
                         files_written += 1
-            else:
-                if check_only:
-                    print(f"[MISSING] {dst_yaml.relative_to(repo_root)}")
-                    drift_found = True
-                else:
-                    dst_yaml.write_text(yaml_content, encoding="utf-8")
-                    files_written += 1
 
         # 2. Sync python files
         for src_path in files_to_sync:

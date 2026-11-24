@@ -137,10 +137,11 @@ class DroneOSApp:
 
         # Perception Config
         from DroneOS2.shared.config.models import PerceptionConfig
+        from DroneOS2.shared.config.profile import resolve_perception_config
         perception_file = config_dir / "perception.yaml"
         if perception_file.exists():
             try:
-                self.perception_cfg = load_yaml_config(perception_file, PerceptionConfig)
+                self.perception_cfg = resolve_perception_config(config_dir, PerceptionConfig)
             except Exception as e:
                 logger.warning(f"Failed to load perception config: {e}. Defaulting to disabled.")
                 self.perception_cfg = PerceptionConfig(enabled=False)
