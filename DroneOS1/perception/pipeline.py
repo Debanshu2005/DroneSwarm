@@ -306,6 +306,11 @@ class PerceptionPipeline:
         """
         while self._running:
             try:
+                # Do not capture frames if detector is degraded or failed to load
+                if self.last_rejection_reason == "DETECTOR_NOT_LOADED":
+                    await asyncio.sleep(0.05)
+                    continue
+
                 frame = await self.frame_source.get_frame()
                 if frame is not None and getattr(frame, "image", None) is not None:
                     # Sample telemetry immediately at capture time to pair pose directly with the frame
@@ -314,6 +319,8 @@ class PerceptionPipeline:
                     self._latest_telem = telem
                     self._latest_frame_id += 1
                     self._new_frame_event.set()
+                    # Cooperative yield so fast/mocked frame sources do not starve the event loop
+                    await asyncio.sleep(0.002)
                 else:
                     await asyncio.sleep(0.005)
             except asyncio.CancelledError:
@@ -368,8 +375,6 @@ class PerceptionPipeline:
     async def run_loop(self) -> None:
         """Main periodic perception processing loop."""
         self._running = True
-        if self.decoupled_capture:
-            self.start_capture()
         logger.info("Perception pipeline loop started on %s (max_fps=%.1f, decoupled=%s).", self.drone_id, self.config.max_fps, self.decoupled_capture)
 
         # Stagger startup by drone index to avoid synchronized inference CPU bursts across drones
@@ -391,18 +396,31 @@ class PerceptionPipeline:
 
         # Warm up detector in executor thread before entering periodic step loop
         warmup_frames = int(getattr(self.config, "warmup_frames", 3))
+        loaded = True
         if hasattr(self.detector, "ensure_ready") and callable(self.detector.ensure_ready):
             res = self.detector.ensure_ready(warmup_frames=warmup_frames)
             if asyncio.iscoroutine(res):
-                await res
+                loaded = await res
+            else:
+                loaded = res
         elif hasattr(self.detector, "ensure_loaded") and callable(self.detector.ensure_loaded):
             res = self.detector.ensure_loaded()
             if asyncio.iscoroutine(res):
-                await res
+                loaded = await res
+            else:
+                loaded = res
         elif hasattr(self.detector, "load") and callable(self.detector.load):
             res = self.detector.load()
             if asyncio.iscoroutine(res):
-                await res
+                loaded = await res
+            else:
+                loaded = res
+
+        if loaded is False:
+            self.last_rejection_reason = "DETECTOR_NOT_LOADED"
+            self.last_step_stats["rejection_reason"] = self.last_rejection_reason
+        elif self.decoupled_capture:
+            self.start_capture()
 
         interval = 1.0 / max(0.1, self.config.max_fps)
 

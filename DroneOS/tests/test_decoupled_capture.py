@@ -295,8 +295,6 @@ async def test_decoupled_moving_drone_uses_capture_time_pose_not_newer():
 @pytest.mark.asyncio
 async def test_decoupled_stale_frame_dropped_in_decoupled_mode():
     """In decoupled mode, if the latest frame becomes older than max_frame_age_s, it is dropped."""
-    now_ts = time.time()
-
     class StaleFrameSource:
         def __init__(self):
             self.closed = False
