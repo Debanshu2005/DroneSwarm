@@ -82,19 +82,35 @@ async def run_single_flight(
     max_fps_val: float,
     has_target: bool,
     flight_duration_s: float = 12.0,
+    test_conf_override: Optional[float] = None,
 ) -> Dict[str, Any]:
     vehicle_name = "Drone1"
     host = "127.0.0.1"
     port = 41451
 
-    # Clear previous targets
+    client.enableApiControl(True, vehicle_name=vehicle_name)
+    client.armDisarm(True, vehicle_name=vehicle_name)
+
+    # Clear previous targets before repositioning
     clear_targets(client)
+
+    # Check if vehicle needs takeoff
+    kin = client.simGetGroundTruthKinematics(vehicle_name=vehicle_name)
+    if kin.position.z_val > -1.0:
+        client.takeoffAsync(vehicle_name=vehicle_name).join()
+
+    # Move to start position (-3.0, 0.0, -5.0) in the air
+    start_x = -3.0
+    end_x = 3.0
+    alt_m = 5.0
+    client.moveToPositionAsync(start_x, 0.0, -alt_m, 3.0, vehicle_name=vehicle_name).join()
+    await asyncio.sleep(0.5)
 
     target_texture = REPO_ROOT / "ml" / "data" / "uavvaste_high_conf_target.png"
     target_info = None
 
     if has_target:
-        # Spawn target at origin (0, 0, 0)
+        # Spawn target at origin (0, 0, 0) on ground while drone is safely at 5m AGL
         ok, target_info = await setup_scene_target(
             client=client,
             target_name="GarbageTarget_HighConf",
@@ -108,29 +124,20 @@ async def run_single_flight(
         )
         print(f"  Target Spawned (textured with {target_texture.name}): {target_info}")
 
-    client.enableApiControl(True, vehicle_name=vehicle_name)
-    client.armDisarm(True, vehicle_name=vehicle_name)
-
-    # Position drone at start position (-3.0, 0.0, -5.0) -> 5m AGL
-    # Moving to (3.0, 0.0, -5.0) ensures 6.0m total displacement across target
-    # This comfortably exceeds required_disp (~2.12m)
-    start_x = -3.0
-    end_x = 3.0
-    alt_m = 5.0
-    client.moveToPositionAsync(start_x, 0.0, -alt_m, 3.0, vehicle_name=vehicle_name).join()
-    await asyncio.sleep(0.5)
-
     # Load perception config
     cfg_file = REPO_ROOT / "DroneOS" / "configs" / "perception.yaml"
     cfg = load_yaml_config(cfg_file, PerceptionConfig)
     cfg.enabled = True
     cfg.max_fps = max_fps_val
 
-    # Set up detector using models/garbage.pt
+    # Resolve detector confidence: NEVER modify production config, apply test-only override if provided
+    resolved_conf = float(test_conf_override) if test_conf_override is not None else cfg.confidence
+
+    # Set up detector using models/garbage.pt with warm-up
     detector = GarbageDetector(
         weights_path=str(REPO_ROOT / cfg.weights),
         imgsz=cfg.imgsz,
-        confidence=cfg.confidence,
+        confidence=resolved_conf,
         iou=cfg.iou,
         device=cfg.device,
         classes=cfg.classes,
@@ -139,6 +146,7 @@ async def run_single_flight(
         max_aspect_ratio=getattr(cfg, "max_aspect_ratio", 0.0),
     )
     detector.load()
+    detector.warmup(warmup_frames=getattr(cfg, "warmup_frames", 3))
 
     frame_src = AirSimFrameSource(vehicle_name=vehicle_name, host=host, port=port, camera_name="bottom_center")
     telem_prov = AirSimTelemetryProvider(client, vehicle_name)
@@ -242,9 +250,26 @@ async def run_single_flight(
 
 
 async def main():
+    import argparse
+    import os
+
+    parser = argparse.ArgumentParser(description="AirSim Time-To-Confirm Benchmark (Pipeline Timing)")
+    parser.add_argument("--test-conf", type=float, default=None, help="TEST-ONLY confidence override (never written to config)")
+    args = parser.parse_args()
+
+    test_conf = args.test_conf
+    if test_conf is None and "TEST_CONF_OVERRIDE" in os.environ:
+        try:
+            test_conf = float(os.environ["TEST_CONF_OVERRIDE"])
+        except ValueError:
+            pass
+
     print("=" * 80)
-    print("AIRSIM TIME-TO-CONFIRM AND FALSE-ALERT EVALUATION")
-    print("NOTE: Textured target results are 'pipeline test, not accuracy evidence'.")
+    print("PIPELINE TEST, NOT ACCURACY EVIDENCE")
+    if test_conf is not None:
+        print(f"CONFIDENCE OVERRIDE: {test_conf:.2f} (TEST-ONLY flag/env, production config unchanged)")
+    else:
+        print("CONFIDENCE: Using production perception.yaml default")
     print("=" * 80)
 
     client = airsim.MultirotorClient(ip="127.0.0.1", port=41451)
@@ -259,6 +284,8 @@ async def main():
             "min_hits": 2,
             "min_temporal_separation_s": 2.0,
             "min_drone_displacement_m": 1.5,
+            "test_conf_override": test_conf,
+            "label_note": "PIPELINE TEST, NOT ACCURACY EVIDENCE",
         },
         "target_flights": [],
         "empty_scene_flight": None,
@@ -267,7 +294,7 @@ async def main():
     # 1. Target Flights across max_fps = 1, 2, 3, 4
     for fps in fps_levels:
         print(f"\n--- Testing Target Flight @ max_fps={fps} ---")
-        res = await run_single_flight(client, max_fps_val=fps, has_target=True)
+        res = await run_single_flight(client, max_fps_val=fps, has_target=True, test_conf_override=test_conf)
         results["target_flights"].append(res)
         print(
             f"  max_fps={fps:<3.1f} | Frames Processed: {res['frames_processed']:<2} | "
@@ -278,7 +305,7 @@ async def main():
 
     # 2. Empty Scene Baseline (0 targets)
     print("\n--- Testing Empty Scene Flight (False-Alert Gate) @ max_fps=2.0 ---")
-    empty_res = await run_single_flight(client, max_fps_val=2.0, has_target=False)
+    empty_res = await run_single_flight(client, max_fps_val=2.0, has_target=False, test_conf_override=test_conf)
     results["empty_scene_flight"] = empty_res
     print(
         f"  Empty Flight | Confirmed Alerts: {empty_res['confirmed_alerts_count']} "
@@ -303,6 +330,15 @@ async def main():
     print(f"{'Empty Scene (Baseline)':<25} | {empty_res['max_fps']:<8.1f} | {empty_cnt:<18} | {'N/A (0 alerts)':<15} | N/A")
     print("=" * 80)
     print(f"Results saved to {out_file}")
+
+    # Safely clear targets and land
+    try:
+        clear_targets(client)
+        client.landAsync(vehicle_name="Drone1").join()
+        client.armDisarm(False, vehicle_name="Drone1")
+        client.enableApiControl(False, vehicle_name="Drone1")
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
