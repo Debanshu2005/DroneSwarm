@@ -200,3 +200,134 @@ async def test_decoupled_frame_too_stale_gate_active():
     assert pipe.last_rejection_reason is not None
     assert "STALE_FRAME" in pipe.last_rejection_reason
 
+
+class FakeDetectingDetector:
+    def __init__(self, delay_s: float = 0.0):
+        self.delay_s = delay_s
+        self._available = True
+        self.device = "cpu"
+
+    def load(self) -> bool:
+        return True
+
+    def get_status(self):
+        return ("OK", "")
+
+    async def detect(self, image, **kwargs):
+        if self.delay_s > 0:
+            await asyncio.sleep(self.delay_s)
+        from DroneOS.perception.types import Detection
+        return [Detection(bbox_xyxy=(150.0, 110.0, 170.0, 130.0), confidence=0.85, label="garbage")]
+
+    def close(self):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_decoupled_moving_drone_uses_capture_time_pose_not_newer():
+    """
+    A moving drone with slow capture or delayed processing must pair each frame with
+    the telemetry/pose sampled at its capture time, NOT a newer pose sampled during inference.
+    """
+    capture_lat = 47.641500
+    capture_lon = -122.140200
+    moved_lat = 47.650000  # ~945m away north
+    moved_lon = -122.150000
+
+    current_lat = capture_lat
+    current_lon = capture_lon
+
+    async def moving_telemetry():
+        return TelemetryData(
+            flight_mode="OFFBOARD",
+            armed_state="ARMED",
+            gps_valid=True,
+            altitude=10.0,
+            roll=0.0,
+            pitch=0.0,
+            yaw=0.0,
+            latitude=current_lat,
+            longitude=current_lon,
+            timestamp=time.time(),
+        )
+
+    class MovingDroneDetector(FakeDetectingDetector):
+        async def detect(self, image, **kwargs):
+            nonlocal current_lat, current_lon
+            # The drone moves during the detector inference window!
+            current_lat = moved_lat
+            current_lon = moved_lon
+            return await super().detect(image, **kwargs)
+
+    src = FakeSlowFrameSource(delay_s=0.01)
+    det = MovingDroneDetector(delay_s=0.02)
+    fc = AsyncMock()
+    fc.get_telemetry.side_effect = moving_telemetry
+    net = AsyncMock()
+    cfg = PerceptionConfig(enabled=True, max_fps=20.0, decoupled_capture=True)
+
+    pipe = PerceptionPipeline("drone1", src, det, fc, net, cfg)
+    pipe._running = True
+    pipe.start_capture()
+
+    # Wait for frame capture in background task while drone is at capture_lat
+    await asyncio.sleep(0.03)
+
+    # Process step - during detector inference, drone moves to moved_lat
+    await pipe._step()
+
+    # Check geolocated detections recorded in aggregator
+    tracks = list(pipe.aggregator.tracks.values())
+    assert len(tracks) >= 1, "Expected track to be formed from detection"
+    track = tracks[0]
+
+    # Must match the capture-time pose (~47.6415), NOT the moved pose (~47.6500)
+    assert abs(track.lat - capture_lat) < 0.001, (
+        f"Track lat {track.lat:.6f} drifted from capture lat {capture_lat:.6f} towards moved lat {moved_lat:.6f}"
+    )
+    assert abs(track.lat - moved_lat) > 0.005, (
+        f"Track lat {track.lat:.6f} erroneously used newer pose {moved_lat:.6f} instead of capture pose"
+    )
+
+    await pipe.stop()
+
+
+@pytest.mark.asyncio
+async def test_decoupled_stale_frame_dropped_in_decoupled_mode():
+    """In decoupled mode, if the latest frame becomes older than max_frame_age_s, it is dropped."""
+    now_ts = time.time()
+
+    class StaleFrameSource:
+        def __init__(self):
+            self.closed = False
+
+        async def get_frame(self):
+            await asyncio.sleep(0.01)
+            # Frame was captured 3.5 seconds ago (stale)
+            return Frame(
+                image=np.zeros((100, 100, 3), dtype=np.uint8),
+                timestamp=time.time() - 3.5,
+            )
+
+        async def close(self):
+            self.closed = True
+
+    mock_src = StaleFrameSource()
+    det = FakeDetectingDetector()
+    fc = AsyncMock()
+    fc.get_telemetry.side_effect = make_fresh_telemetry
+    net = AsyncMock()
+    cfg = PerceptionConfig(enabled=True, max_frame_age_s=2.0, decoupled_capture=True)
+
+    pipe = PerceptionPipeline("drone1", mock_src, det, fc, net, cfg)
+    pipe._running = True
+    pipe.start_capture()
+    await asyncio.sleep(0.03)  # Allow capture loop to acquire the stale frame
+
+    await pipe._step()
+    await pipe.stop()
+
+    assert pipe.last_rejection_reason is not None
+    assert "STALE_FRAME" in pipe.last_rejection_reason
+
+

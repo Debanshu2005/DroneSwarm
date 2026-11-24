@@ -75,6 +75,7 @@ class PerceptionPipeline:
         self.decoupled_capture = bool(getattr(config, "decoupled_capture", True))
         self._capture_task: Optional[asyncio.Task] = None
         self._latest_frame: Optional[Frame] = None
+        self._latest_telem: Optional[Any] = None
         self._latest_frame_id: int = 0
         self._last_processed_frame_id: int = -1
         self._new_frame_event: asyncio.Event = asyncio.Event()
@@ -299,14 +300,18 @@ class PerceptionPipeline:
     async def _capture_loop(self) -> None:
         """
         Dedicated background capture task. Continuously acquires frames from frame_source.
-        Overwrites self._latest_frame with the most recently captured frame, immediately
-        dropping older frames without queueing.
+        Overwrites self._latest_frame and self._latest_telem with the most recently captured
+        frame and its corresponding telemetry sampled at capture time, immediately dropping older
+        frames without queueing.
         """
         while self._running:
             try:
                 frame = await self.frame_source.get_frame()
                 if frame is not None and getattr(frame, "image", None) is not None:
+                    # Sample telemetry immediately at capture time to pair pose directly with the frame
+                    telem = await self.fc.get_telemetry()
                     self._latest_frame = frame
+                    self._latest_telem = telem
                     self._latest_frame_id += 1
                     self._new_frame_event.set()
                 else:
@@ -346,6 +351,7 @@ class PerceptionPipeline:
         self._running = False
         await self.stop_capture()
         self._latest_frame = None
+        self._latest_telem = None
         if self._task and not self._task.done():
             self._task.cancel()
             try:
@@ -566,21 +572,25 @@ class PerceptionPipeline:
             logger.debug("Gate reject: Invalid coordinates (%.6f, %.6f)", pre_lat or 0, pre_lon or 0)
             return
 
-        # 3. Acquire frame (decoupled latest-frame-only if background capture running, else direct)
+        # 3. Acquire frame and capture-time telemetry (decoupled latest-frame-only if background capture running, else direct)
         if self._capture_task is not None and not self._capture_task.done():
             if self._latest_frame is None or self._last_processed_frame_id == self._latest_frame_id:
                 try:
                     await asyncio.wait_for(self._new_frame_event.wait(), timeout=1.0)
                 except asyncio.TimeoutError:
                     frame = self._latest_frame
+                    telem = self._latest_telem
                 else:
                     frame = self._latest_frame
+                    telem = self._latest_telem
             else:
                 frame = self._latest_frame
+                telem = self._latest_telem
             self._last_processed_frame_id = self._latest_frame_id
             self._new_frame_event.clear()
         else:
             frame = await self.frame_source.get_frame()
+            telem = await self.fc.get_telemetry()
         if frame is None or frame.image is None:
             self.last_rejection_reason = "FRAME_ACQUISITION_FAILED"
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
@@ -595,8 +605,7 @@ class PerceptionPipeline:
         sim_get_images_ms = float(frame_meta.get("sim_get_images_ms", 0.0) or 0.0)
         capture_ms = float(frame_meta.get("capture_ms", 0.0) or 0.0)
 
-        # 4. Fresh telemetry snapshot immediately after capture for geolocation
-        telem = await self.fc.get_telemetry()
+        # 4. Telemetry snapshot validation (sampled at capture time for accurate geolocation)
         if telem is None:
             self.last_rejection_reason = "TELEMETRY_UNAVAILABLE_POST"
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
