@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from DroneOS2.perception.aggregator import GeoreferencedDetection, TrackAggregator
 from DroneOS2.perception.detector import GarbageDetector
 from DroneOS2.perception.frame_sources import FrameSource
+from DroneOS2.perception.types import Frame
 from DroneOS2.perception.geolocate import pixel_to_lat_lon, lat_lon_to_meters, meters_to_lat_lon, pixel_to_ray_ned, compute_ray_to_point_cpa
 from DroneOS2.shared.protocol.messages import DetectionItem, DetectionMessage
 from DroneOS2.shared.utils.logger import setup_logger
@@ -69,6 +70,14 @@ class PerceptionPipeline:
         self.last_rejection_reason: Optional[str] = None
         self.last_step_stats: dict = {}
         self._deferred_buffer: List[Dict[str, Any]] = []
+
+        # Decoupled frame capture state (runs capture in dedicated task; keeps latest frame only)
+        self.decoupled_capture = bool(getattr(config, "decoupled_capture", True))
+        self._capture_task: Optional[asyncio.Task] = None
+        self._latest_frame: Optional[Frame] = None
+        self._latest_frame_id: int = 0
+        self._last_processed_frame_id: int = -1
+        self._new_frame_event: asyncio.Event = asyncio.Event()
 
         # First-detection diagnostic timeline state (first 60s)
         self._pipeline_start_time: Optional[float] = None
@@ -287,31 +296,75 @@ class PerceptionPipeline:
             dict(self._diag_rejection_histogram),
         )
 
+    async def _capture_loop(self) -> None:
+        """
+        Dedicated background capture task. Continuously acquires frames from frame_source.
+        Overwrites self._latest_frame with the most recently captured frame, immediately
+        dropping older frames without queueing.
+        """
+        while self._running:
+            try:
+                frame = await self.frame_source.get_frame()
+                if frame is not None and getattr(frame, "image", None) is not None:
+                    self._latest_frame = frame
+                    self._latest_frame_id += 1
+                    self._new_frame_event.set()
+                else:
+                    await asyncio.sleep(0.005)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.debug("[%s] Error in decoupled capture loop: %s", self.drone_id, e)
+                await asyncio.sleep(0.02)
+
+    def start_capture(self) -> None:
+        """Start decoupled background capture task if not already running."""
+        if self._capture_task is None or self._capture_task.done():
+            self._capture_task = asyncio.create_task(self._capture_loop())
+
+    async def stop_capture(self) -> None:
+        """Stop decoupled background capture task."""
+        if self._capture_task is not None and not self._capture_task.done():
+            self._capture_task.cancel()
+            try:
+                await self._capture_task
+            except asyncio.CancelledError:
+                pass
+        self._capture_task = None
+
     async def start(self) -> None:
         """Start perception loop as an isolated asyncio task."""
         if self._running:
             return
         self._running = True
+        if self.decoupled_capture:
+            self.start_capture()
         self._task = asyncio.create_task(self.run_loop())
 
-    async def stop(self) -> None:
+    async def stop(self, close_detector: bool = True, close_source: bool = True) -> None:
         """Stop perception pipeline and release resources."""
         self._running = False
+        await self.stop_capture()
+        self._latest_frame = None
         if self._task and not self._task.done():
             self._task.cancel()
             try:
                 await self._task
             except asyncio.CancelledError:
                 pass
-        await self.frame_source.close()
-        self.detector.close()
+        if close_source:
+            await self.frame_source.close()
+        if close_detector:
+            self.detector.close()
         self._print_timeline_summary()
         logger.info("Perception pipeline stopped.")
 
     async def run_loop(self) -> None:
         """Main periodic perception processing loop."""
         self._running = True
-        logger.info("Perception pipeline loop started on %s (max_fps=%.1f).", self.drone_id, self.config.max_fps)
+        if self.decoupled_capture:
+            self.start_capture()
+        logger.info("Perception pipeline loop started on %s (max_fps=%.1f, decoupled=%s).", self.drone_id, self.config.max_fps, self.decoupled_capture)
 
         # Stagger startup by drone index to avoid synchronized inference CPU bursts across drones
         import re
@@ -513,8 +566,21 @@ class PerceptionPipeline:
             logger.debug("Gate reject: Invalid coordinates (%.6f, %.6f)", pre_lat or 0, pre_lon or 0)
             return
 
-        # 3. Acquire frame
-        frame = await self.frame_source.get_frame()
+        # 3. Acquire frame (decoupled latest-frame-only if background capture running, else direct)
+        if self._capture_task is not None and not self._capture_task.done():
+            if self._latest_frame is None or self._last_processed_frame_id == self._latest_frame_id:
+                try:
+                    await asyncio.wait_for(self._new_frame_event.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    frame = self._latest_frame
+                else:
+                    frame = self._latest_frame
+            else:
+                frame = self._latest_frame
+            self._last_processed_frame_id = self._latest_frame_id
+            self._new_frame_event.clear()
+        else:
+            frame = await self.frame_source.get_frame()
         if frame is None or frame.image is None:
             self.last_rejection_reason = "FRAME_ACQUISITION_FAILED"
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
