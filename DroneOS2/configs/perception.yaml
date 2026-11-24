@@ -9,6 +9,8 @@ max_area_ratio: 0.40
 max_aspect_ratio: 8.0
 device: "auto"
 classes: null
+warmup_frames: 3
+start_stagger_s: 0.25
 max_fps: 1.0
 min_altitude_m: 2.0
 max_tilt_deg: 20.0

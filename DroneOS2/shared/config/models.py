@@ -120,6 +120,8 @@ class PerceptionConfig(BaseModel):
     max_aspect_ratio: float = 8.0
     device: Optional[str] = "auto"
     classes: Optional[List[str]] = None
+    warmup_frames: int = 3
+    start_stagger_s: float = 0.25
     max_fps: float = 1.0
     min_altitude_m: float = 2.0
     max_tilt_deg: float = 20.0

@@ -133,6 +133,8 @@ class GarbageDetector:
 
         # Resilient load backoff state (removes permanent shutdown latch)
         self._available = False
+        self._status = "NOT_LOADED"
+        self._warmup_done = False
         self._retry_count = 0
         self._max_retries = 1000
         self._backoff_min_s = 5.0
@@ -149,8 +151,9 @@ class GarbageDetector:
 
     def load(self) -> bool:
         """
-        Attempt to load model weights. On failure, applies exponential backoff
-        (5s to 60s) without permanently disabling subsequent retries.
+        Attempt to load model weights. On failure, applies fast retries (1s, 2s)
+        followed by exponential backoff (5s to 60s) without permanently disabling
+        subsequent retries.
         """
         if self._available and (self._model is not None or self._ort_session is not None):
             return True
@@ -161,11 +164,17 @@ class GarbageDetector:
 
         self._last_attempt_time = now
         self._retry_count = min(self._max_retries, self._retry_count + 1)
-        self._current_backoff_s = min(self._backoff_max_s, self._backoff_min_s * (2 ** (self._retry_count - 1)))
+        if self._retry_count == 1:
+            self._current_backoff_s = min(1.0, self._backoff_min_s)
+        elif self._retry_count == 2:
+            self._current_backoff_s = min(2.0, self._backoff_min_s * 2)
+        else:
+            self._current_backoff_s = min(self._backoff_max_s, self._backoff_min_s * (2 ** (self._retry_count - 3)))
 
         if not self.weights_path.exists():
             self._last_error = f"Weights not found: {self.weights_path}"
-            logger.warning(
+            self._status = "DEGRADED"
+            logger.error(
                 "Perception model weights file not found (retry #%d, next in %.1fs): %s",
                 self._retry_count,
                 self._current_backoff_s,
@@ -197,6 +206,8 @@ class GarbageDetector:
                     self._current_backoff_s = 0.0
                     self._retry_count = 0
                     self._last_error = ""
+                    if getattr(self, "_status", None) != "WARMING_UP":
+                        self._status = "OK"
                     logger.info(
                         "ONNX detector loaded via Ultralytics from %s on %s (attempt #%d).",
                         self.weights_path,
@@ -218,6 +229,8 @@ class GarbageDetector:
                     self._current_backoff_s = 0.0
                     self._retry_count = 0
                     self._last_error = ""
+                    if getattr(self, "_status", None) != "WARMING_UP":
+                        self._status = "OK"
                     logger.info(
                         "ONNX detector loaded via ONNX Runtime from %s with provider %s (attempt #%d).",
                         self.weights_path,
@@ -234,6 +247,8 @@ class GarbageDetector:
                 self._current_backoff_s = 0.0
                 self._retry_count = 0
                 self._last_error = ""
+                if getattr(self, "_status", None) != "WARMING_UP":
+                    self._status = "OK"
                 logger.info(
                     "PyTorch YOLO detector loaded from %s (attempt #%d).",
                     self.weights_path,
@@ -242,21 +257,25 @@ class GarbageDetector:
                 return True
         except ImportError as e:
             self._last_error = f"Missing dependency: {e}"
-            logger.warning(
+            self._status = "DEGRADED"
+            logger.error(
                 "Dependency missing for detector (retry #%d, next in %.1fs): %s",
                 self._retry_count,
                 self._current_backoff_s,
                 e,
+                exc_info=True,
             )
             self._available = False
             return False
         except Exception as e:
             self._last_error = f"Load error: {e}"
-            logger.exception(
+            self._status = "DEGRADED"
+            logger.error(
                 "Failed to load detector model (retry #%d, next in %.1fs): %s",
                 self._retry_count,
                 self._current_backoff_s,
                 e,
+                exc_info=True,
             )
             self._available = False
             return False
@@ -331,11 +350,103 @@ class GarbageDetector:
 
     def get_status(self) -> Tuple[str, str]:
         """Return (status, reason) reflecting detector readiness and retry state."""
+        if getattr(self, "_status", None) == "WARMING_UP":
+            return ("WARMING_UP", "model warm-up in progress")
+        if getattr(self, "_status", None) == "OK":
+            return ("OK", "")
         if self._available:
             return ("OK", "")
         if self._last_error:
             return ("DEGRADED", f"Retry #{self._retry_count}: {self._last_error}")
         return ("DEGRADED", f"Retry #{self._retry_count}: model not loaded")
+
+    def warmup(self, warmup_frames: int = 3) -> bool:
+        """
+        Execute warmup dummy inferences in the dedicated executor thread.
+        Triggers CUDA context creation, memory allocation, and kernel caching
+        before real frames arrive. Detections are discarded.
+        On CUDA failure, falls back to CPU once, re-warms on CPU, and stays on CPU.
+        """
+        if warmup_frames <= 0:
+            self._warmup_done = True
+            if self._available:
+                self._status = "OK"
+            return True
+
+        if not self.load():
+            return False
+
+        self._status = "WARMING_UP"
+        logger.info(
+            "Starting perception warm-up: device=%s half=%s frames=%d",
+            self.resolved_device,
+            self.fp16,
+            warmup_frames,
+        )
+        t_start = time.perf_counter()
+        dummy_img = np.zeros((720, 1280, 3), dtype=np.uint8)
+
+        cuda_failed = False
+        for i in range(warmup_frames):
+            try:
+                _ = self._sync_predict(dummy_img)
+            except Exception as e:
+                if self.resolved_device == "cuda":
+                    logger.warning(
+                        "CUDA warm-up failed on frame #%d (%s); falling back to CPU",
+                        i + 1,
+                        e,
+                    )
+                    cuda_failed = True
+                    break
+                else:
+                    logger.error("Warm-up dummy inference error on frame #%d: %s", i + 1, e)
+
+        if cuda_failed:
+            # Fall back to CPU once, re-run warm-up on CPU, and stay on CPU permanently
+            self.resolved_device = "cpu"
+            self.fp16 = False
+            self.resolved_provider = "CPUExecutionProvider" if self.is_onnx else "torch.cpu"
+            t_start = time.perf_counter()
+            for i in range(warmup_frames):
+                try:
+                    _ = self._sync_predict(dummy_img)
+                except Exception as inner_e:
+                    logger.error("CPU fallback warm-up error on frame #%d: %s", i + 1, inner_e)
+
+        elapsed_s = time.perf_counter() - t_start
+        self._warmup_done = True
+        self._status = "OK"
+
+        mem_msg = ""
+        if self.resolved_device == "cuda":
+            try:
+                import torch
+                if hasattr(torch, "cuda") and torch.cuda.is_available():
+                    alloc_mb = torch.cuda.memory_allocated() / (1024 * 1024)
+                    res_mb = torch.cuda.memory_reserved() / (1024 * 1024)
+                    mem_msg = f" (cuda_alloc={alloc_mb:.2f}MB, cuda_reserved={res_mb:.2f}MB)"
+            except Exception:
+                pass
+
+        logger.info(
+            "perception warm-up device=%s half=%s frames=%d took %.3f s%s",
+            self.resolved_device,
+            self.fp16,
+            warmup_frames,
+            elapsed_s,
+            mem_msg,
+        )
+        return True
+
+    async def ensure_ready(self, warmup_frames: int = 3) -> bool:
+        """Asynchronously load model and perform warm-up in dedicated worker thread."""
+        loop = asyncio.get_running_loop()
+        def _load_and_warmup():
+            if not self.load():
+                return False
+            return self.warmup(warmup_frames)
+        return await loop.run_in_executor(self._executor, _load_and_warmup)
 
     async def ensure_loaded(self) -> bool:
         """Asynchronously ensure weights/model are loaded in the dedicated worker thread."""
@@ -635,6 +746,7 @@ class GarbageDetector:
                 try:
                     self.resolved_device = "cpu"
                     self.fp16 = False
+                    self.resolved_provider = "torch.cpu"
                     predict_kwargs["device"] = "cpu"
                     predict_kwargs["half"] = False
                     results = self._model.predict(**predict_kwargs)

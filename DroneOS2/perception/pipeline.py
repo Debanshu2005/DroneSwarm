@@ -70,6 +70,16 @@ class PerceptionPipeline:
         self.last_step_stats: dict = {}
         self._deferred_buffer: List[Dict[str, Any]] = []
 
+        # First-detection diagnostic timeline state (first 60s)
+        self._pipeline_start_time: Optional[float] = None
+        self._diag_first_inference_s: Optional[float] = None
+        self._diag_first_raw_detection_s: Optional[float] = None
+        self._diag_first_geo_detection_s: Optional[float] = None
+        self._diag_first_confirmed_alert_s: Optional[float] = None
+        self._diag_peers_discovered_s: Optional[float] = None
+        self._diag_rejection_histogram: Dict[str, int] = {}
+        self._diag_summary_printed: bool = False
+
         # Profiling window metrics (~5 s periodic reporting)
         self._profile_window_start = time.monotonic()
         self._profile_frames = 0
@@ -150,6 +160,8 @@ class PerceptionPipeline:
         if hasattr(self.aggregator, "last_confirmed_events"):
             while self.aggregator.last_confirmed_events:
                 evt = self.aggregator.last_confirmed_events.pop(0)
+                if self._diag_first_confirmed_alert_s is None and self._pipeline_start_time is not None:
+                    self._diag_first_confirmed_alert_s = round(time.monotonic() - self._pipeline_start_time, 2)
                 logger.info(
                     "[%s][ALERT CONFIRMED] id=%s label=%s conf=%.3f lat=%.6f lon=%.6f | "
                     "confirmed in %d frames, %.2f s",
@@ -162,6 +174,118 @@ class PerceptionPipeline:
                     evt.get("frames", 0),
                     evt.get("seconds", 0.0),
                 )
+
+    def _record_step_timeline(
+        self,
+        ready_state: str,
+        alt_gate: str = "N/A",
+        tilt_gate: str = "N/A",
+        frame_age_s: Optional[float] = None,
+        telem_age_s: Optional[float] = None,
+        sync_skew_s: Optional[float] = None,
+        rejection_reason: Optional[str] = None,
+        raw_detections: int = 0,
+        max_raw_conf: float = 0.0,
+        deferred: bool = False,
+        defer_reason: str = "none",
+    ) -> None:
+        """Record and log per-step timeline diagnostics during the first 60 seconds."""
+        if self._pipeline_start_time is None:
+            self._pipeline_start_time = time.monotonic()
+        now_m = time.monotonic()
+        elapsed = now_m - self._pipeline_start_time
+
+        # Track peer discovery time
+        if self._diag_peers_discovered_s is None and self.swarm_manager and hasattr(self.swarm_manager, "registry"):
+            active_peers = list(self.swarm_manager.registry.peers.keys())
+            if active_peers:
+                self._diag_peers_discovered_s = round(elapsed, 2)
+                logger.info(
+                    "[%s][TIMELINE PEER DISCOVERY] peers discovered at T+%.2fs: %s",
+                    self.drone_id,
+                    self._diag_peers_discovered_s,
+                    active_peers,
+                )
+
+        reason = rejection_reason or "NONE"
+        self._diag_rejection_histogram[reason] = self._diag_rejection_histogram.get(reason, 0) + 1
+
+        # Check aggregator tracks
+        max_hits = 0
+        min_hits_met = False
+        sep_met = False
+        disp_met = False
+        if hasattr(self, "aggregator") and hasattr(self.aggregator, "tracks") and isinstance(self.aggregator.tracks, dict):
+            for trk in self.aggregator.tracks.values():
+                h = getattr(trk, "hits", 0)
+                if isinstance(h, int) and h > max_hits:
+                    max_hits = h
+                dh = getattr(trk, "distinct_hits", 0)
+                req_h = getattr(self.aggregator, "min_hits", 2)
+                if isinstance(dh, int) and isinstance(req_h, int) and dh >= req_h:
+                    min_hits_met = True
+                min_sep = getattr(self.aggregator, "min_temporal_separation_s", 2.0)
+                hit_t = getattr(trk, "last_distinct_hit_time", 0.0)
+                seen_t = getattr(trk, "first_seen", 0.0)
+                if isinstance(min_sep, (int, float)) and isinstance(hit_t, (int, float)) and isinstance(seen_t, (int, float)):
+                    if (hit_t - seen_t) >= min_sep:
+                        sep_met = True
+                if getattr(trk, "last_distinct_drone_lat", None) is not None and getattr(trk, "last_drone_lat", None) is not None:
+                    disp_met = True
+
+        if elapsed <= 60.0:
+            f_age_str = f"{frame_age_s:.2f}s" if frame_age_s is not None else "N/A"
+            t_age_str = f"{telem_age_s:.2f}s" if telem_age_s is not None else "N/A"
+            skew_str = f"{sync_skew_s:.2f}s" if sync_skew_s is not None else "N/A"
+            logger.info(
+                "[%s][TIMELINE T+%.2fs] state=%s alt_gate=%s tilt_gate=%s frame_age=%s telem_age=%s "
+                "skew=%s reason=%s raw_dets=%d max_conf=%.4f deferred=%s(%s) hits=%d "
+                "criteria=(hits:%s,sep:%s,disp:%s)",
+                self.drone_id,
+                elapsed,
+                ready_state,
+                alt_gate,
+                tilt_gate,
+                f_age_str,
+                t_age_str,
+                skew_str,
+                reason,
+                raw_detections,
+                max_raw_conf,
+                deferred,
+                defer_reason,
+                max_hits,
+                min_hits_met,
+                sep_met,
+                disp_met,
+            )
+
+        if elapsed >= 60.0 and not self._diag_summary_printed:
+            self._print_timeline_summary()
+
+    def _print_timeline_summary(self) -> None:
+        """Print summary of first-detection events and rejection histogram for the first 60s."""
+        if self._diag_summary_printed:
+            return
+        self._diag_summary_printed = True
+        t_inf = f"T+{self._diag_first_inference_s:.2f}s" if self._diag_first_inference_s is not None else "NEVER"
+        t_raw = f"T+{self._diag_first_raw_detection_s:.2f}s" if self._diag_first_raw_detection_s is not None else "NEVER"
+        t_geo = f"T+{self._diag_first_geo_detection_s:.2f}s" if self._diag_first_geo_detection_s is not None else "NEVER"
+        t_conf = f"T+{self._diag_first_confirmed_alert_s:.2f}s" if self._diag_first_confirmed_alert_s is not None else "NEVER"
+        t_peer = f"T+{self._diag_peers_discovered_s:.2f}s" if self._diag_peers_discovered_s is not None else "NONE"
+
+        logger.info(
+            "[%s][TIMELINE SUMMARY 60s] first inference at %s, first raw detection at %s, "
+            "first geolocated detection at %s, first confirmed alert at %s, peers discovered at %s | "
+            "rejection histogram: %s",
+            self.drone_id,
+            t_inf,
+            t_raw,
+            t_geo,
+            t_conf,
+            t_peer,
+            dict(self._diag_rejection_histogram),
+        )
 
     async def start(self) -> None:
         """Start perception loop as an isolated asyncio task."""
@@ -181,6 +305,7 @@ class PerceptionPipeline:
                 pass
         await self.frame_source.close()
         self.detector.close()
+        self._print_timeline_summary()
         logger.info("Perception pipeline stopped.")
 
     async def run_loop(self) -> None:
@@ -194,12 +319,31 @@ class PerceptionPipeline:
         m = re.search(r'\d+', str(self.drone_id))
         if m:
             drone_idx = max(0, int(m.group(0)) - 1)
-        stagger_s = drone_idx * 0.25
+        start_stagger_cfg = float(getattr(self.config, "start_stagger_s", 0.25))
+        stagger_s = drone_idx * start_stagger_cfg
         if stagger_s > 0:
             try:
                 await asyncio.sleep(stagger_s)
             except asyncio.CancelledError:
                 return
+
+        if self._pipeline_start_time is None:
+            self._pipeline_start_time = time.monotonic()
+
+        # Warm up detector in executor thread before entering periodic step loop
+        warmup_frames = int(getattr(self.config, "warmup_frames", 3))
+        if hasattr(self.detector, "ensure_ready") and callable(self.detector.ensure_ready):
+            res = self.detector.ensure_ready(warmup_frames=warmup_frames)
+            if asyncio.iscoroutine(res):
+                await res
+        elif hasattr(self.detector, "ensure_loaded") and callable(self.detector.ensure_loaded):
+            res = self.detector.ensure_loaded()
+            if asyncio.iscoroutine(res):
+                await res
+        elif hasattr(self.detector, "load") and callable(self.detector.load):
+            res = self.detector.load()
+            if asyncio.iscoroutine(res):
+                await res
 
         interval = 1.0 / max(0.1, self.config.max_fps)
 
@@ -223,6 +367,38 @@ class PerceptionPipeline:
 
     async def _step(self) -> None:
         """Single frame iteration: gate, acquire, infer, geolocate, aggregate, broadcast."""
+        if self._pipeline_start_time is None:
+            self._pipeline_start_time = time.monotonic()
+        self._current_step_info = {
+            "ready_state": "OK",
+            "alt_gate": "N/A",
+            "tilt_gate": "N/A",
+            "frame_age_s": None,
+            "telem_age_s": None,
+            "sync_skew_s": None,
+            "raw_detections": 0,
+            "max_raw_conf": 0.0,
+            "deferred": False,
+            "defer_reason": "none",
+        }
+        try:
+            await self._execute_step()
+        finally:
+            self._record_step_timeline(
+                ready_state=self._current_step_info.get("ready_state", "OK"),
+                alt_gate=self._current_step_info.get("alt_gate", "N/A"),
+                tilt_gate=self._current_step_info.get("tilt_gate", "N/A"),
+                frame_age_s=self._current_step_info.get("frame_age_s"),
+                telem_age_s=self._current_step_info.get("telem_age_s"),
+                sync_skew_s=self._current_step_info.get("sync_skew_s"),
+                rejection_reason=self.last_rejection_reason,
+                raw_detections=self._current_step_info.get("raw_detections", 0),
+                max_raw_conf=self._current_step_info.get("max_raw_conf", 0.0),
+                deferred=self._current_step_info.get("deferred", False),
+                defer_reason=self._current_step_info.get("defer_reason", "none"),
+            )
+
+    async def _execute_step(self) -> None:
         t_step_start = time.perf_counter()
         self.last_rejection_reason = None
         self.last_step_stats = {
@@ -234,7 +410,20 @@ class PerceptionPipeline:
             "rejection_reason": None,
         }
 
-        # 1. Detector load check (asynchronous to avoid freezing main asyncio loop)
+        # 1. Warm-up / readiness check: do not acquire camera frames or request telemetry while warming up
+        if hasattr(self.detector, "get_status") and callable(self.detector.get_status):
+            try:
+                res = self.detector.get_status()
+                if isinstance(res, tuple) and len(res) >= 1 and isinstance(res[0], str):
+                    self._current_step_info["ready_state"] = res[0]
+                    if res[0] == "WARMING_UP":
+                        self.last_rejection_reason = "DETECTOR_WARMING_UP"
+                        self.last_step_stats["rejection_reason"] = self.last_rejection_reason
+                        return
+            except Exception:
+                pass
+
+        # 2. Detector load check (asynchronous to avoid freezing main asyncio loop)
         loaded = True
         if hasattr(self.detector, "ensure_loaded") and callable(self.detector.ensure_loaded):
             res = self.detector.ensure_loaded()
@@ -248,14 +437,31 @@ class PerceptionPipeline:
                 loaded = await res
             else:
                 loaded = res
+        elif hasattr(self.detector, "_available"):
+            loaded = bool(self.detector._available)
 
         if loaded is False:
             self.last_rejection_reason = "DETECTOR_NOT_LOADED"
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
+            self._current_step_info["ready_state"] = "DEGRADED"
             if not getattr(self, "_load_failed_logged", False):
                 logger.error("Perception detector not loaded; retrying with backoff.")
                 self._load_failed_logged = True
             return
+
+        # Check readiness state
+        if hasattr(self.detector, "get_status") and callable(self.detector.get_status):
+            try:
+                res = self.detector.get_status()
+                if isinstance(res, tuple) and len(res) >= 1 and isinstance(res[0], str):
+                    self._current_step_info["ready_state"] = res[0]
+                    if res[0] != "OK" and not getattr(self.detector, "_available", False):
+                        self.last_rejection_reason = "DETECTOR_NOT_LOADED"
+                        self.last_step_stats["rejection_reason"] = self.last_rejection_reason
+                        return
+            except Exception:
+                pass
+        self._current_step_info["ready_state"] = "OK"
 
         # 2. Early telemetry gating BEFORE acquiring a frame
         pre_telem = await self.fc.get_telemetry()
@@ -282,6 +488,7 @@ class PerceptionPipeline:
 
         # Altitude above minimum
         alt = float(getattr(pre_telem, "altitude", 0.0) or 0.0)
+        self._current_step_info["alt_gate"] = "PASS" if alt >= self.config.min_altitude_m else f"FAIL(alt={alt:.1f}m<{self.config.min_altitude_m:.1f}m)"
         if alt < self.config.min_altitude_m:
             self.last_rejection_reason = f"ALTITUDE_BELOW_MINIMUM (alt={alt:.2f}m < {self.config.min_altitude_m:.2f}m)"
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
@@ -291,6 +498,7 @@ class PerceptionPipeline:
         # Tilt angle limits (|roll|, |pitch| <= max_tilt_deg)
         roll = float(getattr(pre_telem, "roll", 0.0) or 0.0)
         pitch = float(getattr(pre_telem, "pitch", 0.0) or 0.0)
+        self._current_step_info["tilt_gate"] = "PASS" if (abs(roll) <= self.config.max_tilt_deg and abs(pitch) <= self.config.max_tilt_deg) else f"FAIL(roll={roll:.1f},pitch={pitch:.1f})"
         if abs(roll) > self.config.max_tilt_deg or abs(pitch) > self.config.max_tilt_deg:
             self.last_rejection_reason = f"TILT_EXCEEDED_PRE (roll={roll:.1f}deg, pitch={pitch:.1f}deg > {self.config.max_tilt_deg:.1f}deg)"
             self.last_step_stats["rejection_reason"] = self.last_rejection_reason
@@ -337,6 +545,13 @@ class PerceptionPipeline:
 
         telem_ts = getattr(telem, "timestamp", None)
         frame_ts = getattr(frame, "timestamp", None)
+
+        if telem_ts is not None and float(telem_ts) > 1_000_000_000:
+            self._current_step_info["telem_age_s"] = now - float(telem_ts)
+        if frame_ts is not None and float(frame_ts) > 1_000_000_000:
+            self._current_step_info["frame_age_s"] = now - float(frame_ts)
+        if telem_ts is not None and frame_ts is not None and float(telem_ts) > 0 and float(frame_ts) > 0:
+            self._current_step_info["sync_skew_s"] = abs(float(frame_ts) - float(telem_ts))
 
         # Only validate against wall-clock time if timestamp is a real epoch (> year 2001)
         if telem_ts is not None and float(telem_ts) > 1_000_000_000:
@@ -397,6 +612,13 @@ class PerceptionPipeline:
         inference_ms = float(timing.get("inference_ms", 0.0) or 0.0)
         postprocess_ms = float(timing.get("postprocess_filter_ms", 0.0) or 0.0)
         raw_conf = float(timing.get("max_raw_conf", 0.0) or 0.0)
+
+        self._current_step_info["raw_detections"] = len(detections) if detections else 0
+        self._current_step_info["max_raw_conf"] = raw_conf
+        if self._diag_first_inference_s is None and self._pipeline_start_time is not None:
+            self._diag_first_inference_s = round(time.monotonic() - self._pipeline_start_time, 2)
+        if detections and self._diag_first_raw_detection_s is None and self._pipeline_start_time is not None:
+            self._diag_first_raw_detection_s = round(time.monotonic() - self._pipeline_start_time, 2)
 
         infer_latency_ms = (time.perf_counter() - t_infer_start) * 1000.0
         self.last_step_stats["inference_latency_ms"] = round(infer_latency_ms, 2)
@@ -557,6 +779,8 @@ class PerceptionPipeline:
                 continue
 
             if decision == "DEFERRED":
+                self._current_step_info["deferred"] = True
+                self._current_step_info["defer_reason"] = exclusion_reason
                 buf_window = float(getattr(self.config, "deferred_buffer_window_s", 3.0))
                 logger.warning(
                     "Deferring detection at (%.6f, %.6f): %s (buffered for %.1fs window)",
@@ -595,6 +819,8 @@ class PerceptionPipeline:
             )
 
         self.last_step_stats["geo_detections"] = len(geo_dets)
+        if geo_dets and self._diag_first_geo_detection_s is None and self._pipeline_start_time is not None:
+            self._diag_first_geo_detection_s = round(time.monotonic() - self._pipeline_start_time, 2)
         if not geo_dets:
             if any(item.get("deadline") for item in self._deferred_buffer):
                 self.last_rejection_reason = "DETECTIONS_DEFERRED"

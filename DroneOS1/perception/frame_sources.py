@@ -49,6 +49,7 @@ class AirSimFrameSource(FrameSource):
         self._client = client
         self._external_client = (client is not None)
         self._connected = (client is not None)
+        self._warmed_up = False
         self.is_synthetic = False
         self.last_sim_get_images_ms = 0.0
         self.last_capture_ms = 0.0
@@ -74,6 +75,17 @@ class AirSimFrameSource(FrameSource):
             self._client.confirmConnection()
             self._connected = True
             logger.info("AirSimFrameSource connected to %s:%d for vehicle '%s'", self.host, self.port, self.vehicle_name)
+            if not self._warmed_up:
+                try:
+                    img_req = getattr(airsim, "ImageRequest", None)
+                    img_type = getattr(getattr(airsim, "ImageType", None), "Scene", 0)
+                    if img_req is not None:
+                        req = img_req(self.camera_name, img_type, False, False)
+                        self._client.simGetImages([req], vehicle_name=self.vehicle_name)
+                    self._warmed_up = True
+                    logger.debug("AirSimFrameSource warmup capture completed for '%s'", self.vehicle_name)
+                except Exception as we:
+                    logger.debug("AirSimFrameSource warmup capture non-fatal failure: %s", we)
             return True
         except Exception as e:
             logger.debug("AirSimFrameSource connection attempt failed: %s", e)

@@ -357,7 +357,7 @@ class DroneOSApp:
                     max_area_ratio=getattr(self.perception_cfg, "max_area_ratio", 1.0),
                     max_aspect_ratio=getattr(self.perception_cfg, "max_aspect_ratio", 0.0),
                 )
-                detector.load()
+                # Model load & warm-up are dispatched asynchronously in executor via pipeline.start()
                 self.perception_pipeline = PerceptionPipeline(
                     drone_id=self.node_id,
                     frame_source=frame_src,

@@ -113,22 +113,30 @@ export const DroneProvider = ({ children }) => {
     let okCount = 0;
     let degradedCount = 0;
     let disabledCount = 0;
+    let warmingUpCount = 0;
     let total = droneList.length;
     for (const d of droneList) {
       const ps = d.telemetry?.perception_status?.status || (d.diagnostics?.perception_status?.status);
       if (ps === 'OK') okCount++;
+      else if (ps === 'WARMING_UP') warmingUpCount++;
       else if (ps === 'DEGRADED') degradedCount++;
       else if (ps === 'DISABLED') disabledCount++;
     }
-    const color = okCount === total && total > 0 ? "var(--good, #22c55e)" : (degradedCount > 0 ? "var(--warning, #eab308)" : "var(--danger, #ef4444)");
+    const color = okCount === total && total > 0
+      ? "var(--good, #22c55e)"
+      : (warmingUpCount > 0 && degradedCount === 0
+          ? "var(--warning, #eab308)"
+          : (degradedCount > 0 ? "var(--warning, #eab308)" : "var(--danger, #ef4444)"));
     let detail = "";
-    if (degradedCount > 0) detail = ` (${degradedCount} DEGRADED)`;
+    if (warmingUpCount > 0) detail = ` (${warmingUpCount} WARMING UP)`;
+    else if (degradedCount > 0) detail = ` (${degradedCount} DEGRADED)`;
     else if (disabledCount > 0) detail = ` (${disabledCount} OFF)`;
     return {
       text: `ML: ${okCount}/${total} OK${detail}`,
       color,
       okCount,
       total,
+      warmingUpCount,
       degradedCount,
       disabledCount
     };
