@@ -73,6 +73,7 @@ class PerceptionPipeline:
 
         # Decoupled frame capture state (runs capture in dedicated task; keeps latest frame only)
         self.decoupled_capture = bool(getattr(config, "decoupled_capture", True))
+        self._capture_running: bool = False
         self._capture_task: Optional[asyncio.Task] = None
         self._latest_frame: Optional[Frame] = None
         self._latest_telem: Optional[Any] = None
@@ -304,7 +305,7 @@ class PerceptionPipeline:
         frame and its corresponding telemetry sampled at capture time, immediately dropping older
         frames without queueing.
         """
-        while self._running:
+        while self._capture_running:
             try:
                 # Do not capture frames if detector is degraded or failed to load
                 if self.last_rejection_reason == "DETECTOR_NOT_LOADED":
@@ -331,11 +332,13 @@ class PerceptionPipeline:
 
     def start_capture(self) -> None:
         """Start decoupled background capture task if not already running."""
+        self._capture_running = True
         if self._capture_task is None or self._capture_task.done():
             self._capture_task = asyncio.create_task(self._capture_loop())
 
     async def stop_capture(self) -> None:
         """Stop decoupled background capture task."""
+        self._capture_running = False
         if self._capture_task is not None and not self._capture_task.done():
             self._capture_task.cancel()
             try:
@@ -349,8 +352,6 @@ class PerceptionPipeline:
         if self._running:
             return
         self._running = True
-        if self.decoupled_capture:
-            self.start_capture()
         self._task = asyncio.create_task(self.run_loop())
 
     async def stop(self, close_detector: bool = True, close_source: bool = True) -> None:
