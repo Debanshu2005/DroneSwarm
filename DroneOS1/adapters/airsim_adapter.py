@@ -125,7 +125,7 @@ class AirSimFlightController(IFlightController):
                     break
                 if (time.time() - start > 15.0) and vel < 0.2:
                     break
-            except Exception as e:
+            except Exception:
                 pass
             await asyncio.sleep(0.5)
 
@@ -615,7 +615,8 @@ class AirSimFlightController(IFlightController):
                 self._telemetry.is_armable = getattr(state, 'can_arm', True)
                 self._telemetry.health_all_ok = True
                 
-                if self._awaiting_disarm and (state.landed_state == 1 or (state.kinematics_estimated.position.z_val > -0.5 and math.hypot(state.kinematics_estimated.linear_velocity.x_val, state.kinematics_estimated.linear_velocity.y_val) < 0.2)):
+                is_landed = (getattr(state, 'landed_state', None) == 0)
+                if self._awaiting_disarm and (is_landed or (state.kinematics_estimated.position.z_val > -0.5 and math.hypot(state.kinematics_estimated.linear_velocity.x_val, state.kinematics_estimated.linear_velocity.y_val) < 0.2)):
                     self._armed = False
                     self._awaiting_disarm = False
                     if self._mode in ("LAND", "RTL"):

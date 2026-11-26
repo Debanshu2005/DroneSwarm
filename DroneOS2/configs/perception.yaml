@@ -22,7 +22,7 @@ peer_exclusion_radius_m: 4.0
 peer_position_max_age_s: 5.0
 deferred_buffer_window_s: 3.0
 unknown_peer_deferral_max_s: 3.0
-vehicle_artifact_pixel_tol_px: 35.0
+vehicle_artifact_pixel_tol_px: 50.0
 min_temporal_separation_s: 2.0
 min_drone_displacement_m: 1.5
 gps_sigma_m: 0.5

@@ -247,6 +247,66 @@ def test_stationary_pixel_track_while_drone_moves_is_rejected_as_vehicle_artifac
     assert real_track.is_vehicle_artifact is False
 
 
+def test_artifact_track_does_not_absorb_subsequent_ground_target_within_merge_radius():
+    """When a candidate track is flagged as a vehicle artifact, subsequent real ground detections
+    within merge_radius_m must NOT be swallowed by the artifact track; they must create their own track and confirm."""
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_pixel_tol_px=50.0,
+    )
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+
+    # 1. Shadow detection at t0
+    s1_lat, s1_lon = meters_to_lat_lon(0.5, 0.0, d0_lat, d0_lon)
+    agg.update([
+        GeoreferencedDetection(label="rubbish", confidence=0.60, lat=s1_lat, lon=s1_lon, drone_lat=d0_lat, drone_lon=d0_lon, pixel_x=678.0, pixel_y=60.0)
+    ], now=t0)
+
+    # 2. Shadow detection at t0 + 2.0s after drone moves 1.6m North (shadow pixel stays stationary)
+    d2_lat, d2_lon = meters_to_lat_lon(1.6, 0.0, d0_lat, d0_lon)
+    s2_lat, s2_lon = meters_to_lat_lon(1.6, 0.0, s1_lat, s1_lon)
+    agg.update([
+        GeoreferencedDetection(label="rubbish", confidence=0.60, lat=s2_lat, lon=s2_lon, drone_lat=d2_lat, drone_lon=d2_lon, pixel_x=678.5, pixel_y=61.0)
+    ], now=t0 + 2.0)
+
+    assert len(agg.tracks) == 1
+    artifact_track = list(agg.tracks.values())[0]
+    assert artifact_track.is_vehicle_artifact is True
+    assert artifact_track.confirmed is False
+
+    # 3. Drone moves to 2.2m North; genuine ground target is located at g_lat, g_lon (which is only 1.0m from artifact track)
+    g_lat, g_lon = meters_to_lat_lon(2.0, 0.0, d0_lat, d0_lon)
+    d3_lat, d3_lon = meters_to_lat_lon(2.2, 0.0, d0_lat, d0_lon)
+    res3 = agg.update([
+        GeoreferencedDetection(label="rubbish", confidence=0.80, lat=g_lat, lon=g_lon, drone_lat=d3_lat, drone_lon=d3_lon, pixel_x=640.0, pixel_y=250.0)
+    ], now=t0 + 4.0)
+
+    # Should create a NEW track, NOT merge into artifact_track
+    assert len(res3) == 0
+    assert len(agg.tracks) == 2
+    tracks = list(agg.tracks.values())
+    real_track = tracks[1]
+    assert real_track.id != artifact_track.id
+    assert real_track.is_vehicle_artifact is False
+
+    # 4. Drone moves to 5.2m North (3.0m further >= 3*sigma_diff ~2.12m), target pixel shifts to 450.0 (> 50px tol)
+    d4_lat, d4_lon = meters_to_lat_lon(5.2, 0.0, d0_lat, d0_lon)
+    res4 = agg.update([
+        GeoreferencedDetection(label="rubbish", confidence=0.85, lat=g_lat, lon=g_lon, drone_lat=d4_lat, drone_lon=d4_lon, pixel_x=640.0, pixel_y=450.0)
+    ], now=t0 + 6.0)
+
+    # Real track must confirm!
+    assert len(res4) == 1
+    assert res4[0].id == real_track.id
+    assert real_track.confirmed is True
+    assert real_track.is_vehicle_artifact is False
+
+
 def test_hovering_drone_below_displacement_threshold_does_not_reject_as_artifact():
     """A hovering drone with displacement below threshold must NOT be flagged as an artifact."""
     agg = TrackAggregator(
@@ -341,7 +401,7 @@ def test_perception_config_defaults_include_artifact_rejection_and_masks():
 
     cfg_path = Path(__file__).resolve().parent.parent / "configs" / "perception.yaml"
     cfg = load_yaml_config(cfg_path, PerceptionConfig)
-    assert cfg.vehicle_artifact_pixel_tol_px == 35.0
+    assert cfg.vehicle_artifact_pixel_tol_px == 50.0
     assert cfg.camera.mask_regions == []
 
 

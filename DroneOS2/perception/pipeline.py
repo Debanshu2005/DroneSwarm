@@ -61,7 +61,7 @@ class PerceptionPipeline:
             min_temporal_separation_s=getattr(config, "min_temporal_separation_s", 2.0),
             min_drone_displacement_m=getattr(config, "min_drone_displacement_m", 1.5),
             gps_sigma_m=getattr(config, "gps_sigma_m", 0.5),
-            vehicle_artifact_pixel_tol_px=getattr(config, "vehicle_artifact_pixel_tol_px", 35.0),
+            vehicle_artifact_pixel_tol_px=getattr(config, "vehicle_artifact_pixel_tol_px", 50.0),
         )
 
         self._running = False

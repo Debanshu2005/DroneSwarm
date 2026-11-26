@@ -100,7 +100,7 @@ class TrackAggregator:
         min_drone_displacement_m: float = 1.5,
         gps_sigma_m: float = 0.5,
         min_viewpoint_angle_deg: float = 5.0,
-        vehicle_artifact_pixel_tol_px: float = 35.0,
+        vehicle_artifact_pixel_tol_px: float = 50.0,
     ):
         self.drone_id = drone_id
         self.merge_radius_m = merge_radius_m
@@ -145,6 +145,8 @@ class TrackAggregator:
 
             for tid, track in self.tracks.items():
                 if tid in matched_track_ids:
+                    continue
+                if track.is_vehicle_artifact:
                     continue
                 # Calculate distance between track and detection in meters
                 dn, de = lat_lon_to_meters(det.lat, det.lon, track.lat, track.lon)
