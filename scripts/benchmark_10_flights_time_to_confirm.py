@@ -166,6 +166,7 @@ async def evaluate_batch(
         min_drone_displacement_m=base_cfg.min_drone_displacement_m,
         min_altitude_m=base_cfg.min_altitude_m,
         max_tilt_deg=base_cfg.max_tilt_deg,
+        vehicle_artifact_pixel_tol_px=base_cfg.vehicle_artifact_pixel_tol_px,
     )
 
     flight_results = []
@@ -285,6 +286,7 @@ async def main():
         min_hits=base_cfg.min_hits,
         min_temporal_separation_s=base_cfg.min_temporal_separation_s,
         min_drone_displacement_m=base_cfg.min_drone_displacement_m,
+        vehicle_artifact_pixel_tol_px=base_cfg.vehicle_artifact_pixel_tol_px,
     )
     empty_res = await run_single_pass(client, detector, src, telem, empty_cfg, speed_mps=0.5, flight_idx=0, has_target=False)
     print(f"Empty Flight Confirmed Alerts: {empty_res['confirmed_count']} (PASS: 0 false alerts)" if empty_res['confirmed_count'] == 0 else f"FAIL: {empty_res['confirmed_count']} false alerts")
@@ -294,7 +296,8 @@ async def main():
     detector.close()
     try:
         clear_targets(client)
-        client.landAsync(vehicle_name="Drone1").join()
+        client.moveToPositionAsync(0.0, 0.0, -2.0, 2.0, timeout_sec=5, vehicle_name="Drone1").join()
+        client.landAsync(timeout_sec=5, vehicle_name="Drone1").join()
         client.armDisarm(False, vehicle_name="Drone1")
         client.enableApiControl(False, vehicle_name="Drone1")
     except Exception:
