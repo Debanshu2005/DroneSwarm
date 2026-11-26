@@ -90,41 +90,8 @@ def main():
     
     print(f"[{drone_cfg.drone_id}] Starting DroneOS Lifecycle Manager...")
     
-    # 1. Kill any existing orphaned servers/relays forcefully on this Pi
-    import psutil
     is_sim = os.environ.get("DRONEOS_PROFILE") in ("sim", "test")
-    server_port = 50051
     sim_ws_port = "8082"  # Drone 2 relay WS port
-    drone_udp_port = 14551  # Drone 2 DroneOS UDP listen port
-    relay_udp_port = 14651  # Drone 2 Relay UDP bind port
-    target_ports = {drone_udp_port, int(sim_ws_port), relay_udp_port}
-
-    if not is_sim:
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            try:
-                cmdline = proc.info.get('cmdline') or []
-                cmdline_str = ' '.join(cmdline)
-                if proc.info['name'] and 'mavsdk_server' in proc.info['name']:
-                    if cmdline and any(str(server_port) in arg for arg in cmdline):
-                        print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
-                        proc.kill()
-                elif cmdline and 'relay.py' in cmdline_str:
-                    print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
-                    proc.kill()
-            except Exception:
-                pass
-
-        # Kill any process still holding our ports (zombie guard on hardware).
-        for proc in psutil.process_iter(['pid']):
-            try:
-                for conn in proc.net_connections(kind='inet'):
-                    if conn.laddr and conn.laddr.port in target_ports:
-                        print(f"[{drone_cfg.drone_id}] Releasing port {conn.laddr.port} held by zombie PID {proc.pid}")
-                        proc.kill()
-                        break
-            except Exception:
-                pass
-        time.sleep(1.0)
     
     # 3. Spawn Relay manually
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"

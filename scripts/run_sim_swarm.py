@@ -26,18 +26,6 @@ def main():
     if log_dir:
         log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Pre-clean any stale relays or DroneOS processes
-    import psutil
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-        try:
-            cmd = ' '.join(proc.info.get('cmdline') or [])
-            if 'relay.py' in cmd or 'start_drone' in cmd:
-                if proc.pid != os.getpid():
-                    proc.kill()
-        except Exception:
-            pass
-    time.sleep(0.5)
-
     print("=" * 70)
     print(f"Launching {args.drones} Simulation Drones (PROFILE=sim, start_stagger_s={args.stagger}s)")
     print("=" * 70)
