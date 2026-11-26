@@ -37,6 +37,15 @@ class AggregatedTrack:
     first_frame_id: int = 0
     frames_to_confirm: int = 0
     seconds_to_confirm: float = 0.0
+    last_pixel_x: Optional[float] = None
+    last_pixel_y: Optional[float] = None
+    last_distinct_pixel_x: Optional[float] = None
+    last_distinct_pixel_y: Optional[float] = None
+    first_pixel_x: Optional[float] = None
+    first_pixel_y: Optional[float] = None
+    first_drone_lat: Optional[float] = None
+    first_drone_lon: Optional[float] = None
+    is_vehicle_artifact: bool = False
 
 
 @dataclass
@@ -49,6 +58,10 @@ class GeoreferencedDetection:
     altitude_agl: Optional[float] = None
     drone_lat: Optional[float] = None
     drone_lon: Optional[float] = None
+    pixel_x: Optional[float] = None
+    pixel_y: Optional[float] = None
+    box_w: Optional[float] = None
+    box_h: Optional[float] = None
 
 
 @dataclass
@@ -87,6 +100,7 @@ class TrackAggregator:
         min_drone_displacement_m: float = 1.5,
         gps_sigma_m: float = 0.5,
         min_viewpoint_angle_deg: float = 5.0,
+        vehicle_artifact_pixel_tol_px: float = 35.0,
     ):
         self.drone_id = drone_id
         self.merge_radius_m = merge_radius_m
@@ -98,6 +112,7 @@ class TrackAggregator:
         self.min_drone_displacement_m = min_drone_displacement_m
         self.gps_sigma_m = gps_sigma_m
         self.min_viewpoint_angle_deg = min_viewpoint_angle_deg
+        self.vehicle_artifact_pixel_tol_px = vehicle_artifact_pixel_tol_px
 
         self._seq = 0
         self._current_frame_id = 0
@@ -186,6 +201,43 @@ class TrackAggregator:
                         )
                         viewpoint_or_disp_ok = (disp_m >= required_disp) or (delta_bearing_deg >= angle_threshold_deg)
                         is_distinct = time_advanced and viewpoint_or_disp_ok
+
+                        # Vehicle artifact rejection: check whether pixel centroid stays nearly fixed
+                        # across hits while drone displaces >= min_drone_displacement_m / required_disp
+                        has_pixel_coords = (
+                            det.pixel_x is not None
+                            and det.pixel_y is not None
+                            and track.last_distinct_pixel_x is not None
+                            and track.last_distinct_pixel_y is not None
+                        )
+                        if has_pixel_coords:
+                            p_disp = math.hypot(
+                                det.pixel_x - track.last_distinct_pixel_x,
+                                det.pixel_y - track.last_distinct_pixel_y,
+                            )
+                            tot_drone_disp = 0.0
+                            tot_p_disp = 0.0
+                            if track.first_drone_lat is not None and track.first_drone_lon is not None:
+                                f_dn, f_de = lat_lon_to_meters(
+                                    det.drone_lat, det.drone_lon,
+                                    track.first_drone_lat, track.first_drone_lon
+                                )
+                                tot_drone_disp = math.hypot(f_dn, f_de)
+                            if track.first_pixel_x is not None and track.first_pixel_y is not None:
+                                tot_p_disp = math.hypot(
+                                    det.pixel_x - track.first_pixel_x,
+                                    det.pixel_y - track.first_pixel_y,
+                                )
+
+                            is_stationary_pixel = False
+                            if disp_m >= required_disp and p_disp <= self.vehicle_artifact_pixel_tol_px:
+                                is_stationary_pixel = True
+                            if tot_drone_disp >= self.min_drone_displacement_m and tot_p_disp <= self.vehicle_artifact_pixel_tol_px:
+                                is_stationary_pixel = True
+
+                            if is_stationary_pixel:
+                                track.is_vehicle_artifact = True
+                                is_distinct = False
                     else:
                         # Detections without drone coordinates cannot verify spatial displacement
                         # or viewpoint angle change; they must NOT reach confirmed status on time alone.
@@ -200,6 +252,9 @@ class TrackAggregator:
                             track.last_distinct_drone_lon = det.drone_lon
                             t_dn, t_de = lat_lon_to_meters(track.lat, track.lon, det.drone_lat, det.drone_lon)
                             track.last_distinct_bearing_deg = math.degrees(math.atan2(t_de, t_dn)) % 360.0
+                        if det.pixel_x is not None and det.pixel_y is not None:
+                            track.last_distinct_pixel_x = det.pixel_x
+                            track.last_distinct_pixel_y = det.pixel_y
                 else:
                     if now > track.last_seen:
                         track.hits += 1
@@ -208,6 +263,9 @@ class TrackAggregator:
                 if det.drone_lat is not None and det.drone_lon is not None:
                     track.last_drone_lat = det.drone_lat
                     track.last_drone_lon = det.drone_lon
+                if det.pixel_x is not None and det.pixel_y is not None:
+                    track.last_pixel_x = det.pixel_x
+                    track.last_pixel_y = det.pixel_y
 
                 track.max_confidence = max(track.max_confidence, det.confidence)
                 track.sum_conf += det.confidence
@@ -252,13 +310,22 @@ class TrackAggregator:
                     last_emitted_hits=0,
                     confirmed=False,
                     altitude_agl=det.altitude_agl,
+                    last_pixel_x=det.pixel_x,
+                    last_pixel_y=det.pixel_y,
+                    last_distinct_pixel_x=det.pixel_x,
+                    last_distinct_pixel_y=det.pixel_y,
+                    first_pixel_x=det.pixel_x,
+                    first_pixel_y=det.pixel_y,
+                    first_drone_lat=det.drone_lat,
+                    first_drone_lon=det.drone_lon,
+                    is_vehicle_artifact=False,
                 )
                 self.tracks[new_id] = track
                 matched_track_ids.add(new_id)
 
         # Check emission criteria
         for track in self.tracks.values():
-            if not track.confirmed and track.distinct_hits >= self.min_hits:
+            if not track.confirmed and not track.is_vehicle_artifact and track.distinct_hits >= self.min_hits:
                 track.confirmed = True
                 track.frames_to_confirm = max(1, self._current_frame_id - track.first_frame_id + 1)
                 track.seconds_to_confirm = max(0.0, now - track.first_seen)

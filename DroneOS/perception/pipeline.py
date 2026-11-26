@@ -61,6 +61,7 @@ class PerceptionPipeline:
             min_temporal_separation_s=getattr(config, "min_temporal_separation_s", 2.0),
             min_drone_displacement_m=getattr(config, "min_drone_displacement_m", 1.5),
             gps_sigma_m=getattr(config, "gps_sigma_m", 0.5),
+            vehicle_artifact_pixel_tol_px=getattr(config, "vehicle_artifact_pixel_tol_px", 35.0),
         )
 
         self._running = False
@@ -492,6 +493,8 @@ class PerceptionPipeline:
         if hasattr(self.detector, "get_status") and callable(self.detector.get_status):
             try:
                 res = self.detector.get_status()
+                if asyncio.iscoroutine(res):
+                    res = await res
                 if isinstance(res, tuple) and len(res) >= 1 and isinstance(res[0], str):
                     self._current_step_info["ready_state"] = res[0]
                     if res[0] == "WARMING_UP":
@@ -531,6 +534,8 @@ class PerceptionPipeline:
         if hasattr(self.detector, "get_status") and callable(self.detector.get_status):
             try:
                 res = self.detector.get_status()
+                if asyncio.iscoroutine(res):
+                    res = await res
                 if isinstance(res, tuple) and len(res) >= 1 and isinstance(res[0], str):
                     self._current_step_info["ready_state"] = res[0]
                     if res[0] != "OK" and not getattr(self.detector, "_available", False):
@@ -753,10 +758,33 @@ class PerceptionPipeline:
         if recovered_from_buffer:
             geo_dets.extend(recovered_from_buffer)
 
+        cam_mask_regions = getattr(cam_cfg, "mask_regions", None) or []
+
         for det_idx, det in enumerate(detections or []):
             trace_id = f"{self.drone_id}-f{self._frame_id}-d{det_idx}-{int(now_curr*1000)}"
             x1, y1, x2, y2 = det.bbox_xyxy
             bbox_list = [round(float(c), 2) for c in (x1, y1, x2, y2)]
+            u = (x1 + x2) / 2.0
+            v = (y1 + y2) / 2.0
+            box_w = abs(x2 - x1)
+            box_h = abs(y2 - y1)
+
+            # Camera mask regions check: ignore fixed vehicle parts on real hardware
+            is_masked = False
+            for mr in cam_mask_regions:
+                if len(mr) == 4:
+                    mx1, my1, mx2, my2 = mr
+                    if max(mx1, my1, mx2, my2) <= 1.0:
+                        mx1 *= w
+                        mx2 *= w
+                        my1 *= h
+                        my2 *= h
+                    if min(mx1, mx2) <= u <= max(mx1, mx2) and min(my1, my2) <= v <= max(my1, my2):
+                        is_masked = True
+                        break
+            if is_masked:
+                logger.debug("Dropping detection at pixel (%.1f, %.1f): inside camera mask region", u, v)
+                continue
 
             drone_gps_data = {
                 "lat": drone_lat,
@@ -778,9 +806,6 @@ class PerceptionPipeline:
                     label=det.label,
                     drone_gps=drone_gps_data
                 )
-
-            u = (x1 + x2) / 2.0
-            v = (y1 + y2) / 2.0
 
             res = pixel_to_lat_lon(
                 u=u,
@@ -909,6 +934,10 @@ class PerceptionPipeline:
                     altitude_agl=agl,
                     drone_lat=drone_lat,
                     drone_lon=drone_lon,
+                    pixel_x=u,
+                    pixel_y=v,
+                    box_w=box_w,
+                    box_h=box_h,
                 )
             )
 
@@ -1244,6 +1273,10 @@ class PerceptionPipeline:
                         altitude_agl=item["agl"],
                         drone_lat=item["drone_lat"],
                         drone_lon=item["drone_lon"],
+                        pixel_x=item.get("u"),
+                        pixel_y=item.get("v"),
+                        box_w=item.get("w"),
+                        box_h=item.get("h"),
                     )
                 )
             elif is_deadline_expired:

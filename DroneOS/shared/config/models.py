@@ -107,6 +107,7 @@ class CameraConfig(BaseModel):
     airsim_camera: str = "bottom_center"
     device: Any = 0
     image_dir: Optional[str] = None
+    mask_regions: Optional[List[List[float]]] = None
 
 class PerceptionConfig(BaseModel):
     enabled: bool = False
@@ -137,6 +138,7 @@ class PerceptionConfig(BaseModel):
     min_drone_displacement_m: float = 1.5
     gps_sigma_m: float = 0.5
     unknown_peer_deferral_max_s: float = 3.0
+    vehicle_artifact_pixel_tol_px: float = 35.0
     min_hits: int = 2
     update_interval_s: float = 10.0
     max_tracks: int = 2000
