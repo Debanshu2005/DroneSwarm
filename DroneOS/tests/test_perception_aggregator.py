@@ -1,5 +1,6 @@
 """Unit tests for multi-frame detection aggregator."""
 
+import math
 import pytest
 
 from DroneOS.perception.aggregator import GeoreferencedDetection, TrackAggregator
@@ -405,30 +406,270 @@ def test_perception_config_defaults_include_artifact_rejection_and_masks():
     assert cfg.camera.mask_regions == []
 
 
-def test_camera_mask_regions_filtering():
-    """Verify camera mask regions logic filters detections inside normalized or pixel masks."""
-    w, h = 1280, 720
-    # Mask top center 20% of image [0.4, 0.0, 0.6, 0.2]
-    mask_regions = [[0.4, 0.0, 0.6, 0.2]]
+@pytest.mark.parametrize("altitude_m", [5.0, 10.0, 20.0, 40.0])
+@pytest.mark.parametrize("img_w", [640, 1280, 1920])
+def test_expected_shift_model_real_ground_object_never_flagged(altitude_m, img_w):
+    """A real ground object is NOT flagged at altitudes 5, 10, 20 and 40 m, and image widths 640, 1280 and 1920."""
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_shift_ratio=0.25,
+        vehicle_artifact_pixel_floor_px=8.0,
+        hfov_deg=90.0,
+    )
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+    g_lat, g_lon = meters_to_lat_lon(1.0, 0.0, d0_lat, d0_lon)
+    img_h = int(img_w * 9 / 16)
 
-    def is_in_mask(u, v):
-        for mr in mask_regions:
-            mx1, my1, mx2, my2 = mr
-            if max(mx1, my1, mx2, my2) <= 1.0:
-                mx1 *= w
-                mx2 *= w
-                my1 *= h
-                my2 *= h
-            if min(mx1, mx2) <= u <= max(mx1, mx2) and min(my1, my2) <= v <= max(my1, my2):
-                return True
-        return False
+    # Hit 1: Drone at origin, object at center of image
+    u1, v1 = float(img_w / 2.0), float(img_h / 2.0)
+    det1 = GeoreferencedDetection(
+        label="rubbish",
+        confidence=0.85,
+        lat=g_lat,
+        lon=g_lon,
+        drone_lat=d0_lat,
+        drone_lon=d0_lon,
+        altitude_agl=altitude_m,
+        pixel_x=u1,
+        pixel_y=v1,
+        img_w=img_w,
+        img_h=img_h,
+    )
+    r1 = agg.update([det1], now=t0)
+    assert len(r1) == 0
 
-    # Detection in top center (e.g. shadow or landing gear at 640, 70) -> masked
-    assert is_in_mask(640.0, 70.0) is True
-    # Detection in center ground (640, 360) -> not masked
-    assert is_in_mask(640.0, 360.0) is False
-    # Detection in bottom right (1000, 600) -> not masked
-    assert is_in_mask(1000.0, 600.0) is False
+    # Hit 2: Drone moves 2.0m North (displacement >= 1.5m and >= 3*sigma_diff)
+    disp_m = 2.0
+    d2_lat, d2_lon = meters_to_lat_lon(disp_m, 0.0, d0_lat, d0_lon)
+    # Expected shift in pixels for ground object
+    focal_px = (float(img_w) / 2.0) / math.tan(math.radians(45.0))
+    expected_shift_px = focal_px * disp_m / altitude_m
+    u2 = u1
+    v2 = v1 + expected_shift_px  # Moves in image plane along flight axis
+
+    det2 = GeoreferencedDetection(
+        label="rubbish",
+        confidence=0.88,
+        lat=g_lat,
+        lon=g_lon,
+        drone_lat=d2_lat,
+        drone_lon=d2_lon,
+        altitude_agl=altitude_m,
+        pixel_x=u2,
+        pixel_y=v2,
+        img_w=img_w,
+        img_h=img_h,
+    )
+    r2 = agg.update([det2], now=t0 + 2.0)
+    assert len(r2) == 1, f"Real ground object MUST confirm at alt={altitude_m}m, width={img_w}px"
+    track = list(agg.tracks.values())[0]
+    assert track.confirmed is True
+    assert track.is_vehicle_artifact is False, f"Real ground object must NOT be flagged at alt={altitude_m}m, width={img_w}px"
+
+
+@pytest.mark.parametrize("altitude_m", [5.0, 10.0, 20.0, 40.0])
+@pytest.mark.parametrize("img_w", [640, 1280, 1920])
+def test_expected_shift_model_zero_shift_shadow_is_flagged(altitude_m, img_w):
+    """A zero-shift (shadow-like) track IS flagged as a vehicle artifact at altitudes 5, 10, 20 and 40 m, and image widths 640, 1280 and 1920."""
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_shift_ratio=0.25,
+        vehicle_artifact_pixel_floor_px=8.0,
+        hfov_deg=90.0,
+    )
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+    img_h = int(img_w * 9 / 16)
+    # Shadow ground position at 0.5m from drone
+    s1_lat, s1_lon = meters_to_lat_lon(0.5, 0.0, d0_lat, d0_lon)
+    u1, v1 = float(img_w / 2.0), float(img_h / 2.0)
+
+    det1 = GeoreferencedDetection(
+        label="rubbish",
+        confidence=0.60,
+        lat=s1_lat,
+        lon=s1_lon,
+        drone_lat=d0_lat,
+        drone_lon=d0_lon,
+        altitude_agl=altitude_m,
+        pixel_x=u1,
+        pixel_y=v1,
+        img_w=img_w,
+        img_h=img_h,
+    )
+    r1 = agg.update([det1], now=t0)
+    assert len(r1) == 0
+
+    # Drone moves 2.0m North; shadow follows drone (moves 2.0m on ground, stationary in image)
+    disp_m = 2.0
+    d2_lat, d2_lon = meters_to_lat_lon(disp_m, 0.0, d0_lat, d0_lon)
+    s2_lat, s2_lon = meters_to_lat_lon(disp_m, 0.0, s1_lat, s1_lon)
+    # Pixel centroid remains at center (zero shift with tiny 0.5px jitter)
+    u2, v2 = u1 + 0.5, v1 + 0.5
+
+    det2 = GeoreferencedDetection(
+        label="rubbish",
+        confidence=0.62,
+        lat=s2_lat,
+        lon=s2_lon,
+        drone_lat=d2_lat,
+        drone_lon=d2_lon,
+        altitude_agl=altitude_m,
+        pixel_x=u2,
+        pixel_y=v2,
+        img_w=img_w,
+        img_h=img_h,
+    )
+    r2 = agg.update([det2], now=t0 + 2.0)
+    assert len(r2) == 0, f"Shadow track must NOT confirm at alt={altitude_m}m, width={img_w}px"
+    track = list(agg.tracks.values())[0]
+    assert track.confirmed is False
+    assert track.is_vehicle_artifact is True, f"Shadow track MUST be flagged as artifact at alt={altitude_m}m, width={img_w}px"
+
+
+def test_hovering_drone_not_flagged_under_expected_shift_model():
+    """A hovering drone (below min_drone_displacement_m) is not flagged as an artifact."""
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_shift_ratio=0.25,
+        vehicle_artifact_pixel_floor_px=8.0,
+    )
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+    det1 = GeoreferencedDetection(
+        label="rubbish", confidence=0.80, lat=d0_lat, lon=d0_lon, drone_lat=d0_lat, drone_lon=d0_lon,
+        altitude_agl=5.0, pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+    )
+    agg.update([det1], now=t0)
+
+    # Frame 2: drone moved only 0.2m (hovering / GPS jitter < 1.5m)
+    d2_lat, d2_lon = meters_to_lat_lon(0.2, 0.0, d0_lat, d0_lon)
+    det2 = GeoreferencedDetection(
+        label="rubbish", confidence=0.82, lat=d0_lat, lon=d0_lon, drone_lat=d2_lat, drone_lon=d2_lon,
+        altitude_agl=5.0, pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+    )
+    r2 = agg.update([det2], now=t0 + 2.0)
+    assert len(r2) == 0
+    track = list(agg.tracks.values())[0]
+    assert track.confirmed is False
+    assert track.is_vehicle_artifact is False, "Hovering drone below displacement threshold must NOT be flagged as artifact"
+
+
+def test_expected_shift_model_fallback_path():
+    """When altitude or intrinsics are unknown, the aggregator falls back to fixed tolerance."""
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_pixel_tol_px=50.0,
+    )
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+    g_lat, g_lon = meters_to_lat_lon(1.0, 0.0, d0_lat, d0_lon)
+
+    # Detection with altitude=None, img_w=None (fallback path)
+    det1 = GeoreferencedDetection(
+        label="rubbish", confidence=0.80, lat=g_lat, lon=g_lon, drone_lat=d0_lat, drone_lon=d0_lon,
+        altitude_agl=None, pixel_x=640.0, pixel_y=360.0, img_w=None, img_h=None,
+    )
+    agg.update([det1], now=t0)
+
+    # Frame 2 with small pixel shift (10px <= fallback 50px) while drone moves 2.0m -> flagged as artifact
+    d2_lat, d2_lon = meters_to_lat_lon(2.0, 0.0, d0_lat, d0_lon)
+    det2_artifact = GeoreferencedDetection(
+        label="rubbish", confidence=0.80, lat=g_lat, lon=g_lon, drone_lat=d2_lat, drone_lon=d2_lon,
+        altitude_agl=None, pixel_x=640.0, pixel_y=370.0, img_w=None, img_h=None,
+    )
+    r2 = agg.update([det2_artifact], now=t0 + 2.0)
+    assert len(r2) == 0
+    track = list(agg.tracks.values())[0]
+    assert track.is_vehicle_artifact is True, "Fallback path must flag stationary pixel shift <= fallback_pixel_tol_px"
+
+    # Frame 2 with large pixel shift (80px > fallback 50px) -> confirms
+    agg2 = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_pixel_tol_px=50.0,
+    )
+    agg2.update([det1], now=t0)
+    det2_real = GeoreferencedDetection(
+        label="rubbish", confidence=0.80, lat=g_lat, lon=g_lon, drone_lat=d2_lat, drone_lon=d2_lon,
+        altitude_agl=None, pixel_x=640.0, pixel_y=445.0, img_w=None, img_h=None,
+    )
+    r_real = agg2.update([det2_real], now=t0 + 2.0)
+    assert len(r_real) == 1, "Fallback path must confirm shift > fallback_pixel_tol_px"
+    track2 = list(agg2.tracks.values())[0]
+    assert track2.confirmed is True
+    assert track2.is_vehicle_artifact is False
+
+
+def test_shadow_hit_does_not_poison_real_target_track():
+    """An initial spurious shadow detection followed by real ground detections does NOT poison the track and confirms."""
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_shift_ratio=0.25,
+        vehicle_artifact_pixel_floor_px=8.0,
+        hfov_deg=90.0,
+    )
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+    # Ground target at (1.5m North, 0m East)
+    target_lat, target_lon = meters_to_lat_lon(1.5, 0.0, d0_lat, d0_lon)
+
+    # 1. Spurious shadow detection near target at t0 (drone at origin, shadow at nadir 640, 360, geolocated 1.0m North)
+    s_lat, s_lon = meters_to_lat_lon(1.0, 0.0, d0_lat, d0_lon)
+    det1_shadow = GeoreferencedDetection(
+        label="rubbish", confidence=0.55, lat=s_lat, lon=s_lon, drone_lat=d0_lat, drone_lon=d0_lon,
+        altitude_agl=5.0, pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+    )
+    agg.update([det1_shadow], now=t0)
+    assert len(agg.tracks) == 1
+
+    # 2. Real target detection at t0 + 1.0s (drone moved 1.0m North, target pixel at 768)
+    d1_lat, d1_lon = meters_to_lat_lon(1.0, 0.0, d0_lat, d0_lon)
+    det2_target = GeoreferencedDetection(
+        label="rubbish", confidence=0.85, lat=target_lat, lon=target_lon, drone_lat=d1_lat, drone_lon=d1_lon,
+        altitude_agl=5.0, pixel_x=704.0, pixel_y=360.0, img_w=1280, img_h=720,
+    )
+    agg.update([det2_target], now=t0 + 1.0)
+
+    # 3. Second real target detection at t0 + 2.5s (drone moved 3.0m North, target pixel at 448)
+    # Between hit 2 (drone at 1.0m) and hit 3 (drone at 3.0m), displacement is 2.0m >= 1.5m
+    # Pixel shift between hit 2 and hit 3 is |448 - 704| = 256px >= threshold (48px)
+    d2_lat, d2_lon = meters_to_lat_lon(3.0, 0.0, d0_lat, d0_lon)
+    det3_target = GeoreferencedDetection(
+        label="rubbish", confidence=0.90, lat=target_lat, lon=target_lon, drone_lat=d2_lat, drone_lon=d2_lon,
+        altitude_agl=5.0, pixel_x=448.0, pixel_y=360.0, img_w=1280, img_h=720,
+    )
+    res = agg.update([det3_target], now=t0 + 2.5)
+
+    # Real target MUST confirm! Spurious shadow at hit 1 must not poison the track!
+    assert len(res) == 1, "Track with genuine ground observations MUST confirm despite earlier shadow hit"
+    confirmed_track = list(agg.tracks.values())[0]
+    assert confirmed_track.confirmed is True
+    assert confirmed_track.is_vehicle_artifact is False
+
 
 
 

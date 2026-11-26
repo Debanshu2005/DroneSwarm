@@ -1,15 +1,10 @@
 """Comprehensive production audit regression tests for DroneSwarm perception hardening."""
 
-import asyncio
-import math
-import time
 from unittest.mock import AsyncMock, MagicMock
 import numpy as np
 import pytest
 
 from DroneOS.perception.aggregator import (
-    AggregatedTrack,
-    AggregatorItem,
     GeoreferencedDetection,
     TrackAggregator,
 )
@@ -111,7 +106,7 @@ def test_spatial_track_association_and_separation():
     t1_id = items1[0].id
 
     # Det 2 (1.0m away) merges into Track 1
-    items2 = agg.update([det2_close], now=2.0)
+    agg.update([det2_close], now=2.0)
     assert len(agg.tracks) == 1, "Nearby detection must merge into existing track"
 
     # Det 3 (10m away) creates Track 2

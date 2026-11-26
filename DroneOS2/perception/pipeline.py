@@ -52,6 +52,7 @@ class PerceptionPipeline:
         self.swarm_manager = swarm_manager
         self.peer_exclusion_radius_m = float(getattr(config, "peer_exclusion_radius_m", 4.0))
 
+        cam_hfov = getattr(getattr(config, "camera", None), "hfov_deg", 90.0)
         self.aggregator = TrackAggregator(
             drone_id=drone_id,
             merge_radius_m=getattr(config, "merge_radius_m", 2.5),
@@ -62,6 +63,9 @@ class PerceptionPipeline:
             min_drone_displacement_m=getattr(config, "min_drone_displacement_m", 1.5),
             gps_sigma_m=getattr(config, "gps_sigma_m", 0.5),
             vehicle_artifact_pixel_tol_px=getattr(config, "vehicle_artifact_pixel_tol_px", 50.0),
+            vehicle_artifact_shift_ratio=getattr(config, "vehicle_artifact_shift_ratio", 0.25),
+            vehicle_artifact_pixel_floor_px=getattr(config, "vehicle_artifact_pixel_floor_px", 8.0),
+            hfov_deg=cam_hfov,
         )
 
         self._running = False
@@ -912,8 +916,10 @@ class PerceptionPipeline:
                     "agl": agl,
                     "u": u,
                     "v": v,
-                    "w": w,
-                    "h": h,
+                    "w": box_w,
+                    "h": box_h,
+                    "img_w": w,
+                    "img_h": h,
                     "roll": roll,
                     "pitch": pitch,
                     "yaw": yaw,
@@ -938,6 +944,8 @@ class PerceptionPipeline:
                     pixel_y=v,
                     box_w=box_w,
                     box_h=box_h,
+                    img_w=w,
+                    img_h=h,
                 )
             )
 
@@ -1277,6 +1285,8 @@ class PerceptionPipeline:
                         pixel_y=item.get("v"),
                         box_w=item.get("w"),
                         box_h=item.get("h"),
+                        img_w=item.get("img_w"),
+                        img_h=item.get("img_h"),
                     )
                 )
             elif is_deadline_expired:

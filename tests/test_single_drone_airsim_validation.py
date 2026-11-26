@@ -21,8 +21,6 @@ Strictly verifies:
 
 import asyncio
 import json
-import math
-import os
 from pathlib import Path
 import subprocess
 import time
@@ -32,9 +30,7 @@ import pytest
 import websockets
 
 from DroneOS.perception.detector import GarbageDetector
-from DroneOS.perception.frame_sources import AirSimFrameSource, Frame
-from DroneOS.perception.geolocate import meters_to_lat_lon, pixel_to_lat_lon, wgs84_meters_per_degree
-from DroneOS.perception.pipeline import GeoreferencedDetection, PerceptionPipeline
+from DroneOS.perception.geolocate import meters_to_lat_lon, wgs84_meters_per_degree
 from DroneOS.shared.communication.network_node import UdpNetworkAdapter
 from DroneOS.shared.communication.serializers import JsonSerializer
 from DroneOS.shared.config.models import CameraConfig, PerceptionConfig
@@ -830,8 +826,6 @@ def test_ground_truth_association_rejects_peer_drone_false_positives():
 def test_ground_truth_association_isolates_true_target():
     """Verify that when BOTH target and peer drones are in view, the true target track is isolated."""
     from DroneOS.perception.aggregator import AggregatedTrack
-    from DroneOS.perception.types import Detection
-    from DroneOS.shared.config.models import CameraConfig
     from scripts.validate_single_drone_airsim import evaluate_ground_truth_association
 
     origin_lat = 47.641468
@@ -930,7 +924,6 @@ def test_ground_truth_association_isolates_true_target():
 def test_ground_truth_association_multiple_quadrants():
     """Verify target association across all 4 operational quadrants and varying yaw headings."""
     from DroneOS.perception.aggregator import AggregatedTrack
-    from DroneOS.shared.config.models import CameraConfig
     from scripts.validate_single_drone_airsim import evaluate_ground_truth_association
 
     origin_lat = 47.641468
