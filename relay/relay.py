@@ -640,6 +640,8 @@ if __name__ == "__main__":
     parser.add_argument("--allow-duplicate-ips", action="store_true", default=True, help="Allow multiple WebSocket connections from the same IP")
     parser.add_argument("--disallow-duplicate-ips", action="store_false", dest="allow_duplicate_ips", help="Disallow multiple WebSocket connections from the same IP")
     parser.add_argument("--ws-send-timeout", type=float, default=3.0, help="Per-client WebSocket send timeout in seconds")
+    parser.add_argument("--relay-ack-db", type=str, default="data/relay_acks.db", help="Path to relay ACK SQLite DB")
+    parser.add_argument("--gfs-db-path", type=str, default="data/gfs.db", help="Path to GFS SQLite DB")
     args = parser.parse_args()
 
     relay = UdpWebsocketRelay(
@@ -652,7 +654,9 @@ if __name__ == "__main__":
         gs_heartbeat_interval=args.gs_heartbeat_interval,
         udp_target_endpoints=dict(args.udp_target),
         allow_duplicate_ips=args.allow_duplicate_ips,
-        ws_send_timeout=args.ws_send_timeout
+        ws_send_timeout=args.ws_send_timeout,
+        relay_ack_db=args.relay_ack_db,
+        gfs_db_path=args.gfs_db_path,
     )
     try:
         asyncio.run(relay.start())

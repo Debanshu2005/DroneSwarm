@@ -1,6 +1,5 @@
 import asyncio
 import glob
-import re
 import socket
 import subprocess
 import sys
@@ -26,7 +25,6 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
     usb_paths = sorted(glob.glob("/dev/ttyUSB*"))
     ama_paths = sorted(glob.glob("/dev/ttyAMA*"))
 
-    match = re.search(r'\d+', vehicle_name)
     idx = 0  # Changed: Each Pi only has 1 device connected, so always use the first one
 
     if by_id_paths and len(by_id_paths) > idx:
@@ -46,7 +44,7 @@ def resolve_serial(vehicle_name: str, conn_str: str) -> str:
 
 
 
-def wait_for_relay_ready(relay_proc, host: str, port: int, timeout: float = 5.0) -> None:
+def wait_for_relay_ready(relay_proc, host: str, port: int, timeout: float = 45.0) -> None:
     """Fail fast if a stale relay owns this drone's WebSocket endpoint."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -66,6 +64,11 @@ def wait_for_relay_ready(relay_proc, host: str, port: int, timeout: float = 5.0)
 
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True, write_through=True)
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(line_buffering=True, write_through=True)
+
     if "--perception" in sys.argv:
         os.environ["DRONEOS_PERCEPTION"] = "1"
         sys.argv.remove("--perception")
@@ -81,11 +84,8 @@ def main():
     drone_cfg = load_yaml_config(config_dir / "drone.yaml", DroneConfig)
     from DroneOS3.shared.config.profile import resolve_flight_config
     flight_cfg = resolve_flight_config(config_dir, FlightConfig)
-
-    if os.environ.get("DRONEOS_PROFILE") in ("sim", "test"):
-        resolved_conn = "sim"
-    else:
-        resolved_conn = resolve_serial(drone_cfg.vehicle_name, flight_cfg.px4_connection_string)
+    if os.environ.get("DRONEOS_PROFILE") not in ("sim", "test"):
+        resolve_serial(drone_cfg.vehicle_name, flight_cfg.px4_connection_string)
 
     print(f"[{drone_cfg.drone_id}] Starting DroneOS Lifecycle Manager...")
 
@@ -95,35 +95,35 @@ def main():
     server_port = 50051
     sim_ws_port = "8084"  # Drone 4 relay WS port
     drone_udp_port = 14553  # Drone 4 DroneOS UDP listen port
+    relay_udp_port = 14653  # Drone 4 Relay UDP bind port
+    target_ports = {drone_udp_port, int(sim_ws_port), relay_udp_port}
 
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-        try:
-            cmdline = proc.info.get('cmdline') or []
-            cmdline_str = ' '.join(cmdline)
-            if not is_sim and proc.info['name'] and 'mavsdk_server' in proc.info['name']:
-                if cmdline and any(str(server_port) in arg for arg in cmdline):
-                    print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
+    if not is_sim:
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                cmdline = proc.info.get('cmdline') or []
+                cmdline_str = ' '.join(cmdline)
+                if proc.info['name'] and 'mavsdk_server' in proc.info['name']:
+                    if cmdline and any(str(server_port) in arg for arg in cmdline):
+                        print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned mavsdk_server (PID {proc.info['pid']})")
+                        proc.kill()
+                elif cmdline and 'relay.py' in cmdline_str:
+                    print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
                     proc.kill()
-            elif cmdline and 'relay.py' in cmdline_str:
-                if is_sim and sim_ws_port not in cmdline_str:
-                    continue  # Not our relay, skip
-                print(f"[{drone_cfg.drone_id}] Cleaning up old orphaned relay (PID {proc.info['pid']})")
-                proc.kill()
-        except Exception:
-            pass
+            except Exception:
+                pass
 
-    # Kill any process still holding our DroneOS UDP port (zombie guard).
-    for proc in psutil.process_iter(['pid']):
-        try:
-            for conn in proc.net_connections(kind='udp'):
-                if conn.laddr.port == drone_udp_port:
-                    print(f"[{drone_cfg.drone_id}] Releasing UDP port {drone_udp_port} held by zombie PID {proc.pid}")
-                    proc.kill()
-                    break
-        except Exception:
-            pass
-
-    time.sleep(1.0)
+        # Kill any process still holding our ports (zombie guard on hardware).
+        for proc in psutil.process_iter(['pid']):
+            try:
+                for conn in proc.net_connections(kind='inet'):
+                    if conn.laddr and conn.laddr.port in target_ports:
+                        print(f"[{drone_cfg.drone_id}] Releasing port {conn.laddr.port} held by zombie PID {proc.pid}")
+                        proc.kill()
+                        break
+            except Exception:
+                pass
+        time.sleep(1.0)
 
     # 3. Spawn Relay on default ports (WS 8080, UDP 14550/14551)
     relay_script = Path(__file__).resolve().parent / "relay" / "relay.py"
@@ -136,11 +136,13 @@ def main():
                       "--udp-target", "drone2=127.0.0.1:14551",
                       "--udp-target", "drone3=127.0.0.1:14552",
                       "--udp-target", "drone4=127.0.0.1:14553",
+                      "--relay-ack-db", "data/relay_acks_drone4.db",
+                      "--gfs-db-path", "data/gfs_drone4.db",
                       "--allow-duplicate-ips"]
     relay_proc = subprocess.Popen(
-        [sys.executable, str(relay_script)] + relay_args,
-        stdout=None if os.environ.get("DRONEOS_DIAGNOSTIC_TRACE") else subprocess.DEVNULL,
-        stderr=None if os.environ.get("DRONEOS_DIAGNOSTIC_TRACE") else subprocess.DEVNULL
+        [sys.executable, "-u", str(relay_script)] + relay_args,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
     )
     if is_sim:
         wait_for_relay_ready(relay_proc, "127.0.0.1", int(sim_ws_port))
