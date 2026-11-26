@@ -182,10 +182,11 @@ async def test_pipeline_does_not_broadcast_unconfirmed_tracks():
     mock_detector = MagicMock()
     mock_detector.ensure_loaded = AsyncMock(return_value=True)
     mock_detector.close = MagicMock()
-    # Return 1 detection in center
-    mock_detector.detect = AsyncMock(return_value=[
-        Detection(bbox_xyxy=(600, 340, 680, 380), confidence=0.85, label="rubbish")
-    ])
+    # Return 1 detection in center for steps 1 and 2
+    det1 = Detection(bbox_xyxy=(600, 340, 680, 380), confidence=0.85, label="rubbish")
+    # On step 3, drone moves North by 2.2m at 10m alt -> ground object in nadir camera shifts by fx*(disp/alt) = 640*(2.2/10) = 140.8px
+    det3 = Detection(bbox_xyxy=(600, 340 + 140.8, 680, 380 + 140.8), confidence=0.85, label="rubbish")
+    mock_detector.detect = AsyncMock(side_effect=[[det1], [det1], [det3]])
 
     mock_telem = MagicMock()
     mock_telem.armed_state = "ARMED"

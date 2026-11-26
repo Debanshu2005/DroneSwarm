@@ -1,7 +1,7 @@
 """Parity tests for perception module across DroneOS, DroneOS1, DroneOS2, DroneOS3."""
 
 import pytest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 import numpy as np
 
 packages = ["DroneOS", "DroneOS1", "DroneOS2", "DroneOS3"]
@@ -87,6 +87,8 @@ async def test_perception_pipeline_parity(pkg_name):
     frame_src.is_synthetic = False
 
     detector = AsyncMock()
+    detector.get_status = MagicMock(return_value=("OK", ""))
+    detector.ensure_loaded = AsyncMock(return_value=True)
     detector.detect.return_value = [
         types_mod.Detection(bbox_xyxy=(640, 360, 660, 380), confidence=0.9, label="rubbish")
     ]

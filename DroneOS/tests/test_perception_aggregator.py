@@ -171,21 +171,207 @@ def test_stationary_drone_cannot_self_confirm_in_consecutive_frames():
     assert track.confirmed is True
 
 
-def test_moving_drone_confirms_via_spatial_displacement():
-    """A moving drone (>= min_drone_displacement_m) can confirm without waiting for temporal separation."""
-    agg = TrackAggregator(drone_id="drone1", min_hits=2, min_temporal_separation_s=2.0, min_drone_displacement_m=1.5)
+def test_stationary_pixel_track_while_drone_moves_is_rejected_as_vehicle_artifact():
+    """A track whose pixel-space centroid stays nearly fixed while the drone moves is a vehicle artifact and must not confirm."""
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_pixel_tol_px=35.0,
+    )
     t0 = 100.0
-    # Drone at origin
-    det1 = GeoreferencedDetection(label="rubbish", confidence=0.8, lat=22.314000, lon=87.310000, drone_lat=22.314000, drone_lon=87.310000)
-    agg.update([det1], now=t0)
-
-    # Frame 2 only 0.5s later (dt=0.5 < 2.0), but drone has moved ~3 meters north (~0.000027 deg lat)
-    det2 = GeoreferencedDetection(label="rubbish", confidence=0.85, lat=22.314001, lon=87.310000, drone_lat=22.314027, drone_lon=87.310000)
-    res2 = agg.update([det2], now=t0 + 0.5)
-    assert len(res2) == 1, "Moving drone with >= 1.5m displacement must confirm on second hit"
+    # First hit: drone at origin (22.314000, 87.310000), shadow at ground pos 2.0m North, image pixel (679.0, 77.0)
+    d0_lat, d0_lon = 22.314000, 87.310000
+    s1_lat, s1_lon = meters_to_lat_lon(2.0, 0.0, d0_lat, d0_lon)
+    det1 = GeoreferencedDetection(
+        label="rubbish",
+        confidence=0.60,
+        lat=s1_lat,
+        lon=s1_lon,
+        drone_lat=d0_lat,
+        drone_lon=d0_lon,
+        pixel_x=679.0,
+        pixel_y=77.0,
+    )
+    res1 = agg.update([det1], now=t0)
+    assert len(res1) == 0
+    assert len(agg.tracks) == 1
     track = list(agg.tracks.values())[0]
-    assert track.hits == 2
+    assert not track.confirmed
+    assert not track.is_vehicle_artifact
+
+    # Second hit: drone moves 1.6m North (speed ~0.8 m/s * 2s, >= min_drone_displacement_m 1.5m and < merge_radius_m 2.5m)
+    # The shadow follows the drone and also moves 1.6m North on the ground (1.6m < 2.5m merge_radius -> merges into same track!)
+    d2_lat, d2_lon = meters_to_lat_lon(1.6, 0.0, d0_lat, d0_lon)
+    s2_lat, s2_lon = meters_to_lat_lon(1.6, 0.0, s1_lat, s1_lon)
+    det2 = GeoreferencedDetection(
+        label="rubbish",
+        confidence=0.62,
+        lat=s2_lat,
+        lon=s2_lon,
+        drone_lat=d2_lat,
+        drone_lon=d2_lon,
+        pixel_x=679.5,
+        pixel_y=77.5,
+    )
+    res2 = agg.update([det2], now=t0 + 2.0)
+    assert len(agg.tracks) == 1, "Second detection must land on the SAME track within merge_radius_m"
+    assert len(res2) == 0, "Vehicle artifact with stationary pixel centroid must NOT confirm"
+    assert track.confirmed is False
+    assert track.is_vehicle_artifact is True
+    assert track.distinct_hits == 1, "distinct_hits must not increment for vehicle artifact"
+
+    # Non-artifact check: a nearby genuine ground object seen while the drone moves confirms
+    agg_real = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_pixel_tol_px=35.0,
+    )
+    g_lat, g_lon = meters_to_lat_lon(1.0, 0.0, d0_lat, d0_lon)
+    r1 = agg_real.update([
+        GeoreferencedDetection(label="rubbish", confidence=0.80, lat=g_lat, lon=g_lon, drone_lat=d0_lat, drone_lon=d0_lon, pixel_x=640.0, pixel_y=360.0)
+    ], now=t0)
+    assert len(r1) == 0
+    # On 2nd hit, ground object is still at g_lat, g_lon, but camera pixel shifted by 150px (> 35px)
+    r2 = agg_real.update([
+        GeoreferencedDetection(label="rubbish", confidence=0.82, lat=g_lat, lon=g_lon, drone_lat=d2_lat, drone_lon=d2_lon, pixel_x=640.0, pixel_y=510.0)
+    ], now=t0 + 2.0)
+    assert len(r2) == 1, "Real ground target with moving pixel centroid must confirm on same track"
+    real_track = list(agg_real.tracks.values())[0]
+    assert real_track.confirmed is True
+    assert real_track.is_vehicle_artifact is False
+
+
+def test_hovering_drone_below_displacement_threshold_does_not_reject_as_artifact():
+    """A hovering drone with displacement below threshold must NOT be flagged as an artifact."""
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_pixel_tol_px=35.0,
+    )
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+    det1 = GeoreferencedDetection(
+        label="rubbish",
+        confidence=0.75,
+        lat=22.314010,
+        lon=87.310000,
+        drone_lat=d0_lat,
+        drone_lon=d0_lon,
+        pixel_x=640.0,
+        pixel_y=360.0,
+    )
+    agg.update([det1], now=t0)
+    track = list(agg.tracks.values())[0]
+
+    # Drone drifts by only 0.4m (< 1.5m min displacement)
+    d_drift_lat, d_drift_lon = meters_to_lat_lon(0.4, 0.0, d0_lat, d0_lon)
+    det2 = GeoreferencedDetection(
+        label="rubbish",
+        confidence=0.75,
+        lat=22.314010,
+        lon=87.310000,
+        drone_lat=d_drift_lat,
+        drone_lon=d_drift_lon,
+        pixel_x=640.5,
+        pixel_y=360.5,
+    )
+    res2 = agg.update([det2], now=t0 + 2.0)
+    assert len(res2) == 0, "Hovering drone without required displacement does not confirm"
+    assert track.is_vehicle_artifact is False, "Must NOT reject as artifact when drone displacement is below threshold"
+    assert track.confirmed is False
+
+
+def test_moving_pixel_ground_target_confirms_when_drone_moves():
+    """A real ground target whose pixel position shifts as the drone moves confirms normally."""
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_pixel_tol_px=35.0,
+    )
+    t0 = 100.0
+    # First hit: drone at origin, target at image center (640.0, 360.0)
+    det1 = GeoreferencedDetection(
+        label="rubbish",
+        confidence=0.80,
+        lat=22.314000,
+        lon=87.310000,
+        drone_lat=22.314000,
+        drone_lon=87.310000,
+        pixel_x=640.0,
+        pixel_y=360.0,
+    )
+    agg.update([det1], now=t0)
+    track = list(agg.tracks.values())[0]
+
+    # Second hit: drone moves 3 meters north, target pixel shifts by 192 px (>> 35.0 px tolerance)
+    d2_lat, d2_lon = meters_to_lat_lon(3.0, 0.0, 22.314000, 87.310000)
+    det2 = GeoreferencedDetection(
+        label="rubbish",
+        confidence=0.85,
+        lat=22.314001,
+        lon=87.310000,
+        drone_lat=d2_lat,
+        drone_lon=d2_lon,
+        pixel_x=832.0,
+        pixel_y=360.0,
+    )
+    res2 = agg.update([det2], now=t0 + 0.5)
+    assert len(res2) == 1, "Real ground target with moving pixel centroid must confirm"
     assert track.confirmed is True
+    assert track.is_vehicle_artifact is False
+    assert track.hits == 2
+    assert track.distinct_hits == 2
+
+
+def test_perception_config_defaults_include_artifact_rejection_and_masks():
+    """Verify PerceptionConfig and CameraConfig load default values for artifact rejection and mask regions."""
+    from DroneOS.shared.config.models import PerceptionConfig
+    from DroneOS.shared.config.loader import load_yaml_config
+    from pathlib import Path
+
+    cfg_path = Path(__file__).resolve().parent.parent / "configs" / "perception.yaml"
+    cfg = load_yaml_config(cfg_path, PerceptionConfig)
+    assert cfg.vehicle_artifact_pixel_tol_px == 35.0
+    assert cfg.camera.mask_regions == []
+
+
+def test_camera_mask_regions_filtering():
+    """Verify camera mask regions logic filters detections inside normalized or pixel masks."""
+    w, h = 1280, 720
+    # Mask top center 20% of image [0.4, 0.0, 0.6, 0.2]
+    mask_regions = [[0.4, 0.0, 0.6, 0.2]]
+
+    def is_in_mask(u, v):
+        for mr in mask_regions:
+            mx1, my1, mx2, my2 = mr
+            if max(mx1, my1, mx2, my2) <= 1.0:
+                mx1 *= w
+                mx2 *= w
+                my1 *= h
+                my2 *= h
+            if min(mx1, mx2) <= u <= max(mx1, mx2) and min(my1, my2) <= v <= max(my1, my2):
+                return True
+        return False
+
+    # Detection in top center (e.g. shadow or landing gear at 640, 70) -> masked
+    assert is_in_mask(640.0, 70.0) is True
+    # Detection in center ground (640, 360) -> not masked
+    assert is_in_mask(640.0, 360.0) is False
+    # Detection in bottom right (1000, 600) -> not masked
+    assert is_in_mask(1000.0, 600.0) is False
+
+
+
 
 
 

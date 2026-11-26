@@ -617,27 +617,37 @@ async def test_pipeline_safety_gates_rejection_diagnostics():
     fc_advancing = MagicMock()
     fc_advancing.get_telemetry = AsyncMock(side_effect=lambda: make_telem(timestamp=cur_time[0], latitude=cur_lat[0]))
 
-    pipe = PerceptionPipeline(drone_id="drone1", frame_source=fs_advancing, detector=detector, flight_controller=fc_advancing, network_adapter=net_mock, config=config)
-    await pipe._step()
-    assert pipe.last_rejection_reason == "AGGREGATION_NO_EMISSION"
-    assert pipe.last_step_stats["reached_inference"] is True
-    assert pipe.last_step_stats["raw_detections"] == 1
-    assert pipe.last_step_stats["geo_detections"] == 1
-    assert pipe.last_step_stats["emitted_items"] == 0
-    # Unconfirmed candidate track exists
-    assert len(pipe.aggregator.tracks) == 1
-    track = list(pipe.aggregator.tracks.values())[0]
-    assert track.confirmed is False
-    assert track.hits == 1
+    # Shifting detection: ground object shifts in camera pixel coordinates as drone advances North by 2.2m
+    det_g9_1 = Detection(label="rubbish", confidence=0.9, bbox_xyxy=(100.0, 100.0, 200.0, 200.0))
+    # At 10m alt with 90 deg HFOV (fx=640), 2.2m displacement shifts image by 640*(2.2/10) = 140.8px
+    det_g9_2 = Detection(label="rubbish", confidence=0.9, bbox_xyxy=(100.0, 240.8, 200.0, 340.8))
+    det_advancing = MagicMock()
+    det_advancing.ensure_loaded = AsyncMock(return_value=True)
+    det_advancing.detect = AsyncMock(side_effect=[[det_g9_1], [det_g9_2]])
 
-    # Step 2: 2nd hit with advancing time and displaced position confirms track and emits!
-    cur_time[0] = now + 2.5
-    cur_lat[0] = 47.641468 + (2.2 / 111139.0)
-    await pipe._step()
-    assert pipe.last_rejection_reason is None
-    assert pipe.last_step_stats["emitted_items"] == 1
-    assert track.confirmed is True
-    assert track.hits == 2
+    pipe = PerceptionPipeline(drone_id="drone1", frame_source=fs_advancing, detector=det_advancing, flight_controller=fc_advancing, network_adapter=net_mock, config=config)
+    from unittest.mock import patch
+    with patch("time.time", side_effect=lambda: cur_time[0]):
+        await pipe._step()
+        assert pipe.last_rejection_reason == "AGGREGATION_NO_EMISSION"
+        assert pipe.last_step_stats["reached_inference"] is True
+        assert pipe.last_step_stats["raw_detections"] == 1
+        assert pipe.last_step_stats["geo_detections"] == 1
+        assert pipe.last_step_stats["emitted_items"] == 0
+        # Unconfirmed candidate track exists
+        assert len(pipe.aggregator.tracks) == 1
+        track = list(pipe.aggregator.tracks.values())[0]
+        assert track.confirmed is False
+        assert track.hits == 1
+
+        # Step 2: 2nd hit with advancing time and displaced position confirms track and emits!
+        cur_time[0] = now + 2.5
+        cur_lat[0] = 47.641468 + (2.2 / 111139.0)
+        await pipe._step()
+        assert pipe.last_rejection_reason is None
+        assert pipe.last_step_stats["emitted_items"] == 1
+        assert track.confirmed is True
+        assert track.hits == 2
 
 
 # =============================================================================
