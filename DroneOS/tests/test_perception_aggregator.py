@@ -671,6 +671,321 @@ def test_shadow_hit_does_not_poison_real_target_track():
     assert confirmed_track.is_vehicle_artifact is False
 
 
+def test_mixed_track_shadow_hits_plus_one_real_detection_does_not_confirm():
+    """A track with shadow-like hits plus only ONE real off-nadir detection within merge_radius_m
+    must NOT confirm; a second real hit must still allow confirmation."""
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_shift_ratio=0.25,
+        vehicle_artifact_pixel_floor_px=8.0,
+        hfov_deg=90.0,
+    )
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+    g_lat, g_lon = meters_to_lat_lon(2.0, 0.0, d0_lat, d0_lon)
+
+    # 1. Shadow hit 1 at t0 (drone at 0m, nadir pixel 640,360)
+    s1_lat, s1_lon = meters_to_lat_lon(0.5, 0.0, d0_lat, d0_lon)
+    r1 = agg.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.60, lat=s1_lat, lon=s1_lon,
+            drone_lat=d0_lat, drone_lon=d0_lon, altitude_agl=5.0,
+            pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+        )
+    ], now=t0)
+    assert len(r1) == 0
+
+    # 2. ONE real detection elsewhere in the image within merge_radius_m at t0 + 1.0s (drone at 0.4m North)
+    d1_lat, d1_lon = meters_to_lat_lon(0.4, 0.0, d0_lat, d0_lon)
+    r2 = agg.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.85, lat=g_lat, lon=g_lon,
+            drone_lat=d1_lat, drone_lon=d1_lon, altitude_agl=5.0,
+            pixel_x=400.0, pixel_y=360.0, img_w=1280, img_h=720,
+        )
+    ], now=t0 + 1.0)
+    assert len(r2) == 0
+    assert len(agg.tracks) == 1
+
+    # 3. Shadow hit 2 at t0 + 2.0s (drone at 2.0m North, fixed nadir pixel 640,360)
+    # Shadow hit 1 & 2 form a stationary displaced pair -> both are vehicle-attached and excluded!
+    # Only ONE real hit (from t0+1.0s) remains -> MUST NOT confirm!
+    d2_lat, d2_lon = meters_to_lat_lon(2.0, 0.0, d0_lat, d0_lon)
+    s2_lat, s2_lon = meters_to_lat_lon(2.0, 0.0, s1_lat, s1_lon)
+    r3 = agg.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.62, lat=s2_lat, lon=s2_lon,
+            drone_lat=d2_lat, drone_lon=d2_lon, altitude_agl=5.0,
+            pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+        )
+    ], now=t0 + 2.0)
+    assert len(r3) == 0, "Mixed track with shadow hits + only ONE real hit must NOT confirm"
+    track = list(agg.tracks.values())[0]
+    assert track.confirmed is False
+    assert track.distinct_hits == 1
+
+    # 4. Second real hit arrives at t0 + 3.5s (drone at 3.5m North, pixel shifted by 320px: 400 -> 80)
+    d3_lat, d3_lon = meters_to_lat_lon(3.5, 0.0, d0_lat, d0_lon)
+    r4 = agg.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.88, lat=g_lat, lon=g_lon,
+            drone_lat=d3_lat, drone_lon=d3_lon, altitude_agl=5.0,
+            pixel_x=80.0, pixel_y=360.0, img_w=1280, img_h=720,
+        )
+    ], now=t0 + 3.5)
+    assert len(r4) == 1, "Second real hit must allow confirmation"
+    assert track.confirmed is True
+    assert track.distinct_hits == 2
+
+
+def test_single_off_nadir_fp_near_drone_while_shadow_hits_exist_does_not_confirm():
+    """A single off-nadir false positive near the drone's ground position while shadow hits exist
+    must NOT confirm."""
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_shift_ratio=0.25,
+        vehicle_artifact_pixel_floor_px=8.0,
+        hfov_deg=90.0,
+    )
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+
+    # Shadow hits exist at t0 (0m) and t0+2.0s (2.0m North)
+    s1_lat, s1_lon = meters_to_lat_lon(0.5, 0.0, d0_lat, d0_lon)
+    agg.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.58, lat=s1_lat, lon=s1_lon,
+            drone_lat=d0_lat, drone_lon=d0_lon, altitude_agl=5.0,
+            pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+        )
+    ], now=t0)
+
+    d2_lat, d2_lon = meters_to_lat_lon(2.0, 0.0, d0_lat, d0_lon)
+    s2_lat, s2_lon = meters_to_lat_lon(2.0, 0.0, s1_lat, s1_lon)
+    agg.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.59, lat=s2_lat, lon=s2_lon,
+            drone_lat=d2_lat, drone_lon=d2_lon, altitude_agl=5.0,
+            pixel_x=640.5, pixel_y=360.5, img_w=1280, img_h=720,
+        )
+    ], now=t0 + 2.0)
+
+    # Single off-nadir FP near the drone's ground position at t0+3.0s
+    d3_lat, d3_lon = meters_to_lat_lon(3.0, 0.0, d0_lat, d0_lon)
+    fp_lat, fp_lon = meters_to_lat_lon(2.2, 0.5, d0_lat, d0_lon)
+    r3 = agg.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.60, lat=fp_lat, lon=fp_lon,
+            drone_lat=d3_lat, drone_lon=d3_lon, altitude_agl=5.0,
+            pixel_x=450.0, pixel_y=310.0, img_w=1280, img_h=720,
+        )
+    ], now=t0 + 3.0)
+    assert len(r3) == 0, "Single off-nadir FP while shadow hits exist must NOT confirm"
+    assert all(not trk.confirmed for trk in agg.tracks.values())
+
+
+def test_camera_geometry_guard_nadir_uses_expected_shift():
+    """Within 10 deg of nadir, auto mode uses expected_shift_px (confirming small valid shifts at high alt)."""
+    # At 40m altitude, 1280px, hfov=90 -> focal_px=640.
+    # For 2.0m displacement, expected_shift = 640 * 2 / 40 = 32px.
+    # Threshold = max(8, 0.25 * 32) = 8px (vs fixed fallback 50px!).
+    agg = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_pixel_tol_px=50.0,
+        vehicle_artifact_shift_ratio=0.25,
+        vehicle_artifact_pixel_floor_px=8.0,
+        hfov_deg=90.0,
+        mount_pitch_deg=85.0,  # 5 deg from nadir (within 10 deg guard)
+        vehicle_artifact_mode="auto",
+    )
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+    g_lat, g_lon = meters_to_lat_lon(1.0, 0.0, d0_lat, d0_lon)
+    agg.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.80, lat=g_lat, lon=g_lon,
+            drone_lat=d0_lat, drone_lon=d0_lon, altitude_agl=40.0,
+            pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+            roll_deg=0.0, pitch_deg=0.0,
+        )
+    ], now=t0)
+
+    d2_lat, d2_lon = meters_to_lat_lon(2.0, 0.0, d0_lat, d0_lon)
+    # 30px shift (< 50px fixed fallback, but >= 8px nadir threshold)
+    res = agg.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.85, lat=g_lat, lon=g_lon,
+            drone_lat=d2_lat, drone_lon=d2_lon, altitude_agl=40.0,
+            pixel_x=640.0, pixel_y=390.0, img_w=1280, img_h=720,
+            roll_deg=0.0, pitch_deg=0.0,
+        )
+    ], now=t0 + 2.0)
+    assert len(res) == 1, "Nadir camera (within 10 deg) must use expected-shift threshold and confirm 30px shift at 40m"
+
+
+def test_camera_geometry_guard_oblique_mount_and_tilt_use_fixed_fallback():
+    """When camera mount or drone tilt exceeds 10 deg from nadir, auto mode must NOT use the nadir formula
+    and instead uses the fixed-pixel fallback."""
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+    g_lat, g_lon = meters_to_lat_lon(1.0, 0.0, d0_lat, d0_lon)
+    d2_lat, d2_lon = meters_to_lat_lon(2.0, 0.0, d0_lat, d0_lon)
+
+    # 1. Oblique mount (mount_pitch_deg=45.0 -> 45 deg from nadir)
+    agg_oblique = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_pixel_tol_px=50.0,
+        vehicle_artifact_shift_ratio=0.25,
+        vehicle_artifact_pixel_floor_px=8.0,
+        hfov_deg=90.0,
+        mount_pitch_deg=45.0,
+        vehicle_artifact_mode="auto",
+    )
+    agg_oblique.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.80, lat=g_lat, lon=g_lon,
+            drone_lat=d0_lat, drone_lon=d0_lon, altitude_agl=40.0,
+            pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+            roll_deg=0.0, pitch_deg=0.0,
+        )
+    ], now=t0)
+    # 30px shift: under nadir formula at 40m it would pass (>= 8px), but oblique mount must use fixed 50px fallback!
+    res_oblique = agg_oblique.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.85, lat=g_lat, lon=g_lon,
+            drone_lat=d2_lat, drone_lon=d2_lon, altitude_agl=40.0,
+            pixel_x=640.0, pixel_y=390.0, img_w=1280, img_h=720,
+            roll_deg=0.0, pitch_deg=0.0,
+        )
+    ], now=t0 + 2.0)
+    assert len(res_oblique) == 0
+    assert list(agg_oblique.tracks.values())[0].is_vehicle_artifact is True
+
+    # 2. Nadir mount (90 deg) but drone rolled 15 deg (> 10 deg from nadir) -> fixed fallback
+    agg_tilted = TrackAggregator(
+        drone_id="drone1",
+        min_hits=2,
+        merge_radius_m=2.5,
+        min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5,
+        vehicle_artifact_pixel_tol_px=50.0,
+        mount_pitch_deg=90.0,
+        vehicle_artifact_mode="auto",
+    )
+    agg_tilted.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.80, lat=g_lat, lon=g_lon,
+            drone_lat=d0_lat, drone_lon=d0_lon, altitude_agl=40.0,
+            pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+            roll_deg=15.0, pitch_deg=0.0,
+        )
+    ], now=t0)
+    res_tilted = agg_tilted.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.85, lat=g_lat, lon=g_lon,
+            drone_lat=d2_lat, drone_lon=d2_lon, altitude_agl=40.0,
+            pixel_x=640.0, pixel_y=390.0, img_w=1280, img_h=720,
+            roll_deg=15.0, pitch_deg=0.0,
+        )
+    ], now=t0 + 2.0)
+    assert len(res_tilted) == 0
+    assert list(agg_tilted.tracks.values())[0].is_vehicle_artifact is True
+
+
+def test_vehicle_artifact_mode_off_and_fixed_and_startup_log(caplog):
+    """Verify 'off' disables the rule, 'fixed' uses fixed tol even at nadir, and PerceptionPipeline logs active mode once."""
+    import logging
+    from unittest.mock import MagicMock
+    from DroneOS.perception.pipeline import PerceptionPipeline
+    from DroneOS.shared.config.models import CameraConfig, PerceptionConfig
+
+    t0 = 100.0
+    d0_lat, d0_lon = 22.314000, 87.310000
+    d2_lat, d2_lon = meters_to_lat_lon(2.0, 0.0, d0_lat, d0_lon)
+    g_lat, g_lon = meters_to_lat_lon(1.0, 0.0, d0_lat, d0_lon)
+
+    # 1. mode="off" disables artifact rejection even for 0px shift
+    agg_off = TrackAggregator(
+        drone_id="drone1", min_hits=2, min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5, vehicle_artifact_mode="off",
+    )
+    agg_off.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.80, lat=g_lat, lon=g_lon,
+            drone_lat=d0_lat, drone_lon=d0_lon, altitude_agl=5.0,
+            pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+        )
+    ], now=t0)
+    r_off = agg_off.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.85, lat=g_lat, lon=g_lon,
+            drone_lat=d2_lat, drone_lon=d2_lon, altitude_agl=5.0,
+            pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+        )
+    ], now=t0 + 2.0)
+    assert len(r_off) == 1
+    assert list(agg_off.tracks.values())[0].is_vehicle_artifact is False
+
+    # 2. mode="fixed" uses fixed tol (50px) even at nadir 40m altitude
+    agg_fixed = TrackAggregator(
+        drone_id="drone1", min_hits=2, min_temporal_separation_s=2.0,
+        min_drone_displacement_m=1.5, vehicle_artifact_pixel_tol_px=50.0,
+        mount_pitch_deg=90.0, vehicle_artifact_mode="fixed",
+    )
+    agg_fixed.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.80, lat=g_lat, lon=g_lon,
+            drone_lat=d0_lat, drone_lon=d0_lon, altitude_agl=40.0,
+            pixel_x=640.0, pixel_y=360.0, img_w=1280, img_h=720,
+        )
+    ], now=t0)
+    r_fixed = agg_fixed.update([
+        GeoreferencedDetection(
+            label="rubbish", confidence=0.85, lat=g_lat, lon=g_lon,
+            drone_lat=d2_lat, drone_lon=d2_lon, altitude_agl=40.0,
+            pixel_x=640.0, pixel_y=390.0, img_w=1280, img_h=720,
+        )
+    ], now=t0 + 2.0)
+    assert len(r_fixed) == 0
+    assert list(agg_fixed.tracks.values())[0].is_vehicle_artifact is True
+
+    # 3. Startup log check for auto (nadir), auto (oblique), fixed, off
+    for mode, mp, expected_substr in [
+        ("auto", 90.0, "mode=auto (nadir expected-shift"),
+        ("auto", 45.0, "mode=auto (oblique mount_pitch=45.0deg"),
+        ("fixed", 90.0, "mode=fixed"),
+        ("off", 90.0, "mode=off"),
+    ]:
+        caplog.clear()
+        with caplog.at_level(logging.INFO):
+            cfg = PerceptionConfig(
+                enabled=True,
+                vehicle_artifact_mode=mode,
+                camera=CameraConfig(mount_pitch_deg=mp),
+            )
+            PerceptionPipeline("drone1", MagicMock(), MagicMock(), MagicMock(), MagicMock(), cfg)
+        matches = [rec.message for rec in caplog.records if "Vehicle-artifact rejection active" in rec.message]
+        assert len(matches) == 1, f"Expected exactly 1 startup log for mode={mode}, got {matches}"
+        assert expected_substr in matches[0]
+
+
+
 
 
 
