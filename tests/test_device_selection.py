@@ -1,8 +1,21 @@
 """Tests for device and execution provider selection (auto/cpu/cuda)."""
 
+import importlib
 from unittest.mock import MagicMock, patch
+import pytest
 
 from DroneOS.perception.detector import GarbageDetector, resolve_device_and_provider
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_torch_loaded_before_sys_modules_patch():
+    """Pre-import torch if installed so patch.dict('sys.modules', {'torch': ...})
+    restores the original module instead of deleting 'torch' and triggering a
+    re-import RuntimeError ('_has_torch_function already has a docstring')."""
+    try:
+        importlib.import_module("torch")
+    except ImportError:
+        pass
 
 
 def test_resolve_device_auto_cuda_available(monkeypatch):
