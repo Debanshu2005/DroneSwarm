@@ -22,6 +22,7 @@ peer_exclusion_radius_m: 4.0
 peer_position_max_age_s: 5.0
 deferred_buffer_window_s: 3.0
 unknown_peer_deferral_max_s: 3.0
+vehicle_artifact_mode: "auto"
 vehicle_artifact_pixel_tol_px: 50.0
 vehicle_artifact_shift_ratio: 0.25
 vehicle_artifact_pixel_floor_px: 8.0

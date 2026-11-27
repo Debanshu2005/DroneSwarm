@@ -52,7 +52,19 @@ class PerceptionPipeline:
         self.swarm_manager = swarm_manager
         self.peer_exclusion_radius_m = float(getattr(config, "peer_exclusion_radius_m", 4.0))
 
-        cam_hfov = getattr(getattr(config, "camera", None), "hfov_deg", 90.0)
+        cam_cfg_init = getattr(config, "camera", None)
+        raw_hfov = getattr(cam_cfg_init, "hfov_deg", 90.0)
+        cam_hfov = float(raw_hfov) if isinstance(raw_hfov, (int, float)) else 90.0
+        raw_mp = getattr(cam_cfg_init, "mount_pitch_deg", 90.0)
+        cam_mount_pitch = float(raw_mp) if isinstance(raw_mp, (int, float)) else 90.0
+        raw_mode = getattr(config, "vehicle_artifact_mode", "auto")
+        artifact_mode = raw_mode.strip().lower() if isinstance(raw_mode, str) else "auto"
+        raw_tol = getattr(config, "vehicle_artifact_pixel_tol_px", 50.0)
+        artifact_tol_px = float(raw_tol) if isinstance(raw_tol, (int, float)) else 50.0
+        raw_ratio = getattr(config, "vehicle_artifact_shift_ratio", 0.25)
+        artifact_shift_ratio = float(raw_ratio) if isinstance(raw_ratio, (int, float)) else 0.25
+        raw_floor = getattr(config, "vehicle_artifact_pixel_floor_px", 8.0)
+        artifact_floor_px = float(raw_floor) if isinstance(raw_floor, (int, float)) else 8.0
         self.aggregator = TrackAggregator(
             drone_id=drone_id,
             merge_radius_m=getattr(config, "merge_radius_m", 2.5),
@@ -62,11 +74,40 @@ class PerceptionPipeline:
             min_temporal_separation_s=getattr(config, "min_temporal_separation_s", 2.0),
             min_drone_displacement_m=getattr(config, "min_drone_displacement_m", 1.5),
             gps_sigma_m=getattr(config, "gps_sigma_m", 0.5),
-            vehicle_artifact_pixel_tol_px=getattr(config, "vehicle_artifact_pixel_tol_px", 50.0),
-            vehicle_artifact_shift_ratio=getattr(config, "vehicle_artifact_shift_ratio", 0.25),
-            vehicle_artifact_pixel_floor_px=getattr(config, "vehicle_artifact_pixel_floor_px", 8.0),
+            vehicle_artifact_pixel_tol_px=artifact_tol_px,
+            vehicle_artifact_shift_ratio=artifact_shift_ratio,
+            vehicle_artifact_pixel_floor_px=artifact_floor_px,
             hfov_deg=cam_hfov,
+            mount_pitch_deg=cam_mount_pitch,
+            vehicle_artifact_mode=artifact_mode,
         )
+        if artifact_mode == "off":
+            logger.info("[%s] Vehicle-artifact rejection active mode=off (disabled)", drone_id)
+        elif artifact_mode == "fixed":
+            logger.info(
+                "[%s] Vehicle-artifact rejection active mode=fixed (fixed_tol=%.1fpx)",
+                drone_id,
+                artifact_tol_px,
+            )
+        else:
+            mount_offset_deg = abs(cam_mount_pitch - 90.0)
+            if mount_offset_deg <= 10.0:
+                logger.info(
+                    "[%s] Vehicle-artifact rejection active mode=auto (nadir expected-shift, mount_pitch=%.1fdeg, shift_ratio=%.2f, floor=%.1fpx, fallback=%.1fpx)",
+                    drone_id,
+                    cam_mount_pitch,
+                    artifact_shift_ratio,
+                    artifact_floor_px,
+                    artifact_tol_px,
+                )
+            else:
+                logger.info(
+                    "[%s] Vehicle-artifact rejection active mode=auto (oblique mount_pitch=%.1fdeg, offset=%.1fdeg > 10deg -> fixed-pixel fallback=%.1fpx)",
+                    drone_id,
+                    cam_mount_pitch,
+                    mount_offset_deg,
+                    artifact_tol_px,
+                )
 
         self._running = False
         self._task: Optional[asyncio.Task] = None
@@ -946,6 +987,8 @@ class PerceptionPipeline:
                     box_h=box_h,
                     img_w=w,
                     img_h=h,
+                    roll_deg=roll,
+                    pitch_deg=pitch,
                 )
             )
 
@@ -1287,6 +1330,8 @@ class PerceptionPipeline:
                         box_h=item.get("h"),
                         img_w=item.get("img_w"),
                         img_h=item.get("img_h"),
+                        roll_deg=item.get("roll"),
+                        pitch_deg=item.get("pitch"),
                     )
                 )
             elif is_deadline_expired:

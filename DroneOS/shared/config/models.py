@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel
 
 class DroneConfig(BaseModel):
@@ -138,6 +138,7 @@ class PerceptionConfig(BaseModel):
     min_drone_displacement_m: float = 1.5
     gps_sigma_m: float = 0.5
     unknown_peer_deferral_max_s: float = 3.0
+    vehicle_artifact_mode: Literal["auto", "off", "fixed"] = "auto"
     vehicle_artifact_pixel_tol_px: float = 50.0
     vehicle_artifact_shift_ratio: float = 0.25
     vehicle_artifact_pixel_floor_px: float = 8.0
