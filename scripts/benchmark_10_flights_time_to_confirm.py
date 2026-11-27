@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import os
 from pathlib import Path
+import random
 import sys
 import time
 from typing import Any, Dict, List, Optional
@@ -43,8 +44,16 @@ async def run_single_pass(
     speed_mps: float,
     flight_idx: int,
     has_target: bool = True,
+    flight_seed: Optional[int] = None,
 ) -> Dict[str, Any]:
     vname = "Drone1"
+
+    if flight_seed is None:
+        flight_seed = random.SystemRandom().randint(1, 2**31 - 1)
+    rng = random.Random(flight_seed)
+    dx_offset = rng.uniform(-0.5, 0.5)
+    dy_offset = rng.uniform(-0.5, 0.5)
+    actual_speed_mps = speed_mps * rng.uniform(0.9, 1.1)
 
     clear_targets(client)
 
@@ -52,12 +61,13 @@ async def run_single_pass(
     if kin.position.z_val > -1.0:
         client.takeoffAsync(vehicle_name=vname).join()
 
-    start_x = -3.0
-    end_x = 3.0
+    start_x = -3.0 + dx_offset
+    end_x = 3.0 + dx_offset
+    y_pos = dy_offset
     alt_m = 5.0
 
     # Move to start position at hover
-    client.moveToPositionAsync(start_x, 0.0, -alt_m, 3.0, vehicle_name=vname).join()
+    client.moveToPositionAsync(start_x, y_pos, -alt_m, 3.0, vehicle_name=vname).join()
     await asyncio.sleep(0.2)
 
     # Spawn target at origin (0, 0, 0) on ground if requested
@@ -98,9 +108,9 @@ async def run_single_pass(
         # Sync warmup frame
         await src.get_frame()
 
-    # Now start pass at fixed speed
-    flight_duration_s = PASS_DISTANCE_M / speed_mps
-    client.moveToPositionAsync(end_x, 0.0, -alt_m, speed_mps, vehicle_name=vname)
+    # Now start pass at randomized speed and lateral offset
+    flight_duration_s = PASS_DISTANCE_M / actual_speed_mps
+    client.moveToPositionAsync(end_x, y_pos, -alt_m, actual_speed_mps, vehicle_name=vname)
 
     t_start = time.time()
     frames_processed = 0
@@ -128,6 +138,11 @@ async def run_single_pass(
 
     res = {
         "flight_idx": flight_idx,
+        "seed": flight_seed,
+        "start_x": round(start_x, 3),
+        "start_y": round(y_pos, 3),
+        "nominal_speed_mps": speed_mps,
+        "actual_speed_mps": round(actual_speed_mps, 3),
         "max_fps": cfg.max_fps,
         "speed_mps": speed_mps,
         "has_target": has_target,
@@ -171,10 +186,15 @@ async def evaluate_batch(
 
     flight_results = []
     for i in range(1, num_flights + 1):
-        res = await run_single_pass(client, detector, src, telem, cfg, speed_mps, i, has_target=True)
+        f_seed = int(max_fps_val * 10000) + int(speed_mps * 1000) + i
+        res = await run_single_pass(client, detector, src, telem, cfg, speed_mps, i, has_target=True, flight_seed=f_seed)
         flight_results.append(res)
         sec_str = f"{res['seconds_to_confirm']:.2f}s" if res['seconds_to_confirm'] is not None else "MISS"
-        print(f"  Flight {i:2d}/{num_flights}: Confirmed={res['confirmed']} | Time to Confirm: {sec_str} | Frames: {res['frames_to_confirm']} | Total Frames: {res['frames_processed']}")
+        print(
+            f"  Flight {i:2d}/{num_flights} (seed={res['seed']}, start=({res['start_x']:+.2f},{res['start_y']:+.2f}), "
+            f"v={res['actual_speed_mps']:.2f}m/s): Confirmed={res['confirmed']} | Time: {sec_str} | "
+            f"Frames: {res['frames_to_confirm']} | Total: {res['frames_processed']}"
+        )
 
     confirmed_times = [r["seconds_to_confirm"] for r in flight_results if r["confirmed"] and r["seconds_to_confirm"] is not None]
     confirmed_frames = [r["frames_to_confirm"] for r in flight_results if r["confirmed"] and r["frames_to_confirm"] is not None]
