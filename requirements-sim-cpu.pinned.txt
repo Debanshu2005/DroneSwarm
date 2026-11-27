@@ -1,0 +1,11 @@
+# Pinned perception stack for CPU simulation (system Python 3.13.1)
+# Note: ultralytics==8.3.250 differs from the checkpoint training version (8.4.211);
+# see doc/guides/perception-environments.md for confidence/recall differences.
+
+torch==2.9.1
+torchvision==0.24.1
+ultralytics==8.3.250
+opencv-python==4.11.0.86
+numpy==2.2.2
+onnxruntime==1.23.2
+pydantic==2.10.6

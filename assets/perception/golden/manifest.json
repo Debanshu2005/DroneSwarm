@@ -1,0 +1,46 @@
+{
+  "description": "Golden frames for verifying GarbageDetector max_raw_conf stability across environments.",
+  "imgsz": 640,
+  "confidence": 0.55,
+  "iou": 0.5,
+  "default_tolerance": 0.05,
+  "pt_reference_stack": "ultralytics==8.4.211 (matches models/garbage.pt training metadata)",
+  "onnx_reference_stack": "onnxruntime==1.23.2 (models/garbage.onnx)",
+  "frames": [
+    {
+      "file": "airsim_empty_shadow.jpg",
+      "source": "AirSim empty scene with drone shadow at 5m",
+      "expected_pt": 0.5180,
+      "expected_onnx": 0.0608,
+      "tolerance": 0.05
+    },
+    {
+      "file": "airsim_target.jpg",
+      "source": "AirSim scene with target present",
+      "expected_pt": 0.1421,
+      "expected_onnx": 0.4242,
+      "tolerance": 0.05
+    },
+    {
+      "file": "uavvaste_1.jpg",
+      "source": "UAVVaste BATCH_d06_img_0.jpg (resized 640x360)",
+      "expected_pt": 0.6996,
+      "expected_onnx": 0.6111,
+      "tolerance": 0.05
+    },
+    {
+      "file": "uavvaste_2.jpg",
+      "source": "UAVVaste BATCH_d06_img_1050.jpg (resized 640x360)",
+      "expected_pt": 0.7613,
+      "expected_onnx": 0.7168,
+      "tolerance": 0.05
+    },
+    {
+      "file": "uavvaste_3.jpg",
+      "source": "UAVVaste BATCH_d06_img_1140.jpg (resized 640x360)",
+      "expected_pt": 0.7514,
+      "expected_onnx": 0.7390,
+      "tolerance": 0.05
+    }
+  ]
+}

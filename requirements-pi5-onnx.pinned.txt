@@ -1,0 +1,9 @@
+# Pinned perception stack for Raspberry Pi 5 (ONNX Runtime only, no ultralytics/torch)
+# Uses models/garbage.onnx with DroneOS's built-in letterbox and NMS/filter path.
+# Note: Tested on Windows x86_64 with onnxruntime==1.23.2; Raspberry Pi 5 ARM64
+# hardware execution is unverified.
+
+onnxruntime==1.23.2
+opencv-python==4.11.0.86
+numpy==2.2.2
+pydantic==2.10.6

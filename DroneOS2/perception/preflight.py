@@ -92,5 +92,81 @@ def run_perception_preflight(
         logger.error(err_msg)
         return ("DEGRADED", f"weights file not found: {weights_path.name}")
 
+    manifest_path = repo_root / "assets" / "perception" / "golden" / "manifest.json"
+    if manifest_path.exists():
+        import sys
+        from unittest.mock import NonCallableMock
+
+        backend_mod = sys.modules.get("onnxruntime" if is_onnx else "ultralytics")
+        if not isinstance(backend_mod, NonCallableMock):
+            status, reason, _ = verify_golden_frames(
+                weights_path=weights_path,
+                manifest_path=manifest_path,
+                imgsz=int(getattr(perception_cfg, "imgsz", 640)),
+                confidence=float(getattr(perception_cfg, "confidence", 0.55)),
+                iou=float(getattr(perception_cfg, "iou", 0.5)),
+                device=str(getattr(perception_cfg, "device", "auto")),
+            )
+            if status != "OK":
+                logger.warning("Perception preflight golden-frame check degraded: %s", reason)
+                return (status, reason)
+
     logger.info("Perception preflight check passed: dependencies and weights verified (OK).")
     return ("OK", "")
+
+
+def verify_golden_frames(
+    weights_path: Path,
+    manifest_path: Path,
+    imgsz: int = 640,
+    confidence: float = 0.55,
+    iou: float = 0.5,
+    device: str = "auto",
+) -> Tuple[str, str, list]:
+    """Run golden-frame confidence check; returns (status, reason, per_frame_results)."""
+    import json
+    import cv2
+    from DroneOS2.perception.detector import GarbageDetector
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    is_onnx = weights_path.suffix.lower() == ".onnx"
+    default_tol = float(manifest.get("default_tolerance", 0.05))
+    frames = manifest.get("frames", [])
+    if not frames:
+        return ("OK", "", [])
+
+    det = GarbageDetector(
+        weights_path=str(weights_path),
+        imgsz=int(manifest.get("imgsz", imgsz)),
+        confidence=float(manifest.get("confidence", confidence)),
+        iou=float(manifest.get("iou", iou)),
+        device=device,
+    )
+    if not det.load():
+        return ("DEGRADED", f"golden-frame check failed: could not load {weights_path.name}", [])
+
+    results = []
+    drifted = []
+    try:
+        for entry in frames:
+            name = entry["file"]
+            img_path = manifest_path.parent / name
+            img = cv2.imread(str(img_path))
+            if img is None:
+                drifted.append(f"{name} (unreadable)")
+                results.append({"file": name, "expected": None, "actual": None, "ok": False})
+                continue
+            det._sync_predict(img)
+            actual = float(det.last_timing.get("max_raw_conf", 0.0))
+            expected = float(entry["expected_onnx"] if is_onnx and "expected_onnx" in entry else entry["expected_pt"])
+            tol = float(entry.get("tolerance", default_tol))
+            ok = abs(actual - expected) <= tol
+            results.append({"file": name, "expected": expected, "actual": actual, "tolerance": tol, "ok": ok})
+            if not ok:
+                drifted.append(f"{name} (expected {expected:.4f}+/-{tol:.2f}, got {actual:.4f})")
+    finally:
+        det.close()
+
+    if drifted:
+        return ("DEGRADED", "golden-frame drift: " + "; ".join(drifted), results)
+    return ("OK", "", results)
