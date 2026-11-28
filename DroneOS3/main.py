@@ -449,6 +449,9 @@ class DroneOSApp:
                 st, rsn = detector.get_status()
                 return PerceptionStatus(st, rsn)
             if detector is not None and getattr(detector, "_available", False):
+                frame_src = getattr(pipeline, "frame_source", None)
+                if frame_src is not None and getattr(frame_src, "is_stalled", False):
+                    return PerceptionStatus("DEGRADED", getattr(frame_src, "last_error", None) or "camera stalled")
                 return PerceptionStatus("OK", "")
             if getattr(pipeline, "last_rejection_reason", None) == "DETECTOR_NOT_LOADED":
                 return PerceptionStatus("DEGRADED", "detector not loaded")

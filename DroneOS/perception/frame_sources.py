@@ -168,37 +168,173 @@ class AirSimFrameSource(FrameSource):
 class OpenCVFrameSource(FrameSource):
     """Acquires live frames via OpenCV VideoCapture (V4L2, USB webcam, or RTSP)."""
 
-    def __init__(self, device: Union[int, str] = 0):
+    def __init__(
+        self,
+        device: Union[int, str] = 0,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        fps: Optional[float] = None,
+        prefer_mjpg: bool = True,
+        reconnect_backoff_s: float = 1.0,
+        max_backoff_s: float = 10.0,
+        stall_timeout_s: float = 3.0,
+    ):
         self.device = device
+        self.requested_width = width
+        self.requested_height = height
+        self.requested_fps = fps
+        self.prefer_mjpg = prefer_mjpg
+        self.reconnect_backoff_s = float(reconnect_backoff_s)
+        self.max_backoff_s = float(max_backoff_s)
+        self.stall_timeout_s = float(stall_timeout_s)
+
         self._cap = None
         self.is_synthetic = False
+        self.backend_name: str = "unopened"
+        self.negotiated_info: dict = {}
+        self.last_error: Optional[str] = None
+        self.last_capture_ms: float = 0.0
+        self.last_frame_monotonic: Optional[float] = None
+        self._opened_at_monotonic: Optional[float] = None
+        self._next_reconnect_at: float = 0.0
+        self._current_backoff_s: float = self.reconnect_backoff_s
+        self._consecutive_failures: int = 0
+
+    @property
+    def is_stalled(self) -> bool:
+        """True if camera is failing or has produced no valid frame within stall_timeout_s."""
+        ref = self.last_frame_monotonic if self.last_frame_monotonic is not None else self._opened_at_monotonic
+        if ref is None:
+            return self.last_error is not None
+        return (time.monotonic() - ref) > self.stall_timeout_s
+
+    def _release_cap(self) -> None:
+        if self._cap is not None:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+
+    def _schedule_reconnect(self, reason: str) -> None:
+        self.last_error = reason
+        self._consecutive_failures += 1
+        self._release_cap()
+        self._next_reconnect_at = time.monotonic() + self._current_backoff_s
+        self._current_backoff_s = min(self.max_backoff_s, self._current_backoff_s * 2.0)
 
     def _ensure_open(self) -> bool:
         if self._cap is not None and self._cap.isOpened():
             return True
-        try:
-            import cv2
-            self._cap = cv2.VideoCapture(self.device)
-            if self._cap.isOpened():
-                # Set buffer size to 1 to guarantee fresh frames
-                self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                logger.info("OpenCVFrameSource initialized on device: %s", self.device)
-                return True
-            logger.warning("OpenCVFrameSource failed to open device: %s", self.device)
+        now_m = time.monotonic()
+        if now_m < self._next_reconnect_at:
             return False
+        try:
+            import sys
+            import cv2
+
+            candidates = []
+            if sys.platform.startswith("win") and isinstance(self.device, int) and hasattr(cv2, "CAP_DSHOW"):
+                candidates.append(("DSHOW", cv2.CAP_DSHOW))
+            candidates.append(("DEFAULT", None))
+
+            cap = None
+            opened_backend = "DEFAULT"
+            for b_name, b_flag in candidates:
+                try:
+                    c = cv2.VideoCapture(self.device) if b_flag is None else cv2.VideoCapture(self.device, b_flag)
+                except TypeError:
+                    c = cv2.VideoCapture(self.device)
+                if c is not None and c.isOpened():
+                    cap = c
+                    opened_backend = b_name
+                    break
+                if c is not None:
+                    try:
+                        c.release()
+                    except Exception:
+                        pass
+
+            if cap is None or not cap.isOpened():
+                self._schedule_reconnect(f"camera busy or not found: {self.device}")
+                logger.warning("OpenCVFrameSource failed to open device=%s (%s)", self.device, self.last_error)
+                return False
+
+            self._cap = cap
+            self.backend_name = opened_backend
+            self._opened_at_monotonic = now_m
+            self._current_backoff_s = self.reconnect_backoff_s
+            self.last_error = None
+
+            # Buffer size 1 so we always get the freshest frame; MJPG when available
+            self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            if self.prefer_mjpg and hasattr(cv2, "VideoWriter_fourcc"):
+                try:
+                    self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+                except Exception:
+                    pass
+            if self.requested_width is not None:
+                self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(self.requested_width))
+            if self.requested_height is not None:
+                self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(self.requested_height))
+            if self.requested_fps is not None:
+                self._cap.set(cv2.CAP_PROP_FPS, float(self.requested_fps))
+
+            neg_w = self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+            neg_h = self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+            neg_fps = self._cap.get(cv2.CAP_PROP_FPS)
+            self.negotiated_info = {
+                "backend": opened_backend,
+                "width": int(neg_w) if isinstance(neg_w, (int, float)) and neg_w > 0 else None,
+                "height": int(neg_h) if isinstance(neg_h, (int, float)) and neg_h > 0 else None,
+                "fps": round(float(neg_fps), 2) if isinstance(neg_fps, (int, float)) and neg_fps > 0 else None,
+            }
+            logger.info(
+                "OpenCVFrameSource opened device=%s backend=%s negotiated=%sx%s@%sfps",
+                self.device,
+                opened_backend,
+                self.negotiated_info["width"],
+                self.negotiated_info["height"],
+                self.negotiated_info["fps"],
+            )
+            return True
         except Exception as e:
+            self._schedule_reconnect(f"error opening device {self.device}: {e}")
             logger.warning("OpenCVFrameSource error opening device %s: %s", self.device, e)
             return False
 
     def _sync_capture(self) -> Optional[Frame]:
         if not self._ensure_open():
             return None
+        t_start = time.perf_counter()
         try:
             ret, frame = self._cap.read()
             if not ret or frame is None:
+                self._schedule_reconnect(f"empty frame from device {self.device}")
+                logger.warning("OpenCVFrameSource received empty/None frame from device %s", self.device)
                 return None
-            return Frame(image=frame, timestamp=time.time())
+
+            capture_ms = (time.perf_counter() - t_start) * 1000.0
+            self.last_capture_ms = round(capture_ms, 2)
+            now_mono = time.monotonic()
+            self.last_frame_monotonic = now_mono
+            self._consecutive_failures = 0
+            self._current_backoff_s = self.reconnect_backoff_s
+            self.last_error = None
+            h, w = frame.shape[:2]
+            return Frame(
+                image=frame,
+                timestamp=time.time(),
+                metadata={
+                    "capture_ms": self.last_capture_ms,
+                    "monotonic_ts": now_mono,
+                    "backend": self.backend_name,
+                    "width": w,
+                    "height": h,
+                },
+            )
         except Exception as e:
+            self._schedule_reconnect(f"capture exception on device {self.device}: {e}")
             logger.warning("OpenCV capture error: %s", e)
             return None
 
@@ -206,12 +342,9 @@ class OpenCVFrameSource(FrameSource):
         return await asyncio.to_thread(self._sync_capture)
 
     async def close(self) -> None:
-        if self._cap is not None:
-            try:
-                self._cap.release()
-            except Exception:
-                pass
-            self._cap = None
+        self._release_cap()
+        self._next_reconnect_at = 0.0
+        self.last_error = None
 
 
 class ImageFolderSource(FrameSource):
