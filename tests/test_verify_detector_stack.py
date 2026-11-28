@@ -115,3 +115,79 @@ def test_cli_verify_detector_stack_exit_codes(tmp_path, monkeypatch):
 
     monkeypatch.setattr("DroneOS.perception.detector.GarbageDetector", _mock_detector_cls(0.10))
     assert verify_detector_stack.main(["--weights", str(weights_path), "--manifest", str(manifest_path)]) == 1
+
+
+def test_preflight_logs_versions_and_warns_on_ultralytics_mismatch(tmp_path, monkeypatch, caplog):
+    weights_path = tmp_path / "models" / "garbage.pt"
+    weights_path.parent.mkdir(parents=True, exist_ok=True)
+    weights_path.write_bytes(b"dummy")
+
+    monkeypatch.setattr(preflight, "_is_module_available", lambda name: True)
+    monkeypatch.setattr(
+        preflight,
+        "_get_runtime_versions",
+        lambda: {
+            "ultralytics": "8.3.250",
+            "onnxruntime": "1.23.2",
+            "opencv": "4.11.0.86",
+            "numpy": "2.2.2",
+            "torch": "2.9.1",
+        },
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_read_checkpoint_metadata",
+        lambda p: {"format": "pt", "training_ultralytics": "8.4.211", "date": "2026-11-13"},
+    )
+    cfg = SimpleNamespace(enabled=True, weights="models/garbage.pt", imgsz=640, confidence=0.55, iou=0.5, device="cpu")
+
+    with caplog.at_level(logging.INFO):
+        status, reason = preflight.run_perception_preflight(cfg, repo_root=tmp_path)
+
+    assert status == "DEGRADED"
+    assert "8.3.250" in reason and "8.4.211" in reason
+    assert any("Perception runtime versions:" in rec.message for rec in caplog.records)
+    assert any(
+        rec.levelno == logging.WARNING and "version mismatch" in rec.message
+        for rec in caplog.records
+    )
+
+
+def test_preflight_ok_when_ultralytics_matches_and_logs_onnx_metadata(tmp_path, monkeypatch, caplog):
+    pt_path = tmp_path / "models" / "garbage.pt"
+    pt_path.parent.mkdir(parents=True, exist_ok=True)
+    pt_path.write_bytes(b"dummy")
+    onnx_path = tmp_path / "models" / "garbage.onnx"
+    onnx_path.write_bytes(b"dummy")
+
+    monkeypatch.setattr(preflight, "_is_module_available", lambda name: True)
+    monkeypatch.setattr(
+        preflight,
+        "_get_runtime_versions",
+        lambda: {
+            "ultralytics": "8.4.211",
+            "onnxruntime": "1.23.2",
+            "opencv": "4.11.0.86",
+            "numpy": "2.2.2",
+            "torch": "2.9.1",
+        },
+    )
+    monkeypatch.setattr(
+        preflight,
+        "_read_checkpoint_metadata",
+        lambda p: (
+            {"format": "onnx", "producer": "pytorch", "version": "8.3.250", "date": "2026-11-13"}
+            if p.suffix == ".onnx"
+            else {"format": "pt", "training_ultralytics": "8.4.211", "date": "2026-11-13"}
+        ),
+    )
+
+    cfg_pt = SimpleNamespace(enabled=True, weights="models/garbage.pt")
+    with caplog.at_level(logging.INFO):
+        assert preflight.run_perception_preflight(cfg_pt, repo_root=tmp_path) == ("OK", "")
+
+    caplog.clear()
+    cfg_onnx = SimpleNamespace(enabled=True, weights="models/garbage.onnx")
+    with caplog.at_level(logging.INFO):
+        assert preflight.run_perception_preflight(cfg_onnx, repo_root=tmp_path) == ("OK", "")
+    assert any("garbage.onnx" in rec.message and "pytorch" in rec.message for rec in caplog.records)

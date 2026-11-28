@@ -39,6 +39,73 @@ def _is_module_available(mod_name: str) -> bool:
         return True
 
 
+def _get_module_version(mod_name: str, pkg_name: Optional[str] = None) -> str:
+    """Return installed version string for mod_name, or 'not_installed'."""
+    import importlib
+    import importlib.metadata
+    import sys
+
+    try:
+        mod = sys.modules[mod_name] if mod_name in sys.modules else importlib.import_module(mod_name)
+    except Exception:
+        return "not_installed"
+    if mod is None:
+        return "not_installed"
+    ver = getattr(mod, "__version__", None)
+    if isinstance(ver, str) and ver:
+        return ver
+    try:
+        return importlib.metadata.version(pkg_name or mod_name)
+    except Exception:
+        return "unknown"
+
+
+def _get_runtime_versions() -> dict:
+    """Collect versions of perception runtime libraries."""
+    return {
+        "ultralytics": _get_module_version("ultralytics"),
+        "onnxruntime": _get_module_version("onnxruntime"),
+        "opencv": _get_module_version("cv2", "opencv-python"),
+        "numpy": _get_module_version("numpy"),
+        "torch": _get_module_version("torch"),
+    }
+
+
+def _read_checkpoint_metadata(weights_path: Path) -> dict:
+    """Read training/export metadata from .pt or .onnx weights without failing on dummy files."""
+    suffix = weights_path.suffix.lower()
+    if suffix == ".pt":
+        try:
+            import torch
+
+            ckpt = torch.load(str(weights_path), map_location="cpu", weights_only=False)
+            if isinstance(ckpt, dict):
+                ver = ckpt.get("version")
+                return {
+                    "format": "pt",
+                    "training_ultralytics": str(ver) if ver else None,
+                    "date": str(ckpt.get("date")) if ckpt.get("date") else None,
+                }
+        except Exception as exc:
+            return {"format": "pt", "error": str(exc)}
+    elif suffix == ".onnx":
+        try:
+            import onnxruntime as ort
+
+            sess = ort.InferenceSession(str(weights_path), providers=["CPUExecutionProvider"])
+            meta = sess.get_modelmeta()
+            custom = dict(meta.custom_metadata_map or {})
+            return {
+                "format": "onnx",
+                "producer": meta.producer_name or None,
+                "version": custom.get("version"),
+                "date": custom.get("date"),
+            }
+        except Exception as exc:
+            return {"format": "onnx", "error": str(exc)}
+    return {"format": suffix.lstrip(".")}
+
+
 def run_perception_preflight(
     perception_cfg,
     repo_root: Optional[Path] = None,
@@ -91,6 +158,34 @@ def run_perception_preflight(
         )
         logger.error(err_msg)
         return ("DEGRADED", f"weights file not found: {weights_path.name}")
+
+    versions = _get_runtime_versions()
+    ckpt_meta = _read_checkpoint_metadata(weights_path)
+    logger.info(
+        "Perception runtime versions: ultralytics=%s, onnxruntime=%s, opencv=%s, numpy=%s, torch=%s; "
+        "checkpoint (%s) metadata: %s",
+        versions["ultralytics"],
+        versions["onnxruntime"],
+        versions["opencv"],
+        versions["numpy"],
+        versions["torch"],
+        weights_path.name,
+        ckpt_meta,
+    )
+
+    ckpt_ultralytics = ckpt_meta.get("training_ultralytics")
+    installed_ultralytics = versions["ultralytics"]
+    if (
+        installed_ultralytics not in ("not_installed", "unknown")
+        and ckpt_ultralytics
+        and installed_ultralytics != ckpt_ultralytics
+    ):
+        reason = (
+            f"ultralytics version mismatch: installed {installed_ultralytics} "
+            f"!= checkpoint training {ckpt_ultralytics}"
+        )
+        logger.warning("Perception preflight version mismatch: %s", reason)
+        return ("DEGRADED", reason)
 
     manifest_path = repo_root / "assets" / "perception" / "golden" / "manifest.json"
     if manifest_path.exists():
